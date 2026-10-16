@@ -152,10 +152,18 @@ export class Notifier {
     this.hub.emit(EVENT.NOTIFY, payload);
     for (const channel of this.channels) {
       try {
-        channel.send(payload);
+        const result = channel.send(payload);
+        // webhook 等通道是异步的，失败只记日志，不能影响其它通道
+        if (result && typeof result.then === "function") {
+          result.catch((error) => this.fail(error));
+        }
       } catch (error) {
-        this.log.warn("通知通道发送失败: " + (error && error.message ? error.message : error));
+        this.fail(error);
       }
     }
+  }
+
+  fail(error) {
+    this.log.warn("通知通道发送失败: " + (error && error.message ? error.message : error));
   }
 }

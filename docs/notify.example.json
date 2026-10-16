@@ -1,0 +1,27 @@
+{
+  "channels": [
+    {
+      "type": "bark",
+      "url": "https://api.day.app/你的BarkKey",
+      "level": "critical",
+      "group": "mo-agent"
+    },
+    {
+      "type": "dingtalk",
+      "url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
+      "secret": "SECxxx"
+    },
+    {
+      "type": "wecom",
+      "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+    },
+    {
+      "type": "feishu",
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+    },
+    {
+      "type": "generic",
+      "url": "https://example.com/hook"
+    }
+  ]
+}

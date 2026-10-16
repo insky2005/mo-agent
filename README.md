@@ -17,6 +17,7 @@
 | app/web/ 手机端 PWA（扫码配对 / 授权卡片 / 语音） | 可用 |
 | app/android/ Capacitor 原生外壳 + 锁屏通知前台服务 | 已打包出 APK |
 | core/notify.mjs 统一通知路由（分级 + 去重 + 通道） | 已实现 |
+| host/notify-webhook.mjs 第三方通道（Bark/钉钉/企业微信/飞书/通用） | 已实现 |
 | desktop/ 桌面壳 | 已完成 |
 
 ## 快速开始
@@ -116,7 +117,25 @@ APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/
     ./scripts/build-android.sh
     adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
 
-> iPhone 目前还没有可靠通道（Web Push 需 HTTPS，且要另配），留给下一个迭代。
+
+## 通知通道（可选）
+
+除了 Android 原生前台服务，host 还能把同一条 notify 事件转发到第三方 App，用来覆盖 iPhone 或跨网段。
+配置文件默认是 ~/.mo-agent/notify.json（里面有 channels 数组），示例见 docs/notify.example.json：
+
+    {
+      "channels": [
+        { "type": "bark", "url": "https://api.day.app/你的BarkKey" },
+        { "type": "dingtalk", "url": "https://oapi.dingtalk.com/robot/send?access_token=xxx", "secret": "SECxxx" },
+        { "type": "wecom", "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx" }
+      ]
+    }
+
+支持的类型：bark（iPhone）、dingtalk（钉钉）、wecom（企业微信）、feishu（飞书）、generic（把通知 JSON 原样 POST 出去）。
+Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /push 接口。
+
+改完配置后重启服务生效（桌面托盘「重启服务」，或重跑 npm start）。
+临时调试可以用环境变量 MO_AGENT_NOTIFY_WEBHOOKS（JSON 数组）。
 
 ## 目录结构
 
