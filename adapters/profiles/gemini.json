@@ -1,0 +1,9 @@
+{
+  "id": "gemini",
+  "label": "Gemini CLI",
+  "enabled": false,
+  "process": { "match": ["(^|/)gemini($|\\s)"] },
+  "session": { "kind": "jsonl-transcript", "root": "~/.gemini", "pattern": "**/*.json" },
+  "hooks": { "kind": "gemini-cli" },
+  "approval": { "capability": "allow", "mechanism": "BeforeTool decision=allow" }
+}

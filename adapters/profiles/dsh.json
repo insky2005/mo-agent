@@ -1,0 +1,9 @@
+{
+  "id": "dsh",
+  "label": "DeepSeek Harness",
+  "enabled": true,
+  "process": { "match": ["oh-my-dsh", "(^|/)dsh($|\\s)"] },
+  "session": { "kind": "native-api" },
+  "hooks": { "kind": "native" },
+  "approval": { "capability": "allow", "mechanism": "原生 remote events（已实现）" }
+}

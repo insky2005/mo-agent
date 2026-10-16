@@ -1,0 +1,11 @@
+{
+  "name": "mo-agent-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "mo-agent 手机端（Capacitor Android 外壳）",
+  "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.5.3"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "mo-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "mo-agent：观察这台电脑上所有 Agent，在关键卡点通知你，并支持远程批准",
+  "scripts": {
+    "start": "node host/index.mjs",
+    "dev": "node --watch host/index.mjs",
+    "check": "node --check host/index.mjs && node --check host/http.mjs && node --check host/logs-http.mjs && node --check host/pair-http.mjs && node --check core/hub.mjs && node --check adapters/claude-code.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^7.6.9",
+    "@capacitor/core": "^8.5.3",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.5",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

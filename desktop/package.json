@@ -1,0 +1,7 @@
+{
+  "name": "mo-agent-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "mo-agent 桌面托盘：启动服务、扫码装 App、扫码配对",
+  "type": "module"
+}

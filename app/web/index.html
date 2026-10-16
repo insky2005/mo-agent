@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>mo-agent</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!--
+    兜底出口 + 错误上报。这段脚本不依赖 app.js：即使 app.js 挂了，
+    也能一键回到本机壳，不会被困在实时界面里。
+
+    注意不要"一报错就弹条"：切后台再回到前台时，WebView 会挂起定时器、
+    断开连接，恢复时 EventSource 重连、请求被中断都是常态，那些不是界面坏了。
+    所以只有 5 秒内连续 3 次错误才提示，而且可以点掉、8 秒后自动收起。
+  -->
+  <script>
+    (function () {
+      var hits = [];
+      var timer = null;
+
+      function shellOrigin() {
+        try {
+          var q = new URLSearchParams(location.search);
+          return q.get("shell") || sessionStorage.getItem("mo-agent.shell") || "";
+        } catch (error) { return ""; }
+      }
+
+      // 手机上看不到 console，把错误送到本机服务写进 host.log —— 这是唯一可查的线索
+      function report(kind, detail) {
+        try { console.log("[mo-agent " + kind + "] " + detail); } catch (error) { /* 忽略 */ }
+        try {
+          fetch("/api/client-error", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ kind: kind, detail: detail, url: location.href, at: new Date().toISOString() })
+          }).catch(function () { /* 送不到就算了 */ });
+        } catch (error) { /* 忽略 */ }
+
+        var now = Date.now();
+        hits.push(now);
+        hits = hits.filter(function (t) { return now - t < 5000; });
+        if (hits.length >= 3) show(detail);
+      }
+
+      function show(detail) {
+        var bar = document.getElementById("fatalBar");
+        if (!bar) {
+          bar = document.createElement("div");
+          bar.id = "fatalBar";
+          bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7a1f2b;color:#fff;padding:10px 12px;font:13px/1.6 -apple-system,BlinkMacSystemFont,sans-serif;display:flex;gap:10px;align-items:center;flex-wrap:wrap";
+          var text = document.createElement("span");
+          text.id = "fatalText";
+          text.style.flex = "1";
+          bar.appendChild(text);
+          var shell = shellOrigin();
+          if (shell) {
+            var link = document.createElement("a");
+            link.href = shell + "/?stay=1";
+            link.textContent = "⌂ 回本机界面";
+            link.style.cssText = "color:#ffd7dd;text-decoration:underline;white-space:nowrap";
+            bar.appendChild(link);
+          }
+          var close = document.createElement("button");
+          close.type = "button";
+          close.textContent = "×";
+          close.style.cssText = "background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:6px;padding:2px 10px;font-size:15px;cursor:pointer";
+          close.addEventListener("click", function () { bar.remove(); hits = []; });
+          bar.appendChild(close);
+          document.body.appendChild(bar);
+        }
+        var label = document.getElementById("fatalText");
+        if (label) label.textContent = "界面连续出错：" + (detail || "未知错误");
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+          var current = document.getElementById("fatalBar");
+          if (current) current.remove();
+        }, 8000);
+      }
+
+      window.addEventListener("error", function (event) {
+        var message = (event && event.message) || "";
+        var file = (event && event.filename) || "";
+        // 跨源脚本的错误会被浏览器脱敏成 "Script error."，连行号都没有。
+        // 我们自己的脚本都是同源的，所以这种基本来自第三方/Capacitor 桥接层 ——
+        // 记进日志即可，不该因此弹"界面出错"。
+        if (message === "Script error." && !file) {
+          try {
+            fetch("/api/client-error", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ kind: "opaque", detail: "Script error.（已忽略，未计入红条）", url: location.href })
+            }).catch(function () {});
+          } catch (error) { /* 忽略 */ }
+          return;
+        }
+        var parts = [];
+        if (message) parts.push(message);
+        if (file) parts.push("@" + file + ":" + (event.lineno || 0));
+        if (event && event.error && event.error.stack) parts.push(String(event.error.stack).split("\n").slice(0, 2).join(" | "));
+        report("error", parts.join(" ") || "未知错误");
+      });
+
+      window.addEventListener("unhandledrejection", function (event) {
+        var reason = event && event.reason;
+        var detail = reason && reason.message ? reason.message : String(reason || "");
+        var stack = reason && reason.stack ? String(reason.stack).split("\n").slice(0, 2).join(" | ") : "";
+        report("rejection", (detail + " " + stack).trim() || "未知 rejection");
+      });
+    })();
+  </script>
+
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 36 36" width="20" height="20" aria-hidden="true">
+        <defs><mask id="moBrandMask">
+          <rect width="36" height="36" fill="#000"/>
+          <circle cx="18" cy="5.2" r="3.1" fill="#fff"/>
+          <rect x="16.3" y="7" width="3.4" height="5" rx="1.7" fill="#fff"/>
+          <rect x="2" y="14.6" width="4.4" height="9" rx="2.2" fill="#fff"/>
+          <rect x="29.6" y="14.6" width="4.4" height="9" rx="2.2" fill="#fff"/>
+          <rect x="6.4" y="9.4" width="23.2" height="22" rx="7" fill="#fff"/>
+          <circle cx="13.4" cy="19.4" r="3.2" fill="#000"/>
+          <circle cx="22.6" cy="19.4" r="3.2" fill="#000"/>
+          <rect x="13.6" y="25.2" width="8.8" height="2.4" rx="1.2" fill="#000"/>
+        </mask></defs>
+        <rect width="36" height="36" fill="currentColor" mask="url(#moBrandMask)"/>
+      </svg>
+      <span>mo-agent</span>
+    </div>
+    <div class="topActions">
+      <span id="conn" class="conn off">未连接</span>
+      <button id="btnNotify" class="ghost" type="button">通知</button>
+      <button id="btnSpeak" class="ghost" type="button">朗读:关</button>
+      <button id="btnRefresh" class="ghost" type="button">刷新</button>
+    </div>
+  </header>
+
+  <div id="linkBar" class="linkBar hidden">
+    <span id="linkText"></span>
+    <button id="btnRepair" class="ghost" type="button">重新配对</button>
+    <button id="btnGoLive" class="ghost hidden" type="button">进入实时界面</button>
+  </div>
+
+  <main id="main">
+    <section id="pendingSection" class="pending hidden">
+      <h2>需要你处理</h2>
+      <div id="pendingList"></div>
+    </section>
+
+    <section class="sessions">
+      <div class="sectionHead">
+        <h2>会话</h2>
+        <label class="filter"><input type="checkbox" id="onlyActive" checked /> 只看活跃</label>
+      </div>
+      <div id="sessionList" class="sessionList"></div>
+    </section>
+  </main>
+
+  <footer class="composer">
+    <div class="target" id="target">发送给：<b>未选择会话</b></div>
+    <div class="composerRow">
+      <button id="btnMic" class="mic" type="button" title="语音输入">🎙️</button>
+      <input id="input" type="text" placeholder="输入指令，或说出你的指令…" autocomplete="off" />
+      <button id="btnSend" class="send" type="button">发送</button>
+    </div>
+    <div class="quickRow">
+      <button class="quick" data-quick="status" type="button">汇报状态</button>
+    </div>
+  </footer>
+
+  <div id="pairOverlay" class="overlay hidden">
+    <div class="dialog">
+      <h3>与电脑配对</h3>
+      <p id="pairHint">用手机扫电脑上的二维码即可自动连接。</p>
+      <input id="pinInput" type="tel" inputmode="numeric" maxlength="6" placeholder="6 位配对码" />
+      <input id="addrInput" type="text" autocapitalize="off" autocomplete="off" placeholder="电脑地址，如 192.168.1.5:7788" />
+      <div class="dialogActions">
+        <button id="btnPair" class="send" type="button">连接</button>
+      </div>
+      <p id="pairError" class="error"></p>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script src="/vendor/jsQR.js"></script>
+  <script src="/scan.js"></script>
+  <script src="/approvals.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "id": "codex",
+  "label": "Codex CLI",
+  "enabled": false,
+  "process": { "match": ["(^|/)codex($|\\s)"] },
+  "session": { "kind": "jsonl-transcript", "root": "~/.codex/sessions", "pattern": "**/*.jsonl" },
+  "hooks": { "kind": "codex" },
+  "approval": {
+    "capability": "block-only",
+    "mechanism": "hooks 只能拦不能放行",
+    "note": "远程批准不可用；仅支持远程拒绝"
+  }
+}

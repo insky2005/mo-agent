@@ -1,0 +1,29 @@
+{
+  "_comment": "把这段合并进 ~/.claude/settings.json（已存在 hooks 时合并，不要整体覆盖）。把 <ABSOLUTE_PATH> 换成本仓库的绝对路径。",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs permission",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs notify",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

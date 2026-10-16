@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  mo-agent 是局域网工具：手机要直连电脑上的 http://<内网IP>:7788。
+
+  Android 9（API 28）起，targetSdk >= 28 的 App 默认禁止明文 HTTP。
+  浏览器不受这条限制（它有自己的策略），所以症状很典型：
+    「手机浏览器能打开 http://172.18.x.x:7788，App 里却 Failed to fetch」。
+
+  这里放开明文。若要收紧，可把 base-config 换成若干 domain-config
+  只列出你常用的内网网段（Android 不支持 CIDR，只能逐个写 IP）。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

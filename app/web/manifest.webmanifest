@@ -1,0 +1,18 @@
+{
+  "name": "mo-agent",
+  "short_name": "mo-agent",
+  "description": "把电脑上 Agent 的工作状态实时推送到手机与蓝牙耳机",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

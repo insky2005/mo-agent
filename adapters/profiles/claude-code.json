@@ -1,0 +1,21 @@
+{
+  "id": "claude-code",
+  "label": "Claude Code",
+  "enabled": true,
+  "process": { "match": ["(^|/)claude($|\\s)"] },
+  "session": {
+    "kind": "jsonl-transcript",
+    "root": "~/.claude/projects",
+    "pattern": "*/*.jsonl"
+  },
+  "hooks": {
+    "kind": "claude-code",
+    "settingsFile": "~/.claude/settings.json",
+    "events": { "PermissionRequest": "approval", "Notification": "attention", "Stop": "completed" }
+  },
+  "approval": {
+    "capability": "allow",
+    "mechanism": "PermissionRequest hook",
+    "note": "官方文档明确支持代替用户批准"
+  }
+}

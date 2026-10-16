@@ -1,0 +1,18 @@
+{
+  "appId": "dev.moagent.app",
+  "appName": "mo-agent",
+  "webDir": "web",
+  "server": {
+    "androidScheme": "http",
+    "allowNavigation": [
+      "localhost",
+      "127.0.0.1",
+      "10.*.*.*",
+      "192.168.*.*",
+      "172.*.*.*"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

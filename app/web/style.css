@@ -1,0 +1,243 @@
+:root {
+  --bg: #0b1020;
+  --panel: #141b32;
+  --panel2: #1b2440;
+  --line: #263054;
+  --text: #e7ecff;
+  --muted: #8b97bd;
+  --blue: #4f8cff;
+  --green: #35d39a;
+  --amber: #f5b942;
+  --red: #ff5d6c;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 15px;
+  min-height: 100%;
+}
+
+body { padding-bottom: 150px; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px calc(12px + env(safe-area-inset-top, 0px));
+  background: rgba(11, 16, 32, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; }
+.logo { font-size: 20px; color: var(--blue); flex: none; }
+.topActions { display: flex; align-items: center; gap: 6px; }
+
+.conn {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #23305a;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.conn.on { background: rgba(53, 211, 154, 0.16); color: var(--green); }
+.conn.off { background: rgba(255, 93, 108, 0.16); color: var(--red); }
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--panel2);
+  padding: 8px 12px;
+}
+button:active { transform: scale(0.97); }
+button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 6px 10px; }
+button.send { background: var(--blue); color: #fff; font-weight: 600; }
+button.mic { background: var(--panel2); font-size: 20px; padding: 8px 14px; }
+button.mic.listening { background: var(--red); animation: pulse 1.1s infinite; }
+button.quick { background: var(--panel2); color: var(--muted); font-size: 13px; padding: 6px 12px; }
+button.quick.danger { color: var(--red); }
+button.primary { background: var(--blue); color: #fff; }
+button.ok { background: var(--green); color: #06301f; font-weight: 600; }
+button.no { background: rgba(255, 93, 108, 0.18); color: var(--red); }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+main { padding: 12px; }
+
+.sectionHead { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 10px; }
+.sectionHead h2, .pending h2 { margin: 0; font-size: 14px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+.filter { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+.pending { margin-bottom: 18px; }
+.pending h2 { color: var(--amber); margin-bottom: 10px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 13px;
+  margin-bottom: 10px;
+}
+.card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(79, 140, 255, 0.4); }
+.card.attention { border-color: var(--amber); background: linear-gradient(180deg, rgba(245, 185, 66, 0.08), var(--panel)); }
+
+.cardTop { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.cardTitle { font-weight: 650; font-size: 15px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; font-weight: 600; }
+.badge.running { background: rgba(79, 140, 255, 0.18); color: var(--blue); }
+.badge.waiting { background: rgba(245, 185, 66, 0.18); color: var(--amber); }
+.badge.idle { background: rgba(139, 151, 189, 0.16); color: var(--muted); }
+.badge.error { background: rgba(255, 93, 108, 0.18); color: var(--red); }
+
+.tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(139, 151, 189, 0.18); color: var(--muted); vertical-align: middle; margin-left: 4px; }
+.meta { color: var(--muted); font-size: 12px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.line { margin-top: 8px; font-size: 13px; line-height: 1.45; color: #c9d3f5; }
+.line b { color: var(--muted); font-weight: 600; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+.cardActions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.cardActions button { font-size: 13px; padding: 6px 12px; }
+
+.q { margin-bottom: 10px; }
+.qHeader { font-weight: 650; margin-bottom: 4px; }
+.qText { color: #d5ddf8; line-height: 1.5; }
+.options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.option { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--panel2); border-radius: 10px; }
+.option input { margin: 0; }
+.option span { flex: 1; }
+
+.customInput, #input, #pinInput, #addrInput {
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+.customInput { margin-top: 8px; }
+.customInput:focus, #input:focus, #pinInput:focus { border-color: var(--blue); }
+
+.linkBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 14px;
+  background: rgba(79, 140, 255, 0.08);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.linkBar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linkBar { flex-wrap: wrap; row-gap: 6px; }
+.linkBar button { padding: 3px 10px; font-size: 12px; flex: none; }
+#addrInput { margin-top: 8px; }
+.scanStatus { font-size: 12.5px; color: var(--muted); margin-top: 10px; min-height: 18px; text-align: center; }
+
+.composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: rgba(11, 16, 32, 0.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.target { font-size: 12px; color: var(--muted); margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.target b { color: var(--text); }
+.composerRow { display: flex; gap: 8px; align-items: center; }
+.composerRow input { flex: 1; }
+.quickRow { display: flex; gap: 8px; margin-top: 8px; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 16, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+.dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 100%; max-width: 360px; }
+.dialog h3 { margin: 0 0 8px; }
+.dialog p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.dialogActions { display: flex; gap: 8px; margin-top: 14px; }
+.dialogActions button { flex: 1; }
+.error { color: var(--red) !important; min-height: 18px; margin-bottom: 0 !important; }
+
+.empty { color: var(--muted); text-align: center; padding: 30px 0; font-size: 14px; }
+.hidden { display: none !important; }
+
+/* 扫码弹窗：必须显式约束 <video>，否则摄像头流按原始分辨率撑爆屏幕 */
+.scanDialog {
+  max-width: min(92vw, 380px);
+  max-height: 88vh;
+  overflow: auto;
+}
+
+#scanVideo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 52vh;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #000;
+}
+
+/* 覆盖 .overlay 的固定 padding，避让刘海与home指示条 */
+.overlay {
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+
+
+/* ============ 手机窄屏适配 ============
+   原来没有任何断点，顶栏在 390px 下：品牌名断成两行、按钮被压缩后
+   文字在按钮内部折行（"通/知"、"朗读:/关"、"刷/新"），顶栏涨到 79px。
+   策略：文字永不折行；顶栏容不下时整组换行；窄屏收紧尺寸。 */
+button { white-space: nowrap; }
+.brand { white-space: nowrap; min-width: 0; }
+.topbar { flex-wrap: wrap; row-gap: 6px; }
+.topActions { flex-wrap: wrap; justify-content: flex-end; }
+.conn { flex: none; }
+
+@media (max-width: 430px) {
+  .topbar { padding: 9px 12px calc(9px + env(safe-area-inset-top, 0px)); gap: 6px; }
+  .brand { font-size: 15px; gap: 6px; }
+  .logo { font-size: 17px; }
+  button { font-size: 13px; padding: 6px 9px; }
+  button.ghost { padding: 5px 8px; }
+  .conn { font-size: 11px; padding: 3px 7px; }
+  main { padding: 10px; }
+  .card { padding: 12px; }
+  .linkBar { padding: 6px 12px; }
+}
+
+/* 极窄屏（<360px）：只留图标，省掉品牌文字 */
+@media (max-width: 360px) {
+  .brand span:not(.logo) { display: none; }
+}
+

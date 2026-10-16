@@ -1,0 +1,33 @@
+# ---- 依赖与工具链（hutch/electrobun devkit 为生成物）----
+node_modules/
+.hutch/
+.prestudy/
+
+# ---- 临时目录 ----
+.cottontail-tmp/
+
+# ---- 运行数据 / 本地状态 ----
+data/
+.dsh/
+*.log
+
+# ---- 系统文件 ----
+.DS_Store
+
+# ---- 桌面壳（Electrobun）构建产物 ----
+/build/
+desktop/build/
+desktop/out/
+desktop/artifacts/
+
+# ---- Capacitor / Android 构建产物（原生工程本身要提交）----
+app/android/build/
+app/android/app/build/
+app/android/.gradle/
+app/android/local.properties
+app/android/capacitor-cordova-android-plugins/
+app/android/app/src/main/assets/public/
+app/android/app/src/main/assets/capacitor.config.json
+
+# ---- 构建生成的版本信息 ----
+app/web/build-info.json
