@@ -41,6 +41,8 @@ public class NotifyService extends Service {
     private volatile boolean running = false;
     private Thread worker;
     private long lastSeq = 0;
+    private android.os.PowerManager.WakeLock wakeLock;
+    private android.net.wifi.WifiManager.WifiLock wifiLock;
 
     @Override
     public void onCreate() {
@@ -51,6 +53,7 @@ public class NotifyService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(ONGOING_ID, ongoing());
+        acquireLocks();
         if (!running) {
             running = true;
             worker = new Thread(this::loop, "mo-agent-sse");
@@ -66,7 +69,35 @@ public class NotifyService extends Service {
         Thread current = worker;
         worker = null;
         if (current != null) current.interrupt();
+        releaseLocks();
         super.onDestroy();
+    }
+
+    /** 切后台/锁屏时 CPU 与 WiFi 都可能休眠，导致 SSE 被断开；这里锁住它们。 */
+    private void acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+                wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "mo-agent:sse");
+                wakeLock.setReferenceCounted(false);
+            }
+            if (!wakeLock.isHeld()) wakeLock.acquire();
+        } catch (Exception ignored) { }
+        try {
+            if (wifiLock == null) {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                if (wm != null) {
+                    wifiLock = wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mo-agent:wifi");
+                    wifiLock.setReferenceCounted(false);
+                }
+            }
+            if (wifiLock != null && !wifiLock.isHeld()) wifiLock.acquire();
+        } catch (Exception ignored) { }
+    }
+
+    private void releaseLocks() {
+        try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) { }
+        try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) { }
     }
 
     @Override
