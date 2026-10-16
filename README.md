@@ -132,16 +132,22 @@ mo-agent 的处理：
 
 排查用：node scripts/inspect-sessions.mjs
 
+自检：npm run check（语法）· npm test（host/logs-http 单测）
+
 ## 接口速查
 
+    GET  /setup                设置页（装 App + 配对两个二维码；桌面面板打开的就是它）
     GET  /pair                 二维码配对页（公开）
     GET  /pair/qr.svg          二维码图片（公开，?ip= 可指定网卡）
+    GET  /logs                 日志页（仅回环地址可访问；桌面「查看日志」打开）
+    GET  /logs/data            日志尾部若干行 JSON（仅回环地址）
     POST /api/pair             配对：{pin} 或 {qrToken}
     GET  /api/state            全量快照（会话 + 待批准 + 进程）
     GET  /api/events           SSE 事件流（?since= 断点重放）
     POST /api/approve          手机决定：{id, decision}
     POST /local/approval       hook 回调（本机令牌）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
+
 ## 菜单栏图标与 Dock 行为
 
 - 菜单栏显示**单色模板图**，系统按亮暗主题自动反色。图标源：desktop/src/mainview/tray.png（36×36），由 scripts/gen-icons.mjs 生成。

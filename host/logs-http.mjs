@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 // 日志只给本机看：host 默认绑 0.0.0.0，若不限制，同网段手机也能读到日志。
-function isLoopback(req) {
+export function isLoopback(req) {
   const raw = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "";
   return raw === "" || raw === "127.0.0.1" || raw === "::1" || raw === "::ffff:127.0.0.1";
 }
@@ -22,8 +22,15 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+// 启动横幅、二维码等会往日志里写终端 ANSI 色码（\x1b[47m 之类），
+// 直接显示到网页会变成乱码，这里统一剥掉。
+const ANSI_PATTERN = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+export function stripAnsi(text) {
+  return String(text).replace(ANSI_PATTERN, "");
+}
+
 /** 只读文件尾部若干行：日志可能很大，读最后 256KB 足够。 */
-function readTail(file, maxLines) {
+export function readTail(file, maxLines) {
   try {
     const stat = fs.statSync(file);
     const bytes = Math.min(stat.size, 256 * 1024);
@@ -38,6 +45,7 @@ function readTail(file, maxLines) {
         const nl = text.indexOf("\n");
         text = nl >= 0 ? text.slice(nl + 1) : "";
       }
+      text = stripAnsi(text);
       const all = text.split(/\r?\n/);
       if (all.length && all[all.length - 1] === "") all.pop();
       return {

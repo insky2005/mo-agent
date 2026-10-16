@@ -19,6 +19,9 @@ data/
 desktop/build/
 desktop/out/
 desktop/artifacts/
+# Electrobun 的图标源是 desktop/icon.iconset（由 scripts/gen-icons.mjs 生成），
+# 这个 icns 无任何引用，属冗余产物。
+desktop/icon.icns
 
 # ---- Capacitor / Android 构建产物（原生工程本身要提交）----
 app/android/build/
