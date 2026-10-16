@@ -24,6 +24,8 @@ export const EVENT = Object.freeze({
   // 远程批准
   APPROVAL_PENDING: "approval.pending",
   APPROVAL_RESOLVED: "approval.resolved",
+  // 统一通知（由 core/notify.mjs 从上面的事件翻译而来，客户端只认这一条）
+  NOTIFY: "notify",
   // 其它
   NOTICE: "notice",
   SOURCE_ERROR: "source.error",

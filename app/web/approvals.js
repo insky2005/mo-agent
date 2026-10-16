@@ -10,7 +10,6 @@
   var token = '';
 
   var approvals = new Map();
-  var seen = new Set();
   var section = null;
   var list = null;
 
@@ -66,15 +65,6 @@
     }).join('');
   }
 
-  function notify(title, body) {
-    if (navigator.vibrate) {
-      try { navigator.vibrate([200, 90, 200, 90, 200]); } catch (e) { /* 忽略 */ }
-    }
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try { new Notification(title, { body: body, tag: 'mo-agent-approval', icon: '/icon.svg' }); } catch (e) { /* 忽略 */ }
-    }
-  }
-
   function load() {
     fetch(BASE + '/api/state', { headers: { 'x-mo-agent-token': token } })
       .then(function (res) { return res.json(); })
@@ -110,10 +100,7 @@
       var p = evt.payload || {};
       approvals.set(p.id, p);
       render();
-      if (!seen.has(evt.seq)) {
-        seen.add(evt.seq);
-        notify('需要授权决定', (p.agentLabel || '') + ' ' + (p.title || p.toolName || ''));
-      }
+      // 通知由 host 的 core/notify.mjs 统一发出（notify 事件），此处不再重复弹
     });
     es.addEventListener('approval.resolved', function (event) {
       var evt;

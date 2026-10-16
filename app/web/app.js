@@ -318,7 +318,7 @@
     var url = BASE + "/api/events?since=" + encodeURIComponent(state.seq) + "&token=" + encodeURIComponent(state.token);
     var es = new EventSource(url);
     state.es = es;
-    es.onopen = function () { sseErrors = 0; stopPolling(); setConn(true); };
+    es.onopen = function () { sseErrors = 0; stopPolling(); setConn(true); startNativeNotify(); };
     es.onerror = function () {
       sseErrors += 1;
       setConn(false, "重连中…");
@@ -329,7 +329,7 @@
         startPolling();
       }
     };
-    var types = ["session.upsert", "session.removed", "session.started", "pending.added", "pending.resolved", "notice", "dsh.error"];
+    var types = ["session.upsert", "session.removed", "session.started", "pending.added", "pending.resolved", "notify", "dsh.error"];
     types.forEach(function (type) {
       es.addEventListener(type, function (event) {
         var parsed;
@@ -354,39 +354,29 @@
     } else if (evt.type === "pending.added") {
       state.pending.set(p.eventId, p);
       renderPending();
-      var title = p.kind === "approval" ? "等待授权确认" : "Agent 正在询问";
-      notify(title, describePending(p), p.kind, evt.seq);
     } else if (evt.type === "pending.resolved") {
       state.pending.delete(p.eventId);
       renderPending();
-    } else if (evt.type === "notice") {
-      notify(p.title || "Agent 通知", p.body || "", p.kind, evt.seq);
+    } else if (evt.type === "notify") {
+      // 通知统一由 host 的 core/notify.mjs 路由成 notify 事件，前端只负责展示
+      notify(p.title || "Agent 通知", p.body || "", p.kind, evt.seq, p.severity);
     } else if (evt.type === "dsh.error") {
       setConn(false, "DSH 异常");
     }
   }
 
-  function describePending(p) {
-    if (p.kind === "approval") {
-      var aq = p.question || {};
-      return aq.reason || aq.toolName || "需要授权";
-    }
-    var q = p.question || {};
-    var list = q.questions || [];
-    if (!list.length) return "需要你的输入";
-    return list.map(function (item) { return item.question || ""; }).join(" / ");
-  }
-
-  function notify(title, body, kind, seq) {
+  function notify(title, body, kind, seq, severity) {
     if (seq && state.notified.has(seq)) return;
     if (seq) {
       state.notified.add(seq);
       if (state.notified.size > 400) state.notified = new Set();
     }
-    if (navigator.vibrate) {
-      try { navigator.vibrate(kind === "error" ? [300, 120, 300] : [140, 70, 140]); } catch (e) { /* 忽略 */ }
+    // 只有「需要人做决定」才强提醒；完成类静默出一条通知即可
+    var critical = severity === "critical";
+    if (critical && navigator.vibrate) {
+      try { navigator.vibrate([200, 90, 200]); } catch (e) { /* 忽略 */ }
     }
-    if (state.speak && window.speechSynthesis) {
+    if (critical && state.speak && window.speechSynthesis) {
       try {
         var utter = new SpeechSynthesisUtterance(title + "。" + body);
         utter.lang = "zh-CN";
@@ -394,10 +384,23 @@
       } catch (e) { /* 忽略 */ }
     }
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      try { new Notification(title, { body: body, tag: "mo-agent", icon: "/icon.svg" }); } catch (e) { /* 忽略 */ }
+      try { new Notification(title, { body: body, tag: "mo-agent-" + (kind || "notice"), icon: "/icon.svg" }); } catch (e) { /* 忽略 */ }
     }
     document.title = "● " + title;
     setTimeout(function () { document.title = "mo-agent"; }, 6000);
+  }
+
+  function nativeNotifyPlugin() {
+    var C = window.Capacitor;
+    return (C && C.Plugins && C.Plugins.MoAgentNotify) || null;
+  }
+
+  // 原生壳：把地址与令牌交给前台服务，之后锁屏通知由原生侧负责
+  function startNativeNotify() {
+    if (!NATIVE || !BASE || !state.token) return;
+    var plugin = nativeNotifyPlugin();
+    if (!plugin) return;
+    try { plugin.start({ base: BASE, token: state.token }); } catch (error) { /* 忽略 */ }
   }
 
   // ---------------------------------------------------------------- 动作
@@ -755,6 +758,8 @@
   renderLink();
   loadLocalBuild();
   loadRemoteBuild();
+  // 尽早把地址/令牌交给前台服务，避免切到「实时界面」后原生长连接没起来
+  startNativeNotify();
   maybeGoLive();
   initDeepLink();
 

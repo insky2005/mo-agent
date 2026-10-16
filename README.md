@@ -15,8 +15,9 @@
 | approvals/ 远程批准中枢 + hook CLI | 已实现并端到端验证 |
 | host/ 主程序（HTTP + SSE + 配对 + 二维码） | 可用 |
 | app/web/ 手机端 PWA（扫码配对 / 授权卡片 / 语音） | 可用 |
-| app/android/ Capacitor 原生外壳 | 已打包出 APK（3.9MB） |
-| desktop/ 桌面壳 | 未开始 |
+| app/android/ Capacitor 原生外壳 + 锁屏通知前台服务 | 已打包出 APK |
+| core/notify.mjs 统一通知路由（分级 + 去重 + 通道） | 已实现 |
+| desktop/ 桌面壳 | 已完成 |
 
 ## 快速开始
 
@@ -97,6 +98,26 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/debug/app-debug.apk。
 页面底部可切换网卡（手机连不上时多半是选错网段）。
 
+## 锁屏通知（Android）
+
+局域网是明文 HTTP，普通浏览器 PWA 在非安全上下文里拿不到 Service Worker / Notification，
+页面一关或手机锁屏就收不到提醒。所以 Android 走**原生前台服务**：
+
+- MainActivity 在配对后把电脑地址和设备令牌交给 NotifyService；
+- 它在后台维持到 host 的 SSE 连接，收到 host 统一路由出来的 notify 事件就发系统通知；
+- 授权类通知带「允许一次 / 拒绝」按钮，直接 POST 回电脑，不用先打开 App；
+- 代价是会常驻一条低优先级通知「mo-agent 正在守候」。
+
+通知**分级**（core/notify.mjs）：授权 / 提问 / 失败 = critical（响铃 + 震动 + 朗读），
+任务完成 = normal（静默一条）。同一件待办只提醒一次。
+
+重新打包安装：
+
+    ./scripts/build-android.sh
+    adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
+
+> iPhone 目前还没有可靠通道（Web Push 需 HTTPS，且要另配），留给下一个迭代。
+
 ## 目录结构
 
     core/          共享：事件模型、状态词表、事件缓冲（纯逻辑，无 IO）
@@ -147,6 +168,8 @@ mo-agent 的处理：
     POST /api/approve          手机决定：{id, decision}
     POST /local/approval       hook 回调（本机令牌）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
+
+    SSE  event: notify         统一通知出口（授权/提问/完成/失败，带 severity）
 
 ## 菜单栏图标与 Dock 行为
 

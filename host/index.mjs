@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { loadConfig } from "./config.mjs";
 import { createLogger } from "./log.mjs";
 import { Hub } from "../core/hub.mjs";
+import { Notifier } from "../core/notify.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
@@ -29,6 +30,9 @@ config.approvalTimeoutMs = config.approvalTimeoutMs || 120000;
 const log = createLogger(config.logLevel);
 
 const hub = new Hub({ log, historySize: config.historySize });
+// 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
+const notifier = new Notifier({ hub, log });
+notifier.start();
 const localToken = process.env.MO_AGENT_LOCAL_TOKEN || randomBytes(24).toString("base64url");
 const profiles = loadProfiles();
 
