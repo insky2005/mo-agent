@@ -38,6 +38,10 @@ export class AgentMonitor {
     this.hub = opts.hub; this.store = opts.hub.store;
     this.sessions = new Map();
     this.pending = new Map();
+    // 实时状态显示「这一轮跑完了」，等下次轮询拿到最新回复再发完成通知
+    this.awaitingCompletion = new Set();
+    // 已经为哪个轮次发过完成通知，避免重复
+    this.lastNotifiedTurns = new Map();
     this.knownAgentIds = new Map();
     this.timer = null;
     this.polling = false;
@@ -101,6 +105,8 @@ export class AgentMonitor {
     for (const [id, session] of [...this.sessions]) {
       if (seen.has(id)) continue;
       this.sessions.delete(id);
+      this.awaitingCompletion.delete(id);
+      this.lastNotifiedTurns.delete(id);
       this.hub.emit("session.removed", { sessionId: id });
     }
   }
@@ -144,7 +150,16 @@ export class AgentMonitor {
     if (changed) {
       this.hub.emit("session.upsert", session);
     }
-    if (prev && prev.status === STATUS.RUNNING && session.status === STATUS.IDLE) {
+    // 完成判定：以「轮次增加」为主（不依赖轮询是否恰好抓到 running），
+    // 再兼顾实时 status 报的结束与状态跃迁。三个信号合并，保证每轮只通知一次。
+    if (!prev) this.lastNotifiedTurns.set(session.sessionId, session.turns || 0);
+    const knownTurns = this.lastNotifiedTurns.get(session.sessionId) || 0;
+    const turned = (session.turns || 0) > knownTurns;
+    const awaiting = this.awaitingCompletion.has(session.sessionId) && !session.running;
+    if (awaiting) this.awaitingCompletion.delete(session.sessionId);
+    const stopped = prev && prev.status === STATUS.RUNNING && session.status === STATUS.IDLE;
+    if (!session.running && (turned || awaiting || stopped)) {
+      this.lastNotifiedTurns.set(session.sessionId, session.turns || 0);
       this.notice("completed", session, "任务完成", session.lastResponse || "Agent 已结束本轮工作");
     }
     if (prev && !prev.running && session.running) {
@@ -255,7 +270,16 @@ export class AgentMonitor {
       const running = !!args[1];
       const session = this.sessions.get(sessionId);
       if (session && session.running !== running) {
+        const wasRunning = session.running;
         session.running = running;
+        if (running) {
+          session.status = STATUS.RUNNING;
+        } else {
+          session.status = this.pendingForSession(sessionId).length > 0 ? STATUS.WAITING : STATUS.IDLE;
+          // 实时通道才是权威信号：一轮结束在这里就能知道。
+          // 只靠轮询的状态跃迁会漏掉「两次轮询之间就跑完」的快轮次。
+          if (wasRunning) this.awaitingCompletion.add(sessionId);
+        }
         this.hub.emit("session.upsert", session);
       }
       return;

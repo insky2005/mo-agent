@@ -7,8 +7,8 @@
   "scripts": {
     "start": "node host/index.mjs",
     "dev": "node --watch host/index.mjs",
-    "check": "node --check host/index.mjs && node --check host/http.mjs && node --check host/logs-http.mjs && node --check host/logs-http.test.mjs && node --check host/pair-http.mjs && node --check core/hub.mjs && node --check core/notify.mjs && node --check core/notify.test.mjs && node --check host/notify-webhook.mjs && node --check host/notify-webhook.test.mjs && node --check adapters/claude-code.mjs",
-    "test": "node --test core/ host/"
+    "check": "node --check host/index.mjs && node --check host/http.mjs && node --check host/logs-http.mjs && node --check host/logs-http.test.mjs && node --check host/pair-http.mjs && node --check core/hub.mjs && node --check core/notify.mjs && node --check core/notify.test.mjs && node --check host/notify-webhook.mjs && node --check host/notify-webhook.test.mjs && node --check adapters/claude-code.mjs && node --check adapters/dsh-monitor.mjs && node --check adapters/dsh-monitor.test.mjs",
+    "test": "node --test core/ host/ adapters/"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
