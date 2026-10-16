@@ -383,7 +383,12 @@ function streamEvents(req, res, url, store, log, onOpen) {
 
   const backlog = store.since(since);
   if (backlog.length) log.debug("SSE 重放 " + backlog.length + " 条事件 (since=" + since + ")");
-  for (const event of backlog) write(event);
+  for (const event of backlog) {
+    // 通知是瞬时推送，不参与断线重放：否则每次重连/重开 App 都会把旧通知再弹一遍。
+    // 需要重放的是状态类事件（会话、待办）；待办在重放后自然会出现在界面上。
+    if (event.type === "notify") continue;
+    write(event);
+  }
 
   const unsubscribe = store.subscribe(write);
   const heartbeat = setInterval(() => res.write(": ping " + Date.now() + "\n\n"), 20000);
