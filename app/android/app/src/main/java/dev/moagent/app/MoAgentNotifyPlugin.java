@@ -61,4 +61,22 @@ public class MoAgentNotifyPlugin extends Plugin {
         result.put("base", prefs().getString(NotifyService.KEY_BASE, ""));
         call.resolve(result);
     }
+
+    /** 把 App 加入电池优化白名单：否则锁屏久了系统会冻结后台网络，通知就会延迟。 */
+    @PluginMethod
+    public void requestBatteryExemption(PluginCall call) {
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            if (pm != null && pm.isIgnoringBatteryOptimizations(getContext().getPackageName())) {
+                call.resolve();
+                return;
+            }
+            Intent intent = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+            getActivity().startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("无法打开电池优化设置: " + error.getMessage());
+        }
+    }
 }

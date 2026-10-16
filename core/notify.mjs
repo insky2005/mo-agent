@@ -149,6 +149,7 @@ export class Notifier {
     if (this.seen.size > this.maxSeen) this.seen = new Set();
 
     const payload = Object.assign({}, intent, { sourceSeq: event.seq, createdAt: Date.now() });
+    this.log.info("通知 " + payload.severity + " · " + payload.title + (payload.body ? " · " + payload.body : ""));
     this.hub.emit(EVENT.NOTIFY, payload);
     for (const channel of this.channels) {
       try {

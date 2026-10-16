@@ -123,8 +123,11 @@ public class NotifyService extends Service {
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 conn.setRequestProperty("Accept", "text/event-stream");
                 conn.setRequestProperty("Cache-Control", "no-cache");
+                conn.setRequestProperty("X-Mo-Agent-Client", "android-native");
                 conn.setConnectTimeout(10000);
-                conn.setReadTimeout(0);
+                // host 每 20 秒发一次心跳：45 秒收不到就认定连接已死，主动重连，
+                // 否则锁屏时被系统冻结的旧连接会一直挂着、通知迟迟不来。
+                conn.setReadTimeout(45000);
                 if (conn.getResponseCode() != 200) throw new IllegalStateException("HTTP " + conn.getResponseCode());
                 backoff = 2000;
 
@@ -152,7 +155,7 @@ public class NotifyService extends Service {
                 if (conn != null) conn.disconnect();
             }
             sleep(backoff);
-            backoff = Math.min(backoff * 2, 30000);
+            backoff = Math.min(backoff * 2, 8000);
         }
     }
 

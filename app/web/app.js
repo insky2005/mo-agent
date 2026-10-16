@@ -400,7 +400,14 @@
     if (!NATIVE || !BASE || !state.token) return;
     var plugin = nativeNotifyPlugin();
     if (!plugin) return;
-    try { plugin.start({ base: BASE, token: state.token }); } catch (error) { /* 忽略 */ }
+    try {
+      plugin.start({ base: BASE, token: state.token });
+      // 首次把 App 加入电池优化白名单，否则锁屏久了后台网络被冻结、通知会延迟
+      if (localStorage.getItem("mo-agent.batteryAsked") !== "1" && plugin.requestBatteryExemption) {
+        localStorage.setItem("mo-agent.batteryAsked", "1");
+        plugin.requestBatteryExemption();
+      }
+    } catch (error) { /* 忽略 */ }
   }
 
   // ---------------------------------------------------------------- 动作

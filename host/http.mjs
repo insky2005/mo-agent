@@ -244,10 +244,15 @@ export function createMoAgentServer(options) {
       }
 
       if (pathname === "/api/events" && req.method === "GET") {
+        const remote = (req.socket && req.socket.remoteAddress) || "?";
+        const clientTag = String(req.headers["x-mo-agent-client"] || "").trim();
+        const ua = String(req.headers["user-agent"] || "no-ua").slice(0, 60);
+        log.info("SSE 接入 " + remote + (clientTag ? " [" + clientTag + "]" : "") + " ua=" + ua);
         return streamEvents(req, res, url, hub.store, log, () => {
           clients += 1;
           return () => {
             clients -= 1;
+            log.info("SSE 断开 " + remote + "（当前在线 " + clients + "）");
           };
         });
       }
@@ -356,7 +361,12 @@ function streamEvents(req, res, url, store, log, onOpen) {
 
   const unsubscribe = store.subscribe(write);
   const heartbeat = setInterval(() => res.write(": ping " + Date.now() + "\n\n"), 20000);
+  // close / error 可能各触发一次，清理必须幂等：否则 clients 会越减越负，
+  // 而远程批准中枢用 clients > 0 判断「手机在不在线」，负值会让授权全部 DEFER。
+  let closed = false;
   const done = () => {
+    if (closed) return;
+    closed = true;
     clearInterval(heartbeat);
     unsubscribe();
     cleanup();
