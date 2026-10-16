@@ -74,6 +74,22 @@ public class NotifyService extends Service {
         return null;
     }
 
+    /** 从最近任务里被划掉时，用闹钟很快把自己拉回来（国产 ROM 会连前台服务一起清）。 */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        try {
+            Intent restart = new Intent(getApplicationContext(), NotifyService.class);
+            int flags = PendingIntent.FLAG_ONE_SHOT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pending = PendingIntent.getService(getApplicationContext(), 1, restart, flags);
+            android.app.AlarmManager alarm = (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarm != null) alarm.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 1500, pending);
+        } catch (Exception ignored) {
+            // 拉不回来就算了，下次打开 App 还会再启动
+        }
+        super.onTaskRemoved(rootIntent);
+    }
+
     private void createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager nm = getSystemService(NotificationManager.class);
