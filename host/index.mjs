@@ -24,6 +24,8 @@ const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "ap
 // 桌面端会把 host 的 stdout/stderr 重定向到日志文件，并通过该环境变量告知路径；
 // 单独的 host 进程也能用默认路径读到桌面端写的日志。
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
+// 已配对设备令牌落盘，host 重启后不丢（否则每次「重启服务」都要重新配对）
+const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), ".mo-agent", "devices.json");
 
 const config = loadConfig(process.argv);
 config.transcriptPollMs = config.transcriptPollMs || 2000;
@@ -87,6 +89,7 @@ const moHost = createMoAgentServer({
   pairHandler: handlePairRoutes,
   apkPath,
   logFile,
+  deviceFile,
 });
 runtime.clientCount = moHost.clientCount;
 

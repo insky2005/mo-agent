@@ -80,8 +80,33 @@ export function createMoAgentServer(options) {
   const pairHandler = options.pairHandler;
   const apkPath = options.apkPath;
   const logFile = options.logFile;
+  const deviceFile = options.deviceFile;
 
   const deviceTokens = new Set();
+
+  // 持久化已配对设备：否则 host 一重启（含桌面「重启服务」）令牌全丢，
+  // 手机必须重新配对，原生前台服务也会拿着旧令牌一直 401。
+  const loadDeviceTokens = () => {
+    if (!deviceFile) return;
+    try {
+      if (!fs.existsSync(deviceFile)) return;
+      const list = JSON.parse(fs.readFileSync(deviceFile, "utf8"));
+      if (Array.isArray(list)) for (const token of list) if (typeof token === "string" && token) deviceTokens.add(token);
+      if (deviceTokens.size) log.info("已恢复 " + deviceTokens.size + " 个已配对设备");
+    } catch (error) {
+      log.warn("读取设备令牌失败: " + (error && error.message ? error.message : error));
+    }
+  };
+  const saveDeviceTokens = () => {
+    if (!deviceFile) return;
+    try {
+      fs.mkdirSync(path.dirname(deviceFile), { recursive: true });
+      fs.writeFileSync(deviceFile, JSON.stringify([...deviceTokens]), { mode: 0o600 });
+    } catch (error) {
+      log.warn("保存设备令牌失败: " + (error && error.message ? error.message : error));
+    }
+  };
+  loadDeviceTokens();
   let pairPin = String(config.pin || "").trim();
   if (!pairPin) pairPin = String(Math.floor(100000 + Math.random() * 900000));
   let clients = 0;
@@ -135,6 +160,7 @@ export function createMoAgentServer(options) {
         }
         const token = randomBytes(24).toString("base64url");
         deviceTokens.add(token);
+        saveDeviceTokens();
         log.info("新设备已配对，当前设备数 " + deviceTokens.size);
         return json(res, 200, { ok: true, token, authRequired: config.authRequired });
       }
