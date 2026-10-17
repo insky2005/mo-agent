@@ -26,7 +26,9 @@ test("approval.pending -> critical，带 eventId", () => {
   assert.equal(intent.severity, SEVERITY.CRITICAL);
   assert.equal(intent.kind, "approval");
   assert.equal(intent.eventId, "a1");
-  assert.match(intent.title, /Claude Code/);
+  assert.equal(intent.title, "授权请求");
+  assert.match(intent.body, /Claude Code/);
+  assert.match(intent.body, /运行 rm/);
 });
 
 test("pending.added 的提问 -> critical，body 取问题文本", () => {
@@ -36,9 +38,24 @@ test("pending.added 的提问 -> critical，body 取问题文本", () => {
   assert.equal(intent.body, "选哪个分支？");
 });
 
-test("notice completed -> normal，error -> critical", () => {
-  assert.equal(classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成" })).severity, SEVERITY.NORMAL);
-  assert.equal(classifyEvent(eventOf(EVENT.NOTICE, { kind: "error", title: "Agent 出错" })).severity, SEVERITY.CRITICAL);
+test("notice completed -> normal「任务完成」，error -> critical「出错了」", () => {
+  const done = classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成" }));
+  assert.equal(done.severity, SEVERITY.NORMAL);
+  assert.equal(done.title, "任务完成");
+  const bad = classifyEvent(eventOf(EVENT.NOTICE, { kind: "error", title: "Agent 出错" }));
+  assert.equal(bad.severity, SEVERITY.CRITICAL);
+  assert.equal(bad.title, "出错了");
+});
+
+test("pending.added 带会话标题：正文是「会话 · 问题」", () => {
+  const intent = classifyEvent(eventOf("pending.added", {
+    eventId: "q2",
+    kind: "question",
+    sessionTitle: "mo-agent",
+    question: { questions: [{ question: "选哪个分支？" }] },
+  }));
+  assert.equal(intent.title, "等待回答");
+  assert.equal(intent.body, "mo-agent · 选哪个分支？");
 });
 
 test("无关事件不产生通知", () => {

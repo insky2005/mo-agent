@@ -24,6 +24,14 @@ function describeQuestion(question) {
   return text || "需要你的输入";
 }
 
+/** 正文前缀：优先会话标题，没有就退回 Agent 名。 */
+function withPrefix(prefix, text) {
+  const head = String(prefix || "").trim();
+  const tail = String(text || "").trim();
+  if (head && tail) return head + " · " + tail;
+  return head || tail;
+}
+
 /**
  * 把 hub 上的原始事件翻译成一条通知意图。
  * 返回 null 表示这条事件不值得打扰用户。
@@ -36,8 +44,8 @@ export function classifyEvent(event) {
       return {
         severity: SEVERITY.CRITICAL,
         kind: "approval",
-        title: "需要授权 · " + label,
-        body: p.title || p.toolName || "该操作需要你的授权才能继续",
+        title: "授权请求",
+        body: withPrefix(label, p.title || p.toolName || "该操作需要你的授权才能继续"),
         eventId: p.id || null,
         sessionId: p.sessionId || null,
         agent: p.agent || null,
@@ -49,8 +57,8 @@ export function classifyEvent(event) {
       return {
         severity: SEVERITY.CRITICAL,
         kind: isApproval ? "approval" : "question",
-        title: isApproval ? "需要授权" : "Agent 正在询问",
-        body: describeQuestion(p.question),
+        title: isApproval ? "授权请求" : "等待回答",
+        body: withPrefix(p.sessionTitle, describeQuestion(p.question)),
         eventId: p.eventId || null,
         sessionId: p.sessionId || null,
         agent: null,
@@ -63,8 +71,8 @@ export function classifyEvent(event) {
       return {
         severity: SEVERITY.CRITICAL,
         kind: isAuth ? "approval" : "question",
-        title: p.title || (isAuth ? "需要授权" : "Agent 正在询问"),
-        body: p.body || p.text || "",
+        title: isAuth ? "授权请求" : "等待回答",
+        body: withPrefix(p.sessionTitle || p.agentLabel || p.agent, p.title || p.body || p.text || ""),
         eventId: p.id || p.eventId || null,
         sessionId: p.sessionId || null,
         agent: p.agent || null,
@@ -73,11 +81,12 @@ export function classifyEvent(event) {
     }
     case EVENT.NOTICE: {
       const kind = p.kind || "notice";
+      const fixedTitle = kind === "completed" ? "任务完成" : kind === "error" ? "出错了" : "";
       return {
         severity: kind === "completed" ? SEVERITY.NORMAL : SEVERITY.CRITICAL,
         kind,
-        title: p.title || "Agent 通知",
-        body: p.body || "",
+        title: fixedTitle || p.title || "提醒",
+        body: withPrefix(p.sessionTitle, p.body || ""),
         eventId: null,
         sessionId: p.sessionId || null,
         agent: p.agent || null,
@@ -88,8 +97,8 @@ export function classifyEvent(event) {
       return {
         severity: SEVERITY.CRITICAL,
         kind: "error",
-        title: (p.title || p.agent || "Agent") + " 失败",
-        body: p.text || p.body || "",
+        title: "出错了",
+        body: withPrefix(p.sessionTitle || p.agent, p.text || p.body || ""),
         eventId: null,
         sessionId: p.id || p.sessionId || null,
         agent: p.agent || null,

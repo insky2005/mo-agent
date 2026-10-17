@@ -253,11 +253,13 @@ export function createMoAgentServer(options) {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const body = await readBody(req);
         const agentLabel = body.agentLabel || "Agent";
-        // 默认标题是「<Agent> 需要你注意」；需要自定义时传 noticeTitle
+        const content = body.body || body.title || body.toolName || "";
+        const prefix = body.sessionTitle || agentLabel;
+        // 标题只表达事件类型；Agent/会话名放正文。需要完全自定义时传 noticeTitle。
         hub.emit("notice", {
           kind: "attention",
-          title: body.noticeTitle || (agentLabel + " 需要你注意"),
-          body: body.body || body.title || body.toolName || "",
+          title: body.noticeTitle || "提醒",
+          body: body.noticeTitle ? content : (prefix + (content ? " · " + content : "")),
           sessionId: body.sessionId || null,
         });
         return json(res, 200, { ok: true });

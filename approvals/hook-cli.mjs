@@ -73,7 +73,7 @@ async function main() {
 
   const payload = {
     agent: "claude-code",
-    agentLabel: "Claude Code",
+    agentLabel: process.env.MO_AGENT_AGENT_LABEL || "Claude Code",
     sessionId: firstString(input, ["session_id", "sessionId"]),
     toolName: firstString(input, ["tool_name", "toolName"]),
     toolInput: input.tool_input || input.toolInput || null,
