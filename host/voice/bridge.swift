@@ -331,7 +331,9 @@ final class VoiceSession {
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
       let snapshot = stats.snapshot()
       let elapsed = Date().timeIntervalSince(started)
-      if snapshot.buffers >= 3 && snapshot.peak > 0.0001 && elapsed >= 0.15 {
+      // 只要求“有 buffer 在流”，不再要求峰值：静音时蓝牙耳机可能输出全零，
+      // 但引擎和路由已经就绪；真正的语音由后面的 VAD 判断。
+      if snapshot.buffers >= 3 && elapsed >= 0.15 {
         return (true, Int(elapsed * 1000), snapshot.buffers, snapshot.peak)
       }
     }
@@ -374,27 +376,10 @@ final class VoiceSession {
     attachSink(next)
     gate.disable()
     state.reset()
+    stats.reset()
 
-    // 会话已经 open 过，但 TTS 播报期间路由可能又变；再给 2 秒确认音频在流。
-    let live = waitLive(timeout: 2.0)
-    if !live.live {
-      gate.disable()
-      attachSink(nil)
-      try? FileManager.default.removeItem(atPath: out)
-      return [
-        "ok": false,
-        "error": "mic-silent",
-        "message": "麦克风没有音频输入",
-        "startupMs": startupMs,
-        "buffers": live.buffers,
-        "peak": Double(live.peak),
-        "routeChanged": route.marked(),
-        "inputDevice": inputDeviceName(),
-        "micAuthorization": micAuthorizationText(),
-      ]
-    }
-
-    // 输入通道已就绪，给一声提示音；提示音被 gate 丢掉，不进 WAV。
+    // 提示音必须无条件先响：用户需要知道“现在可以说了”。
+    // 不再等峰值——有些蓝牙耳机在没人说话时输出的是全零，等峰值会永远等不到。
     playReadySound()
     gate.enable()
     state.reset()
@@ -414,10 +399,12 @@ final class VoiceSession {
 
     let snapshot = state.snapshot()
     let info = next.info()
+    let recordStats = stats.snapshot()
     var payload: [String: Any] = [
       "startupMs": startupMs,
-      "buffers": live.buffers,
-      "peak": Double(live.peak),
+      "buffers": recordStats.buffers,
+      "peak": Double(recordStats.peak),
+      "cue": "Glass",
       "routeChanged": route.marked(),
       "sampleRate": info.sampleRate,
       "channels": info.channels,
@@ -463,6 +450,17 @@ func openVoiceSession(threshold: Float) -> [String: Any] {
       return existing.status(reused: true)
     }
     closeVoiceSession()
+  }
+
+  // 之前只有 record 里请求权限；改成 open 时就要授权，否则引擎只会收到全零。
+  if !requestMic(10) {
+    return [
+      "ok": false,
+      "error": "mic-denied",
+      "message": "未获得麦克风权限",
+      "micAuthorization": micAuthorizationText(),
+      "inputDevice": inputDeviceName(),
+    ]
   }
 
   let started = Date()

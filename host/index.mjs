@@ -290,6 +290,13 @@ async function runVoiceCommand() {
     result = await voice.runExclusive(async function () {
       // 先开麦克风并等音频真的在流，再让执行器播提示语；整条命令（含确认）复用同一会话。
       const opened = await voice.open();
+      if (opened && opened.ok === false && opened.error === "mic-denied") {
+        const reply = "麦克风权限未授予。请到系统设置，隐私与安全性，麦克风里勾选 mo-agent 语音。";
+        log.warn("语音命令: 麦克风权限未授予");
+        broadcastVoiceEvent({ phase: "result", ok: false, intent: "unknown", reply: reply, error: "mic-denied" });
+        try { await voiceSpeaker(reply); } catch (error) { /* 播报失败不影响返回 */ }
+        return { ok: false, intent: "unknown", error: "mic-denied", reply: reply };
+      }
       if (opened && opened.ok === false) {
         log.warn("语音命令: 开麦失败 " + (opened.error || "unknown")
           + (opened.startupMs ? " 启动=" + opened.startupMs + "ms" : "")

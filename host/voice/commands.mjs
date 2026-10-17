@@ -220,6 +220,7 @@ export function createCommandExecutor(options) {
     if (typeof info.peak === "number") parts.push("峰值=" + info.peak.toFixed(4));
     if (info.sampleRate) parts.push("采样率=" + info.sampleRate);
     if (info.routeChanged) parts.push("路由变化");
+    if (info.cue) parts.push("提示音=" + info.cue);
     if (info.error) parts.push("错误=" + info.error);
     if (info.inputDevice) parts.push("设备=" + info.inputDevice);
     return parts.length ? (" " + parts.join(" ")) : "";
