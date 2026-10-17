@@ -10,6 +10,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.huawei.hms.push.HmsMessaging;
 
 /**
  * 暴露给网页的开关：把当前 host 地址与设备令牌交给前台服务，
@@ -17,6 +18,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  */
 @CapacitorPlugin(name = "MoAgentNotify")
 public class MoAgentNotifyPlugin extends Plugin {
+
+    // AGC 里的 App ID（不是 OAuth client_id），公开信息
+    private static final String HMS_APP_ID = "119386705";
 
     private SharedPreferences prefs() {
         return getContext().getSharedPreferences(NotifyService.PREFS, Context.MODE_PRIVATE);
@@ -40,9 +44,31 @@ public class MoAgentNotifyPlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
         else getContext().startService(intent);
 
+        // 配对信息已就绪，顺便取 HMS push token 上报给 host
+        fetchAndReportHmsToken();
+
         JSObject result = new JSObject();
         result.put("running", true);
         call.resolve(result);
+    }
+
+    /** 取 HMS push token 并上报；HMS 不可用时静默跳过。 */
+    private void fetchAndReportHmsToken() {
+        try {
+            final Context context = getContext();
+            HmsMessaging.getInstance(context).setAutoInitEnabled(true);
+            // getToken 是阻塞的网络调用，必须放后台线程
+            new Thread(() -> {
+                try {
+                    String token = com.huawei.hms.aaid.HmsInstanceId.getInstance(context).getToken(HMS_APP_ID, "HCM");
+                    PushTokenReporter.report(context, token);
+                } catch (Exception ignored) {
+                    // HMS Core 缺失或未登录华为账号：忽略
+                }
+            }, "mo-agent-hms-token").start();
+        } catch (Exception ignored) {
+            // 不影响本地功能
+        }
     }
 
     @PluginMethod

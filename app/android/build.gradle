@@ -5,9 +5,11 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        maven { url 'https://developer.huawei.com/repo/' }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.7.2'
+        classpath 'com.huawei.agconnect:agcp:1.9.6.300'
         classpath 'com.google.gms:google-services:4.4.2'
 
         // NOTE: Do not place your application dependencies here; they belong
@@ -21,6 +23,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url 'https://developer.huawei.com/repo/' }
     }
     // Capacitor 模板会把 kotlin-stdlib 的 jdk7/jdk8 旧包一起拉进来，
     // 与 kotlin-stdlib 1.8+ 产生重复类；统一到同一版本即可消除。

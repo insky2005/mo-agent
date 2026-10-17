@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHmac } from "node:crypto";
+import { createHmsChannel } from "./hms-push.mjs";
 
 /**
  * Webhook 通知通道：把 host 的统一 notify 事件转成第三方服务的请求。
@@ -150,7 +151,7 @@ export function createWebhookChannel(config, deps) {
  *  2) 环境变量 MO_AGENT_NOTIFY_WEBHOOKS（JSON 数组，用于临时/调试）
  * 两者都会生效。
  */
-export function loadWebhookChannels(options) {
+export function loadChannelConfigs(options) {
   const opts = options || {};
   const log = opts.log || (() => {});
   const env = opts.env || process.env;
@@ -176,7 +177,33 @@ export function loadWebhookChannels(options) {
     }
   }
 
-  return configs
-    .filter((config) => config && config.url)
-    .map((config) => createWebhookChannel(config, { log }));
+  return configs.filter((config) => config && typeof config === "object");
+}
+
+/** 只要 webhook 类型（bark/dingtalk/wecom/feishu/generic）。 */
+export function loadWebhookChannels(options) {
+  const opts = options || {};
+  return loadChannelConfigs(opts)
+    .filter((config) => config.type !== "hms" && config.url)
+    .map((config) => createWebhookChannel(config, { log: opts.log }));
+}
+
+/** 全部通道，包括 HMS。 */
+export function loadNotifyChannels(options) {
+  const opts = options || {};
+  const log = opts.log || (() => {});
+  const getPushTokens = opts.getPushTokens || (() => []);
+  const result = [];
+  for (const config of loadChannelConfigs(opts)) {
+    if (config.type === "hms") {
+      if (!config.appId || !config.appSecret) {
+        log.warn("HMS 通道缺少 appId/appSecret，已跳过");
+        continue;
+      }
+      result.push(createHmsChannel(config, { log, getPushTokens }));
+    } else if (config.url) {
+      result.push(createWebhookChannel(config, { log }));
+    }
+  }
+  return result;
 }

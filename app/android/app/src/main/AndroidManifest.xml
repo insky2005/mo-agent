@@ -56,6 +56,15 @@
             android:name=".ApprovalActionReceiver"
             android:exported="false" />
 
+        <!-- HMS 推送回调：token 变化时上报 host -->
+        <service
+            android:name=".MoAgentHmsMessageService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.huawei.push.action.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

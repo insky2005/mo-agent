@@ -81,6 +81,7 @@ export function createMoAgentServer(options) {
   const apkPath = options.apkPath;
   const logFile = options.logFile;
   const deviceFile = options.deviceFile;
+  const pushTokens = options.pushTokens;
 
   const deviceTokens = new Set();
 
@@ -255,6 +256,15 @@ export function createMoAgentServer(options) {
       // ---- 需设备令牌 ----
       if (pathname.startsWith("/api/") && !deviceAuthed(req, url)) {
         return json(res, 401, { ok: false, error: "未配对或令牌无效" });
+      }
+
+      if (pathname === "/api/push-token" && req.method === "POST") {
+        const body = await readBody(req);
+        const token = String(body.token || "").trim();
+        if (!token) return json(res, 400, { ok: false, error: "缺少 token" });
+        const count = pushTokens ? pushTokens.add(token) : 0;
+        log.info("已登记设备 push token，共 " + count + " 个");
+        return json(res, 200, { ok: true, count });
       }
 
       if (pathname === "/api/state" && req.method === "GET") {

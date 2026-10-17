@@ -7,7 +7,8 @@ import { loadConfig } from "./config.mjs";
 import { createLogger } from "./log.mjs";
 import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
-import { loadWebhookChannels } from "./notify-webhook.mjs";
+import { loadNotifyChannels } from "./notify-webhook.mjs";
+import { createPushTokenStore } from "./push-tokens.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
@@ -35,7 +36,8 @@ const log = createLogger(config.logLevel);
 const hub = new Hub({ log, historySize: config.historySize });
 // 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
 const notifier = new Notifier({ hub, log });
-for (const channel of loadWebhookChannels({ log })) {
+const pushTokens = createPushTokenStore({ log });
+for (const channel of loadNotifyChannels({ log, getPushTokens: () => pushTokens.list() })) {
   notifier.register(channel);
   log.info("已注册通知通道: " + channel.name);
 }
@@ -90,6 +92,7 @@ const moHost = createMoAgentServer({
   apkPath,
   logFile,
   deviceFile,
+  pushTokens,
 });
 runtime.clientCount = moHost.clientCount;
 
