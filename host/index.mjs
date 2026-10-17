@@ -248,17 +248,24 @@ if (voice) {
 
 async function runVoiceCommand() {
   if (!voice || !voiceCommands) {
+    log.warn("语音命令: 未启用，忽略本机请求");
     return { ok: false, intent: "unknown", error: "voice-disabled", reply: "语音未启用。" };
   }
+  log.info("语音命令: 收到本机请求");
+  const started = Date.now();
   const result = await voice.runExclusive(function () {
     return voiceCommands.runFromMicrophone();
   });
   if (result && result.outcome === "busy") {
+    log.info("语音命令: 正在处理其他语音，忽略本次请求");
     return { ok: false, intent: "unknown", error: "voice-busy", reply: "正在处理上一条语音，请稍后再试。" };
   }
   if (result && result.outcome === "stopped") {
+    log.info("语音命令: 语音通道已停止，忽略本次请求");
     return { ok: false, intent: "unknown", error: "voice-stopped", reply: "语音已停止。" };
   }
+  log.info("语音命令: 请求结束 耗时=" + (Date.now() - started) + "ms ok=" + !!(result && result.ok)
+    + " intent=" + ((result && result.intent) || "unknown"));
   return result;
 }
 

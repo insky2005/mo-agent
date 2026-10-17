@@ -40,6 +40,7 @@ export function loadConfig(argv) {
   if (process.env.MO_AGENT_PIN) cfg.pin = String(process.env.MO_AGENT_PIN);
   if (process.env.MO_AGENT_NO_AUTH === "1") cfg.authRequired = false;
   if (process.env.MO_AGENT_POLL) cfg.pollMs = Number(process.env.MO_AGENT_POLL);
+  if (process.env.MO_AGENT_LOG_LEVEL) cfg.logLevel = String(process.env.MO_AGENT_LOG_LEVEL);
   return cfg;
 }
 

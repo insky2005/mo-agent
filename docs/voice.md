@@ -87,12 +87,31 @@
 - 找不到会话或匹配到多个时列出候选，不猜、不切换。
 - 「当前关注会话」和「静音截止时间」都在 host 内存里，重启 host 会复位。
 
-日志里每次命令一行：
+日志里每次命令会留下完整链路（默认 info 级别）：
 
-    语音命令: 文本=「汇报状态」 intent=status 结果=reported
-    语音命令: 文本=「暂停」 intent=pause 结果=muted 15min
-    语音命令: 文本=「切到第2个」 intent=switch 结果=switched <sessionId>
-    语音命令: 文本=「今天天气不错」 intent=unknown 结果=unknown
+    语音命令: 收到本机请求
+    语音命令: 开始监听 超时=15000ms 最低置信度=0.35
+    语音命令: 监听完成 耗时=1280ms 文本=「匯報狀態」 置信度=0.87
+    语音命令: 状态 会话=7 运行=1 等待=0 待授权=0 静音=否 关注=-
+    语音命令: 文本=「匯報狀態」 intent=status 结果=reported 置信度=0.87 归一=「汇报状态」
+    语音命令: 请求结束 耗时=1650ms ok=true intent=status
+
+需要确认的命令还会记录：
+
+    语音命令: 需要确认 intent=pause 回读=「要暂停语音播报与语音审批 15 分钟，确认吗？」
+    语音命令: 确认输入 文本=「确认」 置信度=1.00 判定=confirm 耗时=760ms
+    语音命令: 已执行 action=muted mutedUntil=1760000000000 targetSessionId=-
+    语音命令: 文本=「暂停」 intent=pause 结果=muted 15min 置信度=1.00 归一=「暂停」
+
+未知/歧义会带上原因，方便判断是识别错还是匹配没覆盖：
+
+    语音命令: 文本=「今天天气不错」 intent=unknown 结果=unknown 置信度=0.91 归一=「今天天气不错」 原因=no-match
+    语音命令: 文本=「暂停一下看看状态」 intent=unknown 结果=unknown 置信度=0.88 归一=「暂停一下看看状态」 原因=ambiguous
+
+更细的「播报原文」「解析目标」在 debug 级别（`MO_AGENT_LOG_LEVEL=debug` 或启动参数 `--log-level debug`）：
+
+    语音命令: 播报「请说命令。」
+    语音命令: 解析 intent=switch 归一=「切到第2个」 目标={"kind":"index","index":2}
 
 ## 配置
 
@@ -112,6 +131,7 @@
 | `MO_AGENT_VOICE_BRIDGE` | 包内 helper | 覆盖语音桥可执行文件路径 |
 | `MO_AGENT_WHISPER_BIN` | 包内 whisper-cli | 覆盖 whisper 可执行文件路径 |
 | `MO_AGENT_TTS_SETTLE_MS` | 150 | 播完后等待音频排空的余量 |
+| `MO_AGENT_LOG_LEVEL` | info | host 日志级别；`debug` 会多记语音播报原文与解析细节 |
 | `MO_AGENT_VOICE_SCRIPT` | 无 | 用脚本台词代替麦克风（调试） |
 | `MO_AGENT_VOICE_NONCE` | 随机 | 固定口令（配合脚本调试） |
 | `MO_AGENT_VOICE_DRY` | 无 | `1` 时只记录播报文本，不出声 |

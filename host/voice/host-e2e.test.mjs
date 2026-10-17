@@ -168,6 +168,11 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
     assert.equal(paused.intent, "pause");
     assert.match(paused.reply, /已暂停/);
     await waitForOutput(function () { return output; }, "语音命令: 文本=「暂停」 intent=pause 结果=muted 15min", 3000);
+    assert.ok(output.includes("语音命令: 收到本机请求"), "应记录请求入口");
+    assert.ok(output.includes("语音命令: 开始监听"), "应记录开始监听");
+    assert.ok(output.includes("语音命令: 确认输入"), "应记录确认输入");
+    assert.ok(output.includes("归一=「暂停」"), "应记录归一文本");
+    assert.ok(output.includes("语音命令: 请求结束"), "应记录请求结束与耗时");
 
     // 静音期间 critical 通知不播报，但通知本身照常发出
     const mutedNotice = "静音期间不播报XYZ";

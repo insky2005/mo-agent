@@ -162,6 +162,22 @@ export function createCommandExecutor(options) {
   let targetSessionId = null;
   let mutedUntil = 0;
 
+  function logInfo(line) {
+    if (typeof log.info === "function") log.info(line);
+  }
+
+  function logDebug(line) {
+    if (typeof log.debug === "function") log.debug(line);
+  }
+
+  function confidenceText(value) {
+    return typeof value === "number" ? value.toFixed(2) : "-";
+  }
+
+  function elapsed(started) {
+    return Date.now() - started;
+  }
+
   function isMuted() {
     return mutedUntil > now();
   }
@@ -381,6 +397,7 @@ export function createCommandExecutor(options) {
   }
 
   async function safeSpeak(text) {
+    logDebug("语音命令: 播报「" + String(text) + "」");
     try {
       await speak(text);
     } catch (error) {
@@ -392,9 +409,17 @@ export function createCommandExecutor(options) {
 
   async function execute(parsed) {
     const intent = parsed && parsed.intent ? parsed.intent : COMMAND.UNKNOWN;
+    logDebug("语音命令: 解析 intent=" + intent
+      + " 归一=「" + (parsed && parsed.normalized ? parsed.normalized : "") + "」"
+      + (parsed && parsed.reason ? " 原因=" + parsed.reason : "")
+      + (parsed && parsed.sessionHint ? " 目标=" + JSON.stringify(parsed.sessionHint) : ""));
 
     if (intent === COMMAND.STATUS) {
       const snapshot = statusSnapshot();
+      logInfo("语音命令: 状态 会话=" + snapshot.sessions + " 运行=" + snapshot.running
+        + " 等待=" + snapshot.waiting + " 待授权=" + snapshot.approvals
+        + " 静音=" + (snapshot.muted ? "是(剩" + snapshot.muteRemainingMinutes + "min)" : "否")
+        + " 关注=" + (snapshot.target ? (snapshot.target.title + "(" + snapshot.target.id + ")") : "-"));
       const reply = statusReply(snapshot);
       await safeSpeak(reply);
       return { ok: true, reply, action: "reported", snapshot };
@@ -418,20 +443,27 @@ export function createCommandExecutor(options) {
     }
 
     // 有副作用的命令：先回读，再听一次明确确认；不认数字口令。
+    logInfo("语音命令: 需要确认 intent=" + intent + " 回读=「" + plan.prompt + "」");
     await safeSpeak(plan.prompt);
+    const confirmStarted = Date.now();
     const heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence });
     if (!heard.ok) {
+      logInfo("语音命令: 确认失败 错误=" + heard.error + " 耗时=" + elapsed(confirmStarted) + "ms");
       const reply = heard.error === "timeout" ? "没有听到确认，未执行。" : "没听清，未执行。";
       await safeSpeak(reply);
       return { ok: false, reply, action: "cancelled", heard, error: heard.error };
     }
     if (!heard.text.trim() || heard.lowConfidence) {
+      logInfo("语音命令: 确认无效 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence)
+        + (heard.lowConfidence ? " 低置信度" : " 空文本") + " 耗时=" + elapsed(confirmStarted) + "ms");
       const reply = "没听清，未执行。";
       await safeSpeak(reply);
       return { ok: false, reply, action: "cancelled", heard };
     }
 
     const replyIntent = parseReply(heard.text).intent;
+    logInfo("语音命令: 确认输入 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence)
+      + " 判定=" + replyIntent + " 耗时=" + elapsed(confirmStarted) + "ms");
     if (replyIntent !== REPLY.CONFIRM) {
       const cancelled = replyIntent === REPLY.CANCEL || replyIntent === REPLY.REJECT;
       const reply = cancelled ? "已取消，未执行。" : "没有确认，未执行。";
@@ -440,6 +472,10 @@ export function createCommandExecutor(options) {
     }
 
     const applied = apply(plan);
+    logInfo("语音命令: 已执行 action=" + applied.action
+      + (applied.sessionId ? " sessionId=" + applied.sessionId : "")
+      + " mutedUntil=" + (isMuted() ? mutedUntil : 0)
+      + " targetSessionId=" + (targetSessionId || "-"));
     await safeSpeak(applied.reply);
     return {
       ok: true,
@@ -484,9 +520,10 @@ export function createCommandExecutor(options) {
     }
 
     const outcome = describeOutcome(parsed.intent, result);
-    if (typeof log.info === "function") {
-      log.info("语音命令: 文本=「" + heard.text + "」 intent=" + parsed.intent + " 结果=" + outcome);
-    }
+    logInfo("语音命令: 文本=「" + heard.text + "」 intent=" + parsed.intent + " 结果=" + outcome
+      + " 置信度=" + confidenceText(heard.confidence)
+      + " 归一=「" + (parsed.normalized || "") + "」"
+      + (parsed.reason ? " 原因=" + parsed.reason : ""));
 
     const value = {
       ok: !!result.ok,
@@ -505,35 +542,36 @@ export function createCommandExecutor(options) {
 
   async function runFromMicrophone() {
     if (typeof listen !== "function") {
+      logInfo("语音命令: 没有可用的录音通道");
       return { ok: false, intent: COMMAND.UNKNOWN, heard: null, reply: "语音输入不可用。", error: "no-listener" };
     }
 
+    logInfo("语音命令: 开始监听 超时=" + timeoutMs + "ms 最低置信度=" + minConfidence);
     await safeSpeak("请说命令。");
+    const listenStarted = Date.now();
     const heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence });
 
     if (!heard.ok) {
+      logInfo("语音命令: 监听失败 错误=" + (heard.error || "unknown") + " 耗时=" + elapsed(listenStarted) + "ms");
       const reply = heard.error === "timeout" ? "没有听到命令。" : "麦克风不可用，请检查语音设置。";
-      if (typeof log.info === "function") {
-        log.info("语音命令: 文本=「」 intent=unknown 结果=failed:" + (heard.error || "unknown"));
-      }
+      logInfo("语音命令: 文本=「」 intent=unknown 结果=failed:" + (heard.error || "unknown"));
       await safeSpeak(reply);
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, error: heard.error };
     }
 
+    logInfo("语音命令: 监听完成 耗时=" + elapsed(listenStarted) + "ms 文本=「" + heard.text + "」"
+      + " 置信度=" + confidenceText(heard.confidence)
+      + (heard.lowConfidence ? " 低置信度" : ""));
+
     if (!heard.text.trim()) {
-      if (typeof log.info === "function") {
-        log.info("语音命令: 文本=「」 intent=unknown 结果=empty");
-      }
+      logInfo("语音命令: 文本=「」 intent=unknown 结果=empty");
       const reply = "没有听到命令。";
       await safeSpeak(reply);
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, action: "empty" };
     }
 
     if (heard.lowConfidence) {
-      if (typeof log.info === "function") {
-        const confidence = heard.confidence === null ? "-" : heard.confidence.toFixed(2);
-        log.info("语音命令: 文本=「" + heard.text + "」 intent=unknown 结果=low-confidence 置信度=" + confidence);
-      }
+      logInfo("语音命令: 文本=「" + heard.text + "」 intent=unknown 结果=low-confidence 置信度=" + confidenceText(heard.confidence));
       const reply = "没听清，请再说一遍。";
       await safeSpeak(reply);
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, action: "low-confidence" };

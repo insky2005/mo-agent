@@ -41,7 +41,11 @@ function makeExecutor(input) {
     broker,
     speak: voice.speak,
     listen: voice.listen,
-    log: { info: function (line) { logs.push(line); }, warn: function (line) { logs.push(line); } },
+    log: {
+      info: function (line) { logs.push(line); },
+      warn: function (line) { logs.push(line); },
+      debug: function (line) { logs.push(line); },
+    },
     now: function () { return state.now; },
     muteMinutes: opts.muteMinutes,
   });
@@ -297,6 +301,34 @@ test("执行：歧义句不执行任何动作", async () => {
   assert.equal(result.intent, COMMAND.UNKNOWN);
   assert.equal(executor.isMuted(), false);
   assert.equal(voice.queue.length, 1);
+});
+
+test("日志：记录监听、解析、确认与执行细节", async () => {
+  const voice = makeVoice(["暂停", "确认"]);
+  const { executor, logs } = makeExecutor({ voice });
+  await executor.runFromMicrophone();
+  const text = logs.join("\n");
+  assert.match(text, /语音命令: 开始监听 超时=15000ms 最低置信度=0\.35/);
+  assert.match(text, /语音命令: 监听完成 .*文本=「暂停」 置信度=1\.00/);
+  assert.match(text, /语音命令: 解析 intent=pause 归一=「暂停」/);
+  assert.match(text, /语音命令: 需要确认 intent=pause 回读=「要暂停/);
+  assert.match(text, /语音命令: 确认输入 文本=「确认」 置信度=1\.00 判定=confirm/);
+  assert.match(text, /语音命令: 已执行 action=muted/);
+  assert.match(text, /语音命令: 文本=「暂停」 intent=pause 结果=muted 15min 置信度=1\.00 归一=「暂停」/);
+});
+
+test("日志：歧义记录归一文本与原因", async () => {
+  const { executor, logs } = makeExecutor({ voice: makeVoice(["确认"]) });
+  await executor.dispatch("暂停一下看看状态");
+  const text = logs.join("\n");
+  assert.match(text, /归一=「暂停一下看看状态」/);
+  assert.match(text, /结果=unknown 置信度=- 归一=「暂停一下看看状态」 原因=ambiguous/);
+});
+
+test("日志：繁体输入记录归一后的文本", async () => {
+  const { executor, logs } = makeExecutor({ voice: makeVoice([]) });
+  await executor.dispatch("匯報狀態");
+  assert.match(logs.join("\n"), /文本=「匯報狀態」 intent=status 结果=reported .*归一=「汇报状态」/);
 });
 
 // ---------- 麦克风入口 ----------
