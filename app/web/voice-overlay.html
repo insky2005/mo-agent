@@ -19,8 +19,9 @@
     height: 100%;
     padding: 13px 16px 15px;
     border-radius: 18px;
-    /* 固定同一档透明度：正常/错误/确认都只改文字颜色，不改面板底色。 */
-    background: rgba(24, 24, 32, 0.86);
+    /* 固定同一档透明度：正常/错误/确认都只改文字颜色，不改面板底色。
+       0.96 基本挡住下层文字，又保留一点半透明质感。 */
+    background: rgba(20, 20, 28, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow: 0 16px 46px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     /* 不用 backdrop-filter：透明 WKWebView 下它的合成会在首帧/音频路由变化后跳变，
@@ -67,7 +68,7 @@
   .reply {
     flex: 1 1 auto; min-height: 44px; overflow: hidden;
     font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, 0.82);
-    background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px; padding: 8px 10px;
     word-break: break-word;
   }
