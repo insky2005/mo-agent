@@ -54,6 +54,8 @@ if [ -f "$APK" ]; then
   if [ -f "app/android/app/build/outputs/apk/debug/version.json" ]; then
     cp "app/android/app/build/outputs/apk/debug/version.json" "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug/version.json"
   fi
+else
+  echo "[build] 警告：未找到 $APK，分发包将无法扫码安装；先跑 ./scripts/build-android.sh" >&2
 fi
 
 printf '{"version":"%s","builtAt":"%s"}\n' "$(date +%Y%m%d%H%M%S)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNTIME_STAGE/runtime.json"

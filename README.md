@@ -112,6 +112,8 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 2. 第 2 步「配对」：打开 App 后点「扫码配对」扫第二个码，自动完成连接。
 
 APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/debug/app-debug.apk。
+桌面 App 构建时会把该 APK（和 version.json）一起打进运行时，所以分发包里自带安装包；
+更新 APK 后需要重新构建桌面 App，分发包里的安装包才会更新。
 页面底部可切换网卡（手机连不上时多半是选错网段）。
 
 ## 锁屏通知（Android / HMS Push）
