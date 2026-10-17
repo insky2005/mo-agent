@@ -1,4 +1,4 @@
-package dev.moagent.app;
+package cn.mocampus.moagent.android;
 
 import android.Manifest;
 import android.content.pm.PackageManager;

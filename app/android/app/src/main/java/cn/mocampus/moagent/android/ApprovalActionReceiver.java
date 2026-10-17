@@ -1,4 +1,4 @@
-package dev.moagent.app;
+package cn.mocampus.moagent.android;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -14,7 +14,7 @@ import java.net.URL;
  * 通知上的「允许一次 / 拒绝」按钮回调：直接 POST /api/approve，不用先打开 App。
  */
 public class ApprovalActionReceiver extends BroadcastReceiver {
-    public static final String ACTION = "dev.moagent.app.APPROVE";
+    public static final String ACTION = "cn.mocampus.moagent.android.APPROVE";
 
     @Override
     public void onReceive(Context context, Intent intent) {

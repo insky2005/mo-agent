@@ -1,4 +1,4 @@
-package dev.moagent.app;
+package cn.mocampus.moagent.android;
 
 import android.app.Notification;
 import android.app.NotificationChannel;

@@ -1,4 +1,4 @@
-package dev.moagent.app;
+package cn.mocampus.moagent.android;
 
 import android.content.Context;
 import android.content.Intent;
