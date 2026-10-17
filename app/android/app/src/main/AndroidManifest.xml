@@ -42,15 +42,6 @@
             android:stopWithTask="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- 开机后自动恢复前台服务 -->
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
         <!-- 通知上的「允许一次 / 拒绝」按钮 -->
         <receiver
             android:name=".ApprovalActionReceiver"

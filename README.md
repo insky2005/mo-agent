@@ -15,9 +15,10 @@
 | approvals/ 远程批准中枢 + hook CLI | 已实现并端到端验证 |
 | host/ 主程序（HTTP + SSE + 配对 + 二维码） | 可用 |
 | app/web/ 手机端 PWA（扫码配对 / 授权卡片 / 语音） | 可用 |
-| app/android/ Capacitor 原生外壳 + 锁屏通知前台服务 | 已打包出 APK |
+| app/android/ Capacitor 原生外壳 + HMS Push | 已打包出 APK |
 | core/notify.mjs 统一通知路由（分级 + 去重 + 通道） | 已实现 |
 | host/notify-webhook.mjs 第三方通道（Bark/钉钉/企业微信/飞书/通用） | 已实现 |
+| host/hms-push.mjs 华为 HMS 推送（OAuth + messages:send） | 已实现并验证送达 |
 | desktop/ 桌面壳 | 已完成 |
 
 ## 快速开始
@@ -99,20 +100,20 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/debug/app-debug.apk。
 页面底部可切换网卡（手机连不上时多半是选错网段）。
 
-## 锁屏通知（Android）
+## 锁屏通知（Android / HMS Push）
 
-局域网是明文 HTTP，普通浏览器 PWA 在非安全上下文里拿不到 Service Worker / Notification，
-页面一关或手机锁屏就收不到提醒。所以 Android 走**原生前台服务**：
+局域网是明文 HTTP，浏览器 PWA 拿不到 Service Worker / Notification，页面一关就收不到。
+所以 Android 走**华为 HMS Push**（系统级推送）：
 
-- MainActivity 在配对后把电脑地址和设备令牌交给 NotifyService；
-- 它在后台维持到 host 的 SSE 连接，收到 host 统一路由出来的 notify 事件就发系统通知；
-- 授权类通知带「允许一次 / 拒绝」按钮，直接 POST 回电脑，不用先打开 App；
-- 代价是会常驻一条低优先级通知「mo-agent 正在守候」。
-- 首次启动会请求把 App 加入**电池优化白名单**：请允许，否则锁屏久了系统会冻结后台网络，通知就会延迟。
-- 服务端每 20 秒发一次心跳，手机侧 45 秒收不到就重连，避免旧连接僵死导致通知迟迟不来。
+- AGC 应用（包名 cn.mocampus.moagent.android）开启 Push Kit，并登记 APK 的 SHA-256 签名指纹；
+- App 配对后向 HMS 取 push token，经 /api/push-token 上报给 host；
+- host 的 host/hms-push.mjs 用 App ID / App Secret 换 OAuth token，调用华为推送接口；
+- 通知由系统直接展示：**App 被杀、锁屏、后台都能收到**，不依赖长连接，也不需要华为电池白名单；
+- 首次启动 host 会自动生成 ~/.mo-agent/notify.json（内含 HMS 通道），无需手写。
 
-通知**分级**（core/notify.mjs）：授权 / 提问 / 失败 = critical（响铃 + 震动 + 朗读），
-任务完成 = normal（静默一条）。同一件待办只提醒一次。
+旧的 SSE 前台服务已停用，「mo-agent 正在守候」常驻通知不再出现。
+
+通知分级仍在 core/notify.mjs：授权 / 提问 / 失败 = critical，任务完成 = normal，同一件待办只提醒一次。
 
 重新打包安装：
 

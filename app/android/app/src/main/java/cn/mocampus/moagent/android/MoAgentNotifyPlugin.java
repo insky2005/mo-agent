@@ -37,14 +37,14 @@ public class MoAgentNotifyPlugin extends Plugin {
         prefs().edit()
                 .putString(NotifyService.KEY_BASE, base)
                 .putString(NotifyService.KEY_TOKEN, token == null ? "" : token)
-                .putBoolean(NotifyService.KEY_ENABLED, true)
+                // 改用 HMS 系统推送后不再需要前台 SSE 服务
+                .putBoolean(NotifyService.KEY_ENABLED, false)
                 .apply();
 
-        Intent intent = new Intent(getContext(), NotifyService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
-        else getContext().startService(intent);
+        // 清掉旧版本可能仍在运行的前台服务与常驻通知
+        try { getContext().stopService(new Intent(getContext(), NotifyService.class)); } catch (Exception ignored) { }
 
-        // 配对信息已就绪，顺便取 HMS push token 上报给 host
+        // 配对信息已就绪，取 HMS push token 上报给 host
         fetchAndReportHmsToken();
 
         JSObject result = new JSObject();

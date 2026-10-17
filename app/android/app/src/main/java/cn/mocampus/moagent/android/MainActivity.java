@@ -16,17 +16,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MoAgentNotifyPlugin.class);
         super.onCreate(savedInstanceState);
         requestNotificationPermission();
-        startNotifyIfConfigured();
-    }
-
-    /** 只要之前配置过，就在 App 启动时从原生侧把前台服务拉起来（不依赖网页 JS）。 */
-    private void startNotifyIfConfigured() {
-        android.content.SharedPreferences prefs = getSharedPreferences(NotifyService.PREFS, MODE_PRIVATE);
-        if (!prefs.getBoolean(NotifyService.KEY_ENABLED, false)) return;
-        if (prefs.getString(NotifyService.KEY_BASE, "").isEmpty()) return;
-        android.content.Intent intent = new android.content.Intent(this, NotifyService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent);
-        else startService(intent);
+        // 改用 HMS 系统推送后不再需要前台 SSE 服务，清理旧版本残留的常驻通知
+        try { stopService(new android.content.Intent(this, NotifyService.class)); } catch (Exception ignored) { }
     }
 
     private void requestNotificationPermission() {
