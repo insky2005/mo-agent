@@ -38,7 +38,8 @@ test("HMS：先换 token，再按 token 数组发送通知", async () => {
   const payload = JSON.parse(calls[1].init.body);
   assert.deepEqual(payload.message.token, ["tok1", "tok2"]);
   assert.equal(payload.message.notification.title, "需要授权");
-  assert.equal(payload.message.android.notification.category, "WORK");
+  assert.equal(payload.message.android.category, "WORK");
+  assert.equal(payload.message.android.notification.category, undefined);
 });
 
 test("HMS：没有 token 时跳过、不请求", async () => {
