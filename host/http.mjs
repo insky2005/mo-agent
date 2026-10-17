@@ -249,6 +249,46 @@ export function createMoAgentServer(options) {
         const result = await options.voiceCommand();
         return json(res, 200, result);
       }
+      // 语音浮层的实时事件流（本机 token 放 query，EventSource 不能带 header）。
+      if (pathname === "/local/voice-events" && req.method === "GET") {
+        const token = url.searchParams.get("token");
+        if (!token || token !== localToken) {
+          return json(res, 401, { ok: false, error: "local token invalid" });
+        }
+        if (!options.voiceEvents || typeof options.voiceEvents.subscribe !== "function") {
+          return json(res, 503, { ok: false, error: "voice-events-unavailable" });
+        }
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+          "access-control-allow-origin": "*",
+        });
+        res.write("retry: 2000\n\n");
+        const send = (event) => {
+          try {
+            res.write("data: " + JSON.stringify(event) + "\n\n");
+          } catch (error) {
+            /* 客户端已断开 */
+          }
+        };
+        const unsubscribe = options.voiceEvents.subscribe(send);
+        const heartbeat = setInterval(() => {
+          try { res.write(": ping " + Date.now() + "\n\n"); } catch (error) { /* 忽略 */ }
+        }, 15000);
+        let closed = false;
+        const done = () => {
+          if (closed) return;
+          closed = true;
+          clearInterval(heartbeat);
+          unsubscribe();
+        };
+        req.on("close", done);
+        req.on("error", done);
+        res.on("error", done);
+        return;
+      }
       if (pathname === "/local/pair-payload" && req.method === "GET") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const addresses = candidateAddresses(localIPv4List());

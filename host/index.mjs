@@ -234,6 +234,31 @@ const broker = new ApprovalBroker({
 
 // P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。
 // 只持有内存状态（voiceTargetSessionId、voiceMutedUntil），host 重启即复位。
+const voiceOverlayClients = new Set();
+const voiceRecentEvents = [];
+function broadcastVoiceEvent(event) {
+  const payload = Object.assign({ at: Date.now() }, event);
+  voiceRecentEvents.push(payload);
+  if (voiceRecentEvents.length > 30) voiceRecentEvents.shift();
+  for (const send of [...voiceOverlayClients]) {
+    try {
+      send(payload);
+    } catch (error) {
+      voiceOverlayClients.delete(send);
+    }
+  }
+}
+const voiceEvents = {
+  subscribe(send) {
+    voiceOverlayClients.add(send);
+    // 浮层加载可能比命令晚一点：把本次命令最近的事件补发一遍。
+    for (const event of voiceRecentEvents.slice(-12)) {
+      try { send(event); } catch (error) { /* 已断开 */ }
+    }
+    return function () { voiceOverlayClients.delete(send); };
+  },
+};
+
 if (voice) {
   voiceCommands = createCommandExecutor({
     hub,
@@ -241,6 +266,7 @@ if (voice) {
     speak: voiceSpeaker,
     listen: voice.listen,
     prepare: voice.prepare,
+    onEvent: broadcastVoiceEvent,
     log,
     muteMinutes: Number(process.env.MO_AGENT_VOICE_MUTE_MINUTES || 15),
     timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
@@ -251,23 +277,37 @@ if (voice) {
 async function runVoiceCommand() {
   if (!voice || !voiceCommands) {
     log.warn("语音命令: 未启用，忽略本机请求");
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "unknown", reply: "语音未启用。", error: "voice-disabled" });
+    broadcastVoiceEvent({ phase: "done", ok: false, intent: "unknown" });
     return { ok: false, intent: "unknown", error: "voice-disabled", reply: "语音未启用。" };
   }
   log.info("语音命令: 收到本机请求");
+  voiceRecentEvents.length = 0;
+  broadcastVoiceEvent({ phase: "start", mode: "command" });
   const started = Date.now();
-  const result = await voice.runExclusive(function () {
-    return voiceCommands.runFromMicrophone();
-  });
+  let result;
+  try {
+    result = await voice.runExclusive(function () {
+      return voiceCommands.runFromMicrophone();
+    });
+  } catch (error) {
+    log.warn("语音命令: 请求异常: " + (error && error.message ? error.message : String(error)));
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "unknown", reply: "命令执行失败，请稍后再试。", error: "exception" });
+    result = { ok: false, intent: "unknown", reply: "命令执行失败，请稍后再试。", error: "exception" };
+  }
   if (result && result.outcome === "busy") {
     log.info("语音命令: 正在处理其他语音，忽略本次请求");
-    return { ok: false, intent: "unknown", error: "voice-busy", reply: "正在处理上一条语音，请稍后再试。" };
-  }
-  if (result && result.outcome === "stopped") {
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "unknown", reply: "正在处理上一条语音，请稍后再试。", error: "voice-busy" });
+    result = { ok: false, intent: "unknown", error: "voice-busy", reply: "正在处理上一条语音，请稍后再试。" };
+  } else if (result && result.outcome === "stopped") {
     log.info("语音命令: 语音通道已停止，忽略本次请求");
-    return { ok: false, intent: "unknown", error: "voice-stopped", reply: "语音已停止。" };
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "unknown", reply: "语音已停止。", error: "voice-stopped" });
+    result = { ok: false, intent: "unknown", error: "voice-stopped", reply: "语音已停止。" };
   }
-  log.info("语音命令: 请求结束 耗时=" + (Date.now() - started) + "ms ok=" + !!(result && result.ok)
-    + " intent=" + ((result && result.intent) || "unknown"));
+  const ok = !!(result && result.ok);
+  const intent = (result && result.intent) || "unknown";
+  broadcastVoiceEvent({ phase: "done", ok, intent });
+  log.info("语音命令: 请求结束 耗时=" + (Date.now() - started) + "ms ok=" + ok + " intent=" + intent);
   return result;
 }
 
@@ -292,6 +332,7 @@ const moHost = createMoAgentServer({
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
+  voiceEvents,
   pairHandler: handlePairRoutes,
   apkPath,
   logFile,

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mo-agent 语音</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    color: #f5f5f7;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  .panel {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    padding: 13px 16px 15px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(42, 42, 54, 0.78), rgba(20, 20, 28, 0.72));
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 16px 46px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    overflow: hidden;
+  }
+  .drag {
+    -webkit-app-region: drag;
+    app-region: drag;
+    cursor: grab;
+  }
+  .no-drag, button {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+  .head { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7; box-shadow: 0 0 10px rgba(110, 231, 183, 0.8); animation: pulse 1.4s ease-in-out infinite; flex: 0 0 auto; }
+  .dot.hot { background: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.8); }
+  .dot.err { background: #f87171; box-shadow: 0 0 10px rgba(248, 113, 113, 0.8); animation: none; }
+  .title { flex: 1; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.5); }
+  .close {
+    border: 0; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.55);
+    width: 24px; height: 24px; border-radius: 7px; font-size: 15px; line-height: 1;
+    cursor: pointer; padding: 0;
+  }
+  .close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .status { font-size: 13px; font-weight: 600; color: #a7f3d0; min-height: 18px; }
+  .status.err { color: #fca5a5; }
+  .heard-label { font-size: 10px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.42); margin-bottom: 2px; }
+  .heard { font-size: 21px; font-weight: 600; line-height: 1.25; min-height: 27px; word-break: break-word; }
+  .heard.empty { color: rgba(255, 255, 255, 0.32); font-weight: 500; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .badge {
+    font-size: 10px; padding: 3px 8px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .badge.intent { color: #c4b5fd; border-color: rgba(196, 181, 253, 0.25); }
+  .badge.confirmed { color: #86efac; border-color: rgba(134, 239, 172, 0.3); }
+  .badge.cancelled { color: #fca5a5; border-color: rgba(252, 165, 165, 0.3); }
+  .reply {
+    flex: 1 1 auto; min-height: 44px; overflow: hidden;
+    font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, 0.82);
+    background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px; padding: 8px 10px;
+    word-break: break-word;
+  }
+  .reply.ok { color: #bbf7d0; }
+  .reply.err { color: #fecaca; }
+  .hint { flex: 0 0 auto; font-size: 10px; color: rgba(255, 255, 255, 0.34); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bars { display: none; align-items: flex-end; gap: 2px; height: 18px; }
+  .bars.on { display: flex; }
+  .bars span { display: block; width: 3px; border-radius: 2px; background: #a7f3d0; animation: wave 1s ease-in-out infinite; }
+  .bars span:nth-child(2) { animation-delay: .1s; }
+  .bars span:nth-child(3) { animation-delay: .2s; }
+  .bars span:nth-child(4) { animation-delay: .3s; }
+  .bars span:nth-child(5) { animation-delay: .4s; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  @keyframes wave { 0%, 100% { height: 5px; } 50% { height: 17px; } }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="head drag electrobun-webkit-app-region-drag">
+    <span class="dot" id="dot"></span>
+    <span class="title">mo-agent · 语音</span>
+    <div class="bars" id="bars"><span></span><span></span><span></span><span></span><span></span></div>
+    <button class="close electrobun-webkit-app-region-no-drag" id="close" title="隐藏">×</button>
+  </div>
+  <div class="status" id="status">等待命令…</div>
+  <div>
+    <div class="heard-label">听到</div>
+    <div class="heard empty" id="heard">—</div>
+  </div>
+  <div class="row">
+    <span class="badge intent" id="intent">意图 unknown</span>
+    <span class="badge" id="confidence">置信度 —</span>
+  </div>
+  <div class="reply" id="reply">点托盘「语音」→「语音命令」，听到提示音后再说。</div>
+  <div class="hint" id="hint">听到「叮」再说；有副作用的命令会先回读，再等你说确认。</div>
+</div>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token") || "";
+  const els = {
+    dot: document.getElementById("dot"),
+    status: document.getElementById("status"),
+    heard: document.getElementById("heard"),
+    intent: document.getElementById("intent"),
+    confidence: document.getElementById("confidence"),
+    reply: document.getElementById("reply"),
+    hint: document.getElementById("hint"),
+    bars: document.getElementById("bars"),
+    close: document.getElementById("close"),
+  };
+  const intentLabels = {
+    status: "状态查询",
+    pause: "暂停语音",
+    resume: "继续语音",
+    switch: "切换会话",
+    help: "帮助",
+    unknown: "未识别",
+  };
+  const confirmLabels = {
+    confirm: "已确认",
+    reject: "已拒绝",
+    cancel: "已取消",
+    retry: "重说",
+    repeat: "重复",
+    unknown: "无明确确认",
+    empty: "没有听清",
+  };
+
+  function setStatus(text, tone) {
+    els.status.textContent = text;
+    els.status.classList.toggle("err", tone === "err");
+    els.dot.classList.toggle("hot", tone === "hot");
+    els.dot.classList.toggle("err", tone === "err");
+    els.bars.classList.toggle("on", tone === "hot");
+  }
+  function setHeard(text) {
+    els.heard.textContent = text || "—";
+    els.heard.classList.toggle("empty", !text);
+  }
+  function setConfidence(value) {
+    if (typeof value === "number") {
+      els.confidence.textContent = "置信度 " + value.toFixed(2);
+    } else {
+      els.confidence.textContent = "置信度 —";
+    }
+  }
+  function reset() {
+    setStatus("正在准备麦克风…", "hot");
+    setHeard("");
+    setConfidence(null);
+    els.intent.textContent = "意图 —";
+    els.intent.className = "badge intent";
+    els.reply.textContent = "等待识别…";
+    els.reply.className = "reply";
+    els.hint.textContent = "听到「叮」再说。";
+  }
+
+  function render(event) {
+    switch (event.phase) {
+      case "start":
+        reset();
+        break;
+      case "listening":
+        setStatus(event.attempt > 1 ? "正在再听一次…" : "正在听…", "hot");
+        break;
+      case "heard":
+        setHeard(event.text);
+        setConfidence(event.confidence);
+        setStatus(event.lowConfidence ? "听到的声音不太确定" : "已识别，正在解析…", event.lowConfidence ? "err" : "hot");
+        break;
+      case "listen-error":
+        setStatus("没有听到声音，准备重试…", "err");
+        els.hint.textContent = "错误：" + (event.error || "unknown");
+        break;
+      case "parsed":
+        if (event.intent) {
+          els.intent.textContent = "意图 " + (intentLabels[event.intent] || event.intent);
+          els.intent.className = "badge intent";
+        }
+        if (event.reason) {
+          els.hint.textContent = "未执行 · " + event.reason;
+        }
+        break;
+      case "confirm":
+        setStatus("等待确认", "hot");
+        els.reply.textContent = event.prompt || "";
+        els.reply.className = "reply";
+        els.hint.textContent = "只有明确说「确认」才执行；说「取消」放弃。";
+        break;
+      case "confirm-heard": {
+        setHeard(event.text);
+        setConfidence(event.confidence);
+        const label = confirmLabels[event.intent] || (event.confirmed ? "已确认" : "无明确确认");
+        els.intent.textContent = "确认：" + label;
+        els.intent.className = "badge " + (event.confirmed ? "confirmed" : "cancelled");
+        setStatus(event.confirmed ? "已确认，正在执行…" : "没有确认，未执行", event.confirmed ? "hot" : "err");
+        break;
+      }
+      case "confirm-error":
+        setStatus("没有听到确认，准备重试…", "err");
+        break;
+      case "result":
+        setStatus(event.ok ? "完成" : "未执行", event.ok ? "ok" : "err");
+        if (event.intent) {
+          els.intent.textContent = "意图 " + (intentLabels[event.intent] || event.intent);
+          els.intent.className = "badge intent";
+        }
+        els.reply.textContent = event.reply || "";
+        els.reply.className = "reply " + (event.ok ? "ok" : "err");
+        els.hint.textContent = event.ok ? "结果已显示，随后播报。" : "未执行，可以再说一次。";
+        break;
+      case "done":
+        if (els.status.classList.contains("err")) break;
+        setStatus(event.ok ? "完成" : "未执行", event.ok ? "ok" : "err");
+        break;
+      default:
+        break;
+    }
+  }
+
+  let source = null;
+  if (!token) {
+    setStatus("缺少本机令牌，无法连接", "err");
+    els.hint.textContent = "从托盘重新打开语音命令。";
+  } else {
+    source = new EventSource("/local/voice-events?token=" + encodeURIComponent(token));
+    source.onmessage = function (message) {
+      try {
+        render(JSON.parse(message.data));
+      } catch (error) {
+        /* 忽略坏事件 */
+      }
+    };
+    source.onerror = function () {
+      setStatus("连接断开，正在重连…", "err");
+    };
+  }
+
+  els.close.addEventListener("click", function () {
+    try { window.close(); } catch (error) { /* 忽略 */ }
+  });
+})();
+</script>
+</body>
+</html>

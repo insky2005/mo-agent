@@ -52,6 +52,10 @@ function writeVoiceEnabled(enabled: boolean): void {
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
+let voiceOverlay: BrowserWindow | null = null;
+let voiceOverlayToken = "";
+let voiceOverlayFrame: { x: number; y: number; width: number; height: number } | null = null;
+let voiceOverlayHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -323,6 +327,13 @@ async function openLogs(): Promise<void> {
 
 async function restartService(openPanelAfter: boolean): Promise<void> {
   disposePanel();
+  cancelVoiceOverlayHide();
+  if (voiceOverlay) {
+    const current = voiceOverlay;
+    voiceOverlay = null;
+    voiceOverlayToken = "";
+    try { current.close(); } catch (error) { /* 已经销毁 */ }
+  }
   if (logs) {
     const current = logs;
     logs = null;
@@ -409,7 +420,87 @@ async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
   }
 }
 
-/** P1：点一次、说一条命令；结果用弹窗显示，播报由 host 负责。 */
+function cancelVoiceOverlayHide(): void {
+  if (!voiceOverlayHideTimer) return;
+  clearTimeout(voiceOverlayHideTimer);
+  voiceOverlayHideTimer = null;
+}
+
+function hideVoiceOverlay(): void {
+  cancelVoiceOverlayHide();
+  if (!voiceOverlay) return;
+  try { voiceOverlayFrame = voiceOverlay.getFrame(); } catch (error) { /* 忽略 */ }
+  try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
+}
+
+function scheduleVoiceOverlayHide(delayMs: number): void {
+  cancelVoiceOverlayHide();
+  voiceOverlayHideTimer = setTimeout(function () {
+    voiceOverlayHideTimer = null;
+    hideVoiceOverlay();
+  }, delayMs);
+}
+
+/** 磨砂半透明浮层：置顶、不抢焦点、可拖动。 */
+async function ensureVoiceOverlay(): Promise<boolean> {
+  const token = readLocalToken();
+  if (!token) return false;
+
+  // host 重启后本机 token 会变；旧浮层的 SSE 会 401，必须重建。
+  if (voiceOverlay && voiceOverlayToken !== token) {
+    try { voiceOverlay.close(); } catch (error) { /* 忽略 */ }
+    voiceOverlay = null;
+  }
+
+  if (!voiceOverlay) {
+    const frame = voiceOverlayFrame || { x: 80, y: 80, width: 392, height: 272 };
+    const win = new BrowserWindow({
+      title: "mo-agent 语音",
+      url: BASE + "/voice-overlay.html?token=" + encodeURIComponent(token),
+      frame,
+      titleBarStyle: "hidden",
+      transparent: true,
+      activate: false,
+      styleMask: {
+        Borderless: true,
+        Titled: false,
+        Closable: false,
+        Miniaturizable: false,
+        Resizable: false,
+        FullScreen: false,
+        FullSizeContentView: true,
+        UtilityWindow: true,
+        NonactivatingPanel: true,
+      },
+    });
+    voiceOverlay = win;
+    voiceOverlayToken = token;
+    try {
+      win.setAlwaysOnTop(true);
+      win.setVisibleOnAllWorkspaces(true);
+    } catch (error) {
+      logLine("语音浮层置顶失败: " + error);
+    }
+    win.on("close", () => {
+      try { voiceOverlayFrame = win.getFrame(); } catch (error) { /* 忽略 */ }
+      if (voiceOverlay === win) voiceOverlay = null;
+    });
+    // 给页面和 SSE 一点连接时间，避免错过开头的事件。
+    await new Promise(function (resolve) { setTimeout(resolve, 260); });
+  }
+
+  cancelVoiceOverlayHide();
+  try {
+    voiceOverlay.showInactive();
+  } catch (error) {
+    logLine("显示语音浮层失败: " + error);
+    voiceOverlay = null;
+    return false;
+  }
+  return true;
+}
+
+/** P1：点一次、说一条命令；实时识别与结果都显示在浮层，播报由 host 负责。 */
 async function runVoiceCommand(): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
@@ -417,25 +508,38 @@ async function runVoiceCommand(): Promise<void> {
     return;
   }
 
+  const token = readLocalToken();
+  if (!token) {
+    await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "找不到本机令牌", detail: "先重启一次服务" });
+    return;
+  }
+
+  let overlayReady = false;
+  try {
+    overlayReady = await ensureVoiceOverlay();
+  } catch (error) {
+    logLine("创建语音浮层失败: " + error);
+  }
+
   try {
     const result = await postLocal("/local/voice-command", 180000);
-    const heard = result.heard && result.heard.text ? String(result.heard.text) : "";
-    const lines: string[] = [];
-    if (heard) lines.push("听到：" + heard);
-    if (result.intent) lines.push("意图：" + result.intent);
-    if (Array.isArray(result.candidates) && result.candidates.length) {
-      lines.push("候选：" + result.candidates.map(function (item: any) {
-        return (item.index ? item.index + ". " : "") + (item.title || item.id);
-      }).join(" / "));
+    // 正常路径只用浮层显示；浮层起不来时才退回弹框，避免没有反馈。
+    if (!overlayReady) {
+      await Utils.showMessageBox({
+        type: result.ok ? "info" : "warning",
+        title: "语音命令",
+        message: result.reply || (result.error ? ("失败：" + result.error) : "没有结果"),
+        detail: result.heard && result.heard.text ? ("听到：" + result.heard.text) : "没有识别到有效命令。",
+      });
     }
-    await Utils.showMessageBox({
-      type: result.ok ? "info" : "warning",
-      title: "语音命令",
-      message: result.reply || (result.error ? ("失败：" + result.error) : "没有结果"),
-      detail: lines.join("\n") || "没有识别到有效命令。",
-    });
+    if (overlayReady) scheduleVoiceOverlayHide(result.ok ? 6500 : 4500);
   } catch (error) {
-    await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "请求失败", detail: String(error) });
+    logLine("语音命令请求失败: " + error);
+    if (!overlayReady) {
+      await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "请求失败", detail: String(error) });
+    } else {
+      scheduleVoiceOverlayHide(3000);
+    }
   }
 }
 

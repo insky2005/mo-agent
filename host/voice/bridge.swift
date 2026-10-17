@@ -137,7 +137,8 @@ func rmsOf(_ buffer: AVAudioPCMBuffer) -> Float {
 func playReadySound() {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-  process.arguments = ["/System/Library/Sounds/Tink.aiff"]
+  // Tink 太短太轻，蓝牙 HFP 下经常听不到；Glass 更清晰。
+  process.arguments = ["-v", "1.4", "/System/Library/Sounds/Glass.aiff"]
   do {
     try process.run()
     process.waitUntilExit()

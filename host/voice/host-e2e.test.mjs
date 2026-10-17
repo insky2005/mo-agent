@@ -163,6 +163,45 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
     await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
     await waitForOutput(function () { return output; }, "本机:", 5000);
 
+    // 浮层用的实时事件流：先连上，再发命令。
+    const sseAbort = new AbortController();
+    const sseEvents = [];
+    let sseBuffer = "";
+    const sseResponse = await fetch("http://127.0.0.1:" + port + "/local/voice-events?token=" + encodeURIComponent(token), { signal: sseAbort.signal });
+    assert.equal(sseResponse.status, 200);
+    const sseReader = sseResponse.body.getReader();
+    const ssePump = (async function () {
+      const decoder = new TextDecoder();
+      try {
+        while (true) {
+          const chunk = await sseReader.read();
+          if (chunk.done) break;
+          sseBuffer += decoder.decode(chunk.value, { stream: true });
+          let index = sseBuffer.indexOf("\n\n");
+          while (index !== -1) {
+            const block = sseBuffer.slice(0, index).trim();
+            sseBuffer = sseBuffer.slice(index + 2);
+            for (const line of block.split("\n")) {
+              if (line.indexOf("data: ") === 0) {
+                try { sseEvents.push(JSON.parse(line.slice(6))); } catch (error) { /* 忽略 */ }
+              }
+            }
+            index = sseBuffer.indexOf("\n\n");
+          }
+        }
+      } catch (error) {
+        /* abort 后正常退出 */
+      }
+    })();
+    const waitForSse = async function (predicate, timeoutMs) {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        if (predicate(sseEvents)) return;
+        await new Promise(function (resolve) { setTimeout(resolve, 20); });
+      }
+      throw new Error("等待语音事件超时，已收到: " + JSON.stringify(sseEvents));
+    };
+
     const paused = await command();
     assert.equal(paused.ok, true);
     assert.equal(paused.intent, "pause");
@@ -173,6 +212,18 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
     assert.ok(output.includes("语音命令: 确认输入"), "应记录确认输入");
     assert.ok(output.includes("归一=「暂停」"), "应记录归一文本");
     assert.ok(output.includes("语音命令: 请求结束"), "应记录请求结束与耗时");
+
+    await waitForSse(function (events) { return events.some(function (event) { return event.phase === "done"; }); }, 3000);
+    const phases = sseEvents.map(function (event) { return event.phase; });
+    for (const phase of ["start", "listening", "heard", "parsed", "confirm", "confirm-heard", "result", "done"]) {
+      assert.ok(phases.includes(phase), "缺少浮层事件 " + phase + "，实际: " + phases.join(","));
+    }
+    assert.ok(
+      sseEvents.findIndex(function (event) { return event.phase === "result"; })
+        < sseEvents.findIndex(function (event) { return event.phase === "done"; }),
+      "result 事件必须先于 done"
+    );
+    await sseAbort.abort();
 
     // 静音期间 critical 通知不播报，但通知本身照常发出
     const mutedNotice = "静音期间不播报XYZ";
@@ -206,6 +257,7 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
       return output;
     }, '"type":"tts-dry","text":"' + resumedNotice, 3000);
   } finally {
+    try { sseAbort.abort(); } catch (error) { /* 忽略 */ }
     await stop(child);
   }
 });

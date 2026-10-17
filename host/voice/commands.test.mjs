@@ -39,13 +39,26 @@ function makeExecutor(input) {
     get: function (id) { return sessions.find(function (item) { return item.id === id; }) || null; },
   };
   const broker = { list: function () { return pending; } };
+  const events = [];
+  const timeline = [];
+  const record = function (event) {
+    events.push(event);
+    timeline.push({ kind: "event", event: event });
+    if (typeof opts.onEvent === "function") opts.onEvent(event);
+  };
+  const speak = async function (text) {
+    timeline.push({ kind: "speak", text: text });
+    return voice.speak(text);
+  };
   const executor = createCommandExecutor({
     hub,
     broker,
-    speak: voice.speak,
+    speak: speak,
     listen: voice.listen,
+    onEvent: record,
     prepare: opts.prepare || async function () { return { ok: true, simulated: true }; },
     listenDelayMs: 0,
+    resultDelayMs: 0,
     log: {
       info: function (line) { logs.push(line); },
       warn: function (line) { logs.push(line); },
@@ -54,7 +67,7 @@ function makeExecutor(input) {
     now: function () { return state.now; },
     muteMinutes: opts.muteMinutes,
   });
-  return { executor, voice, logs, state, sessions, pending };
+  return { executor, voice, logs, state, sessions, pending, events, timeline };
 }
 
 // ---------- 解析 ----------
@@ -428,6 +441,50 @@ test("日志：录音诊断写入监听完成日志", async () => {
   const text = logs.join("\n");
   assert.match(text, /监听完成 第1次 .*启动=420ms 缓冲=12 峰值=0\.0300 采样率=16000/);
   assert.match(text, /设备=HUAWEI FreeBuds SE 3/);
+});
+
+test("事件：实时事件齐全，结果先显示再播报", async () => {
+  const voice = makeVoice(["汇报状态"]);
+  const { executor, events, timeline } = makeExecutor({ voice });
+  await executor.runFromMicrophone();
+  const phases = events.map(function (event) { return event.phase; });
+  for (const phase of ["listening", "heard", "parsed", "result"]) {
+    assert.ok(phases.includes(phase), "缺少事件 " + phase + "，实际: " + phases.join(","));
+  }
+  const heard = events.find(function (event) { return event.phase === "heard"; });
+  assert.equal(heard.text, "汇报状态");
+  const result = events.find(function (event) { return event.phase === "result"; });
+  assert.equal(result.intent, "status");
+  assert.equal(result.ok, true);
+  const resultIndex = timeline.findIndex(function (item) {
+    return item.kind === "event" && item.event.phase === "result";
+  });
+  const speakIndex = timeline.findIndex(function (item) {
+    return item.kind === "speak" && item.text === result.reply;
+  });
+  assert.ok(resultIndex >= 0, "应发出 result 事件");
+  assert.ok(speakIndex > resultIndex, "result 事件必须先于对应播报");
+});
+
+test("事件：副作用命令包含确认回读与确认输入", async () => {
+  const voice = makeVoice(["暂停", "确认"]);
+  const { executor, events, timeline } = makeExecutor({ voice });
+  await executor.runFromMicrophone();
+  const phases = events.map(function (event) { return event.phase; });
+  for (const phase of ["confirm", "confirm-heard", "result"]) {
+    assert.ok(phases.includes(phase), "缺少事件 " + phase + "，实际: " + phases.join(","));
+  }
+  const confirmHeard = events.find(function (event) { return event.phase === "confirm-heard"; });
+  assert.equal(confirmHeard.confirmed, true);
+  const result = events.find(function (event) { return event.phase === "result"; });
+  assert.equal(result.action, "muted");
+  const resultIndex = timeline.findIndex(function (item) {
+    return item.kind === "event" && item.event.phase === "result";
+  });
+  const speakIndex = timeline.findIndex(function (item) {
+    return item.kind === "speak" && item.text === result.reply;
+  });
+  assert.ok(speakIndex > resultIndex, "执行结果必须先显示再播报");
 });
 
 // ---------- 麦克风入口 ----------

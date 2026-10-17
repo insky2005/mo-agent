@@ -163,6 +163,7 @@ export function createCommandExecutor(options) {
   const speak = typeof opts.speak === "function" ? opts.speak : async function () {};
   const listen = opts.listen;
   const prepare = typeof opts.prepare === "function" ? opts.prepare : null;
+  const onEvent = typeof opts.onEvent === "function" ? opts.onEvent : null;
   const log = opts.log || { info: function () {}, warn: function () {} };
   const now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   const muteMinutes = Math.max(1, Number(opts.muteMinutes) || 15);
@@ -172,6 +173,8 @@ export function createCommandExecutor(options) {
   // 播报结束后给蓝牙 A2DP -> HFP 路由切换留时间；可通过环境变量调整。
   const listenDelayMs = opts.listenDelayMs === 0 ? 0 : Math.max(0, Number(opts.listenDelayMs) || 500);
   const listenAttempts = Math.max(1, Number(opts.listenAttempts) || 2);
+  // 结果事件先到浮层，再留一点时间让 UI 画出来，然后才播报。
+  const resultDelayMs = opts.resultDelayMs === 0 ? 0 : Math.max(0, Number(opts.resultDelayMs) || 180);
 
   let targetSessionId = null;
   let mutedUntil = 0;
@@ -182,6 +185,18 @@ export function createCommandExecutor(options) {
 
   function logDebug(line) {
     if (typeof log.debug === "function") log.debug(line);
+  }
+
+  /** 给桌面浮层/手机看的实时事件；失败不能影响命令主流程。 */
+  function emitEvent(event) {
+    if (!onEvent) return;
+    try {
+      onEvent(Object.assign({ at: Date.now() }, event));
+    } catch (error) {
+      if (typeof log.warn === "function") {
+        log.warn("语音事件发送失败: " + (error && error.message ? error.message : String(error)));
+      }
+    }
   }
 
   function confidenceText(value) {
@@ -463,6 +478,13 @@ export function createCommandExecutor(options) {
     }
   }
 
+  /** 先把结果发到浮层，再播报；保证“显示先于声音”。 */
+  async function finish(reply, details) {
+    emitEvent(Object.assign({ phase: "result", reply: reply }, details || {}));
+    if (resultDelayMs > 0) await sleep(resultDelayMs);
+    await safeSpeak(reply);
+  }
+
   async function execute(parsed) {
     const intent = parsed && parsed.intent ? parsed.intent : COMMAND.UNKNOWN;
     logDebug("语音命令: 解析 intent=" + intent
@@ -477,29 +499,35 @@ export function createCommandExecutor(options) {
         + " 静音=" + (snapshot.muted ? "是(剩" + snapshot.muteRemainingMinutes + "min)" : "否")
         + " 关注=" + (snapshot.target ? (snapshot.target.title + "(" + snapshot.target.id + ")") : "-"));
       const reply = statusReply(snapshot);
-      await safeSpeak(reply);
+      await finish(reply, { ok: true, intent: intent, action: "reported", snapshot: snapshot });
       return { ok: true, reply, action: "reported", snapshot };
     }
 
     if (intent === COMMAND.HELP) {
-      await safeSpeak(HELP_TEXT);
+      await finish(HELP_TEXT, { ok: true, intent: intent, action: "help" });
       return { ok: true, reply: HELP_TEXT, action: "help" };
     }
 
     if (intent === COMMAND.UNKNOWN) {
       const reply = "没听懂。" + HELP_TEXT;
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: intent, action: "unknown" });
       return { ok: false, reply, action: "unknown" };
     }
 
     const plan = preparePlan(intent, parsed && parsed.sessionHint);
     if (!plan.ok) {
-      await safeSpeak(plan.reply);
+      await finish(plan.reply, {
+        ok: false,
+        intent: intent,
+        action: plan.action,
+        candidates: plan.candidates || null,
+      });
       return { ok: false, reply: plan.reply, action: plan.action, candidates: plan.candidates };
     }
 
     // 有副作用的命令：先回读，再听一次明确确认；不认数字口令。
     logInfo("语音命令: 需要确认 intent=" + intent + " 回读=「" + plan.prompt + "」");
+    emitEvent({ phase: "confirm", intent: intent, prompt: plan.prompt });
     await safePrepare();
     await safeSpeak(plan.prompt);
     let heard = null;
@@ -522,19 +550,32 @@ export function createCommandExecutor(options) {
           ? (" 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence))
           : (" 错误=" + heard.error))
         + recordText(heard.ok ? heard.record : null, heard.detail));
+      if (heard.ok) {
+        const attemptIntent = parseReply(heard.text).intent;
+        emitEvent({
+          phase: "confirm-heard",
+          attempt: attempt,
+          text: heard.text,
+          confidence: heard.confidence,
+          confirmed: attemptIntent === REPLY.CONFIRM,
+          intent: attemptIntent,
+        });
+      } else {
+        emitEvent({ phase: "confirm-error", attempt: attempt, error: heard.error, detail: heard.detail || null });
+      }
       if (heard.ok || ["timeout", "mic-silent", "route-changed"].indexOf(heard.error) === -1) break;
     }
     if (!heard.ok) {
       logInfo("语音命令: 确认失败 错误=" + heard.error + recordText(null, heard.detail));
       const reply = heard.error === "timeout" ? "没有听到确认，未执行。" : "没听清，未执行。";
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: intent, action: "cancelled", error: heard.error });
       return { ok: false, reply, action: "cancelled", heard, error: heard.error };
     }
     if (!heard.text.trim() || heard.lowConfidence) {
       logInfo("语音命令: 确认无效 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence)
         + (heard.lowConfidence ? " 低置信度" : " 空文本"));
       const reply = "没听清，未执行。";
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: intent, action: "cancelled" });
       return { ok: false, reply, action: "cancelled", heard };
     }
 
@@ -544,7 +585,7 @@ export function createCommandExecutor(options) {
     if (replyIntent !== REPLY.CONFIRM) {
       const cancelled = replyIntent === REPLY.CANCEL || replyIntent === REPLY.REJECT;
       const reply = cancelled ? "已取消，未执行。" : "没有确认，未执行。";
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: intent, action: "cancelled", replyIntent: replyIntent });
       return { ok: false, reply, action: "cancelled", heard, replyIntent };
     }
 
@@ -553,8 +594,7 @@ export function createCommandExecutor(options) {
       + (applied.sessionId ? " sessionId=" + applied.sessionId : "")
       + " mutedUntil=" + (isMuted() ? mutedUntil : 0)
       + " targetSessionId=" + (targetSessionId || "-"));
-    await safeSpeak(applied.reply);
-    return {
+    const result = {
       ok: true,
       reply: applied.reply,
       action: applied.action,
@@ -563,6 +603,15 @@ export function createCommandExecutor(options) {
       mutedUntil: isMuted() ? mutedUntil : 0,
       targetSessionId,
     };
+    await finish(applied.reply, {
+      ok: true,
+      intent: intent,
+      action: applied.action,
+      sessionId: result.sessionId,
+      muted: result.muted,
+      targetSessionId: result.targetSessionId,
+    });
+    return result;
   }
 
   function describeOutcome(intent, result) {
@@ -586,6 +635,14 @@ export function createCommandExecutor(options) {
       confidence: info && typeof info.confidence === "number" ? info.confidence : null,
     };
     const parsed = parseCommand(heard.text);
+    emitEvent({
+      phase: "parsed",
+      text: heard.text,
+      intent: parsed.intent,
+      normalized: parsed.normalized || "",
+      reason: parsed.reason || null,
+      sessionHint: parsed.sessionHint || null,
+    });
     let result;
     try {
       result = await execute(parsed);
@@ -593,7 +650,9 @@ export function createCommandExecutor(options) {
       if (typeof log.warn === "function") {
         log.warn("语音命令执行失败: " + (error && error.message ? error.message : String(error)));
       }
-      result = { ok: false, reply: "命令执行失败，请稍后再试。", action: "error" };
+      const reply = "命令执行失败，请稍后再试。";
+      emitEvent({ phase: "result", ok: false, intent: parsed.intent, reply: reply, action: "error" });
+      result = { ok: false, reply, action: "error" };
     }
 
     const outcome = describeOutcome(parsed.intent, result);
@@ -620,7 +679,9 @@ export function createCommandExecutor(options) {
   async function runFromMicrophone() {
     if (typeof listen !== "function") {
       logInfo("语音命令: 没有可用的录音通道");
-      return { ok: false, intent: COMMAND.UNKNOWN, heard: null, reply: "语音输入不可用。", error: "no-listener" };
+      const reply = "语音输入不可用。";
+      emitEvent({ phase: "result", ok: false, intent: COMMAND.UNKNOWN, reply: reply, error: "no-listener" });
+      return { ok: false, intent: COMMAND.UNKNOWN, heard: null, reply: reply, error: "no-listener" };
     }
 
     logInfo("语音命令: 开始监听 超时=" + timeoutMs + "ms 最低置信度=" + minConfidence
@@ -638,15 +699,24 @@ export function createCommandExecutor(options) {
       }
       if (listenDelayMs > 0) await sleep(listenDelayMs);
       const listenStarted = Date.now();
+      emitEvent({ phase: "listening", attempt: attempt });
       heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence, prompt: COMMAND_PROMPT });
       if (heard.ok) {
         logInfo("语音命令: 监听完成 第" + attempt + "次 耗时=" + elapsed(listenStarted) + "ms 文本=「" + heard.text + "」"
           + " 置信度=" + confidenceText(heard.confidence)
           + (heard.lowConfidence ? " 低置信度" : "")
           + recordText(heard.record, null));
+        emitEvent({
+          phase: "heard",
+          attempt: attempt,
+          text: heard.text,
+          confidence: heard.confidence,
+          lowConfidence: heard.lowConfidence,
+        });
       } else {
         logInfo("语音命令: 监听失败 第" + attempt + "次 错误=" + (heard.error || "unknown")
           + " 耗时=" + elapsed(listenStarted) + "ms" + recordText(null, heard.detail));
+        emitEvent({ phase: "listen-error", attempt: attempt, error: heard.error, detail: heard.detail || null });
       }
       if (heard.ok && (heard.text.trim() || heard.lowConfidence)) break;
       if (!heard.ok && ["timeout", "mic-silent", "route-changed"].indexOf(heard.error) === -1) break;
@@ -655,21 +725,21 @@ export function createCommandExecutor(options) {
     if (!heard.ok) {
       const reply = heard.error === "timeout" ? "没有听到命令。" : "麦克风不可用，请检查语音设置。";
       logInfo("语音命令: 文本=「」 intent=unknown 结果=failed:" + (heard.error || "unknown"));
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: COMMAND.UNKNOWN, action: "failed", error: heard.error });
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, error: heard.error };
     }
 
     if (!heard.text.trim()) {
       logInfo("语音命令: 文本=「」 intent=unknown 结果=empty");
       const reply = "没有听到命令。";
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: COMMAND.UNKNOWN, action: "empty" });
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, action: "empty" };
     }
 
     if (heard.lowConfidence) {
       logInfo("语音命令: 文本=「" + heard.text + "」 intent=unknown 结果=low-confidence 置信度=" + confidenceText(heard.confidence));
       const reply = "没听清，请再说一遍。";
-      await safeSpeak(reply);
+      await finish(reply, { ok: false, intent: COMMAND.UNKNOWN, action: "low-confidence" });
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, action: "low-confidence" };
     }
 
