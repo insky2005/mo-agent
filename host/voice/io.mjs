@@ -27,7 +27,12 @@ export function createMicCapture(options) {
 
   return async function capture(input) {
     const timeoutMs = (input && input.timeoutMs) || opts.timeoutMs || 15000;
-    const result = await client.record({ timeoutMs });
+    // 录音参数从 listenOnce 一路透传到 helper；不传时 helper 保持 silence 1.1 / max 12 秒。
+    const recordInput = { timeoutMs };
+    if (input && input.silence !== undefined) recordInput.silence = input.silence;
+    if (input && input.maxSeconds !== undefined) recordInput.maxSeconds = input.maxSeconds;
+    if (input && input.threshold !== undefined) recordInput.threshold = input.threshold;
+    const result = await client.record(recordInput);
     if (!result || !result.ok) return result || { ok: false, error: "capture-failed" };
     // 保留 helper 返回的诊断字段（采样率/启动耗时/峰值/路由变化），供 host.log 排查。
     return Object.assign({}, result, { ok: true, raw: result.file });

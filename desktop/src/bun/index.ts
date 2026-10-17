@@ -54,7 +54,8 @@ let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
 const VOICE_OVERLAY_STATE = join(homedir(), ".mo-agent", "voice-overlay.json");
 const VOICE_OVERLAY_WIDTH = 392;
-const VOICE_OVERLAY_HEIGHT = 272;
+// 口述任务需要显示草稿全文，比 P1 的命令浮层高一档。
+const VOICE_OVERLAY_HEIGHT = 360;
 
 function readVoiceOverlayFrame(): { x: number; y: number; width: number; height: number } | null {
   try {
@@ -401,6 +402,7 @@ function trayMenu(): any[] {
         { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
         { type: "divider" },
         { type: "normal", label: "语音命令", action: "voice-command" },
+        { type: "normal", label: "语音口述任务", action: "dictate" },
         { type: "normal", label: "语音测试", action: "voice-test" },
       ],
     },
@@ -595,6 +597,51 @@ async function runVoiceCommand(): Promise<void> {
   }
 }
 
+/** P2：点一次、说一段任务；草稿与「已发送给 X」都显示在同一个浮层。 */
+async function runDictate(): Promise<void> {
+  const ready = await ensureHost();
+  if (!ready) {
+    await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
+    return;
+  }
+
+  const token = readLocalToken();
+  if (!token) {
+    await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "找不到本机令牌", detail: "先重启一次服务" });
+    return;
+  }
+
+  let overlayReady = false;
+  try {
+    overlayReady = await ensureVoiceOverlay();
+  } catch (error) {
+    logLine("创建语音浮层失败: " + error);
+  }
+
+  try {
+    const result = await postLocal("/local/dictate", 180000);
+    // 正常路径只用浮层显示；浮层起不来时才退回弹框，避免没有反馈。
+    if (!overlayReady) {
+      const draft = result.draft && result.draft.text ? ("草稿：" + result.draft.text) : "没有形成草稿。";
+      const target = result.target && result.target.title ? ("目标：" + result.target.title + " · ") : "";
+      await Utils.showMessageBox({
+        type: result.ok ? "info" : "warning",
+        title: "语音口述任务",
+        message: result.reply || (result.error ? ("失败：" + result.error) : "没有结果"),
+        detail: target + draft,
+      });
+    }
+    if (overlayReady) scheduleVoiceOverlayHide(result.ok ? 6500 : 5500);
+  } catch (error) {
+    logLine("语音口述请求失败: " + error);
+    if (!overlayReady) {
+      await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "请求失败", detail: String(error) });
+    } else {
+      scheduleVoiceOverlayHide(3000);
+    }
+  }
+}
+
 async function runVoiceTest(): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
@@ -643,6 +690,7 @@ tray.on("tray-clicked", async (event: any) => {
   if (action === "panel") await openPanel();
   else if (action === "voice") await toggleVoice();
   else if (action === "voice-command") await runVoiceCommand();
+  else if (action === "dictate") await runDictate();
   else if (action === "voice-test") await runVoiceTest();
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();

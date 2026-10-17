@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import http from "node:http";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +38,113 @@ function stop(child) {
     }, 2000);
     setTimeout(resolve, 3000);
   });
+}
+
+
+/** 假 DSH 控制面：只需要鉴权、会话列表与 session/prompt，用来验证口述真的只发一次。 */
+function startFakeDsh() {
+  const state = { prompts: [] };
+  const server = http.createServer(function (req, res) {
+    if (req.method === "GET") {
+      res.writeHead(200, {
+        "content-type": "text/plain",
+        "set-cookie": "dsh=fake; Path=/",
+      });
+      res.end("ok");
+      return;
+    }
+    let body = "";
+    req.on("data", function (chunk) { body += chunk.toString(); });
+    req.on("end", function () {
+      let payload = {};
+      try { payload = JSON.parse(body || "{}"); } catch (error) { payload = {}; }
+      const method = payload.method || "";
+      let value = {};
+      if (method === "session/list") {
+        value = {
+          items: [{
+            sessionId: "session-demo",
+            cwd: "/tmp/mo-agent-demo",
+            running: true,
+            agentAvailable: true,
+            updatedAt: Date.now(),
+            projections: { values: { title: "演示会话" } },
+          }],
+        };
+      } else if (method === "session/prompt") {
+        state.prompts.push(payload.payload || {});
+        value = { accepted: true };
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ type: "server-response", rpcId: payload.rpcId, result: { ok: true, value: value } }));
+    });
+  });
+  return new Promise(function (resolve) {
+    server.listen(0, "127.0.0.1", function () {
+      resolve({
+        port: server.address().port,
+        prompts: state.prompts,
+        close: function () {
+          return new Promise(function (done) {
+            server.close(function () { done(); });
+            setTimeout(done, 500);
+          });
+        },
+      });
+    });
+  });
+}
+
+function sseClient(port, token) {
+  const controller = new AbortController();
+  const events = [];
+  let buffer = "";
+  let reading = null;
+  const ready = (async function () {
+    const response = await fetch("http://127.0.0.1:" + port + "/local/voice-events?token=" + encodeURIComponent(token), { signal: controller.signal });
+    if (response.status !== 200) throw new Error("SSE " + response.status);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    reading = (async function () {
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          let index = buffer.indexOf("\n\n");
+          while (index !== -1) {
+            const block = buffer.slice(0, index).trim();
+            buffer = buffer.slice(index + 2);
+            for (const line of block.split("\n")) {
+              if (line.indexOf("data: ") !== 0) continue;
+              try { events.push(JSON.parse(line.slice(6))); } catch (error) { /* 忽略 */ }
+            }
+            index = buffer.indexOf("\n\n");
+          }
+        }
+      } catch (error) {
+        /* abort 后正常退出 */
+      }
+    })();
+    return events;
+  })();
+  return {
+    ready: ready,
+    events: events,
+    abort: function () {
+      controller.abort();
+      if (reading) reading.catch(function () {});
+    },
+  };
+}
+
+async function waitFor(predicate, timeoutMs, message) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await predicate()) return;
+    await new Promise(function (resolve) { setTimeout(resolve, 40); });
+  }
+  throw new Error(message || "等待条件超时");
 }
 
 test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { skip, timeout: 20000 }, async function () {
@@ -265,5 +374,113 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
   } finally {
     try { sseAbort.abort(); } catch (error) { /* 忽略 */ }
     await stop(child);
+  }
+});
+test("host 集成：语音口述 → 草稿 → 确认发送只发一次；取消/超时不发", { skip, timeout: 60000 }, async function () {
+  const fake = await startFakeDsh();
+  const port = 18100 + Math.floor(Math.random() * 100);
+  const token = "voice-dictate-" + Date.now();
+  const dshHome = path.join(root, ".build", "dsh-home-dictate-" + Date.now());
+  fs.mkdirSync(path.join(dshHome, "oh-my-dsh", "shell"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dshHome, "oh-my-dsh", "shell", "dsh-web.json"),
+    JSON.stringify({ port: fake.port, token: "fake-token" })
+  );
+
+  let output = "";
+  const child = spawn(process.execPath, ["host/index.mjs", "--port", String(port), "--no-auth", "--log-level", "debug"], {
+    cwd: root,
+    env: Object.assign({}, process.env, {
+      MO_AGENT_VOICE: "1",
+      MO_AGENT_NOTIFY_DISABLE: "1",
+      MO_AGENT_VOICE_SCRIPT: "把登录页改成深色,确认发送,第二段内容,取消",
+      MO_AGENT_VOICE_DRY: "1",
+      MO_AGENT_LOCAL_TOKEN: token,
+      MO_AGENT_NO_PARENT_WATCH: "1",
+      MO_AGENT_POLL: "150",
+      MO_AGENT_DEVICE_FILE: path.join(root, ".build", "devices-e2e-dictate.json"),
+      DSH_HOME: dshHome,
+      // 必须覆盖继承来的真实 DSH 地址，否则会拿假 token 去连真 DSH。
+      DSH_WEB_URL: "http://127.0.0.1:" + fake.port,
+    }),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.on("data", function (chunk) { output += chunk.toString(); });
+  child.stderr.on("data", function (chunk) { output += chunk.toString(); });
+
+  let sse = null;
+  const dictate = async function () {
+    const response = await fetch("http://127.0.0.1:" + port + "/local/dictate", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: "{}",
+    });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+
+  try {
+    await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
+    await waitForOutput(function () { return output; }, "本机:", 5000);
+    await waitFor(async function () {
+      const state = await fetch("http://127.0.0.1:" + port + "/api/state");
+      const body = await state.json();
+      return !!body.state && body.state.sessions.some(function (item) { return item.id === "session-demo"; });
+    }, 10000, "假 DSH 会话没有进入 hub");
+    sse = sseClient(port, token);
+    await sse.ready;
+
+    const sent = await dictate();
+    assert.equal(sent.ok, true, JSON.stringify(sent));
+    assert.equal(sent.intent, "dictate");
+    assert.equal(sent.action, "sent");
+    assert.equal(sent.target.title, "演示会话");
+    assert.equal(sent.draft.text, "把登录页改成深色");
+    assert.equal(fake.prompts.length, 1, "确认发送只能调用一次 session/prompt");
+    assert.equal(fake.prompts[0].args.request.content[0].text, "把登录页改成深色");
+    assert.equal(fake.prompts[0].args.request.sessionId, "session-demo");
+
+    await waitForOutput(function () { return output; }, "语音口述: 收到本机请求", 3000);
+    await waitForOutput(function () { return output; }, "语音口述: 草稿 目标=演示会话", 3000);
+    await waitForOutput(function () { return output; }, "语音口述: 已发送 目标=演示会话(session-demo)", 3000);
+    await waitForOutput(function () { return output; }, "语音口述: 请求结束", 3000);
+    assert.ok(output.includes("语音口述: 确认输入 文本=「确认发送」 判定=confirm"), "应记录严格确认判定");
+
+    await waitFor(function () {
+      return sse.events.some(function (event) { return event.phase === "done"; });
+    }, 5000, "浮层没收到 done 事件");
+    const phases = sse.events.map(function (event) { return event.phase; });
+    for (const phase of ["start", "target", "draft", "confirm", "confirm-heard", "sending", "result", "done"]) {
+      assert.ok(phases.includes(phase), "缺少浮层事件 " + phase + "，实际: " + phases.join(","));
+    }
+    const resultEvent = sse.events.find(function (event) { return event.phase === "result"; });
+    assert.equal(resultEvent.action, "sent");
+    assert.equal(resultEvent.target.title, "演示会话");
+    assert.ok(
+      sse.events.findIndex(function (event) { return event.phase === "draft"; })
+        < sse.events.findIndex(function (event) { return event.phase === "confirm"; }),
+      "draft 事件必须先于 confirm"
+    );
+
+    // 取消：不发送
+    const cancelled = await dictate();
+    assert.equal(cancelled.ok, false);
+    assert.equal(cancelled.action, "cancel");
+    assert.equal(fake.prompts.length, 1, "取消后不应发送");
+
+    // 脚本用完 → 录音超时：不发送
+    const timedOut = await dictate();
+    assert.equal(timedOut.ok, false);
+    assert.equal(timedOut.action, "timeout");
+    assert.equal(fake.prompts.length, 1, "超时后不应发送");
+    await waitForOutput(function () { return output; }, "语音口述: 未发送 原因=timeout", 3000);
+
+    assert.ok(!output.includes("HMS 推送"), "测试不应发送 HMS 推送");
+  } finally {
+    if (sse) sse.abort();
+    await stop(child);
+    await fake.close();
+    fs.rmSync(dshHome, { recursive: true, force: true });
   }
 });

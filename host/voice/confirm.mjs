@@ -1,4 +1,4 @@
-import { INTENT, digitSequence, matchesNonce, parseReply } from "./text.mjs";
+import { INTENT, digitSequence, isDictationConfirm, matchesNonce, parseReply } from "./text.mjs";
 
 export const OUTCOME = Object.freeze({
   ALLOW: "allow",
@@ -24,10 +24,15 @@ export async function listenOnce(options) {
   const timeoutMs = opts.timeoutMs || 15000;
   const minConfidence = typeof opts.minConfidence === "number" ? opts.minConfidence : 0.35;
   const prompt = String(opts.prompt || "");
+  // 口述需要更长的断句静音与最长录音时间；审批/命令不传这些字段，保持原有默认。
+  const listenInput = { timeoutMs, prompt };
+  if (opts.silence !== undefined) listenInput.silence = opts.silence;
+  if (opts.maxSeconds !== undefined) listenInput.maxSeconds = opts.maxSeconds;
+  if (opts.threshold !== undefined) listenInput.threshold = opts.threshold;
 
   let result = null;
   try {
-    result = await io.listen({ timeoutMs, prompt });
+    result = await io.listen(listenInput);
   } catch (error) {
     result = { ok: false, error: "listen-failed:" + (error && error.message ? error.message : String(error)) };
   }
@@ -173,7 +178,8 @@ export async function runVoiceConfirm(options) {
     }
 
     if (draft.kind === "dictation") {
-      if (reply.intent === INTENT.CONFIRM) {
+      // 口述专用严格匹配：泛化的「同意」「确定」「好」不能发送任务。
+      if (isDictationConfirm(text)) {
         await say("已发送。");
         return { outcome: OUTCOME.ALLOW, attempts: attempt, heard };
       }

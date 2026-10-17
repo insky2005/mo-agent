@@ -89,6 +89,19 @@ export function parseReply(text) {
   return { intent: INTENT.UNKNOWN, normalized };
 }
 
+/**
+ * 口述任务的确认必须比审批/命令更严格：
+ * 「同意」「确定」「好」「可以」都不能把一段任务发送出去。
+ * 只认明确带「发送/发布」动作的短句，且整句必须就是这句话。
+ */
+const DICTATION_CONFIRM_RE = /^(?:确认发送|确认发送任务|确认发布|确认发布任务|发送|发送任务|发出)$/;
+
+export function isDictationConfirm(text) {
+  const normalized = normalizeReply(text);
+  if (!normalized) return false;
+  return DICTATION_CONFIRM_RE.test(normalized);
+}
+
 /** 口令必须逐位一致，多一位少一位都不行。 */
 export function matchesNonce(text, nonce) {
   const want = String(nonce == null ? "" : nonce).replace(/\D/g, "");
@@ -147,15 +160,20 @@ export function clipText(text, max) {
   return chars.slice(0, max).join("") + "……";
 }
 
-/** 口述草稿的回读：短句全文，长句念开头 + 总字数。 */
+/**
+ * 口述草稿的回读：短句全文，长句念开头 + 总字数。
+ * 带 targetTitle 时先念「发给 X」——自动选中唯一活跃会话时必须让用户听清目标。
+ */
 export function buildDictationDraft(input) {
   const text = String((input && input.text) || "").trim();
   const length = Array.from(text).length;
+  const targetTitle = String((input && input.targetTitle) || "").trim();
+  const target = targetTitle ? "发给「" + targetTitle + "」。" : "";
   const spoken = spellPaths(text);
   const body = length <= 40
-    ? "我听到：" + spoken + "。"
-    : "我听到：" + spellPaths(clipText(text, 40)) + "共" + length + "个字。";
-  return { kind: "dictation", text, prompt: body + "确认发送吗？" };
+    ? target + "我听到：" + spoken + "。"
+    : target + "我听到：" + spellPaths(clipText(text, 40)) + "共" + length + "个字。";
+  return { kind: "dictation", text, length, targetTitle, prompt: body + "确认发送吗？" };
 }
 
 /** 授权草稿的回读：动作 + 目标 + 口令。危险操作额外念出理由。 */

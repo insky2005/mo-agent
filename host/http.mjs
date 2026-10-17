@@ -249,6 +249,15 @@ export function createMoAgentServer(options) {
         const result = await options.voiceCommand();
         return json(res, 200, result);
       }
+      // P2 语音口述：一段话 → 草稿 → 回读 → 严格确认 → 只发送一次。
+      if (pathname === "/local/dictate" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (typeof options.dictate !== "function") {
+          return json(res, 503, { ok: false, error: "voice-disabled" });
+        }
+        const result = await options.dictate();
+        return json(res, 200, result);
+      }
       // 语音浮层的实时事件流（本机 token 放 query，EventSource 不能带 header）。
       if (pathname === "/local/voice-events" && req.method === "GET") {
         const token = url.searchParams.get("token");

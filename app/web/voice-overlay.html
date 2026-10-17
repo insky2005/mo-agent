@@ -74,6 +74,21 @@
   }
   .reply.ok { color: #bbf7d0; }
   .reply.err { color: #fecaca; }
+  .target { color: #bae6fd; border-color: rgba(186, 230, 253, 0.25); }
+  .dictate-only { display: none; }
+  body.dictate .dictate-only { display: inline-block; }
+  .draft-area {
+    display: none; flex: 1 1 auto; min-height: 70px; max-height: 150px;
+    flex-direction: column; gap: 4px;
+    background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px; padding: 8px 10px;
+  }
+  body.dictate .draft-area.on { display: flex; }
+  .draft-head { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.42); }
+  .draft-text {
+    flex: 1 1 auto; overflow-y: auto; font-size: 13px; line-height: 1.5;
+    color: rgba(255, 255, 255, 0.88); white-space: pre-wrap; word-break: break-word;
+  }
   .hint { flex: 0 0 auto; font-size: 10px; color: rgba(255, 255, 255, 0.34); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bars { display: none; align-items: flex-end; gap: 2px; height: 18px; }
   .bars.on { display: flex; }
@@ -102,6 +117,12 @@
   <div class="row">
     <span class="badge intent" id="intent">意图 unknown</span>
     <span class="badge" id="confidence">置信度 —</span>
+    <span class="badge target dictate-only" id="target">目标 —</span>
+    <span class="badge dictate-only" id="chars">— 字</span>
+  </div>
+  <div class="draft-area" id="draftArea">
+    <div class="draft-head"><span>草稿</span><span id="draftMeta">0 字</span></div>
+    <div class="draft-text" id="draftText">—</div>
   </div>
   <div class="reply" id="reply">点托盘「语音」→「语音命令」，听到提示音后再说。</div>
   <div class="hint" id="hint">听到「叮」再说；有副作用的命令会先回读，再等你说确认。</div>
@@ -120,6 +141,11 @@
     hint: document.getElementById("hint"),
     bars: document.getElementById("bars"),
     close: document.getElementById("close"),
+    target: document.getElementById("target"),
+    chars: document.getElementById("chars"),
+    draftArea: document.getElementById("draftArea"),
+    draftMeta: document.getElementById("draftMeta"),
+    draftText: document.getElementById("draftText"),
   };
   const intentLabels = {
     status: "状态查询",
@@ -127,6 +153,7 @@
     resume: "继续语音",
     switch: "切换会话",
     help: "帮助",
+    dictate: "语音口述",
     unknown: "未识别",
   };
   const confirmLabels = {
@@ -157,33 +184,101 @@
       els.confidence.textContent = "置信度 —";
     }
   }
-  function reset() {
+  function setTarget(target, source, ok) {
+    const title = target && target.title ? target.title : "";
+    els.target.textContent = "目标 " + (title || (ok === false ? "未确定" : "—"));
+    els.target.title = source === "single-active" ? "唯一活跃会话（自动选择）" : (source === "focus" ? "当前关注会话" : "");
+    if (typeof target !== "undefined" && target === null && ok === false) {
+      els.target.className = "badge target cancelled dictate-only";
+    } else {
+      els.target.className = "badge target dictate-only";
+    }
+  }
+  function setDraft(text, chars) {
+    const value = String(text || "");
+    if (!value) {
+      els.draftArea.classList.remove("on");
+      els.draftText.textContent = "—";
+      els.draftMeta.textContent = "0 字";
+      els.chars.textContent = "— 字";
+      return;
+    }
+    els.draftArea.classList.add("on");
+    els.draftText.textContent = value;
+    els.draftText.scrollTop = 0;
+    const count = typeof chars === "number" ? chars : Array.from(value).length;
+    els.draftMeta.textContent = count + " 字";
+    els.chars.textContent = count + " 字";
+  }
+  function reset(mode) {
+    document.body.classList.toggle("dictate", mode === "dictate");
     setStatus("正在准备麦克风…", "hot");
     setHeard("");
     setConfidence(null);
     els.intent.textContent = "意图 —";
     els.intent.className = "badge intent";
-    els.reply.textContent = "等待识别…";
+    els.target.textContent = "目标 —";
+    els.target.className = "badge target dictate-only";
+    setDraft("", 0);
+    els.reply.textContent = mode === "dictate"
+      ? "请说你要交给 Agent 的内容；说完会先形成草稿，不会直接发送。"
+      : "等待识别…";
     els.reply.className = "reply";
-    els.hint.textContent = "听到「叮」再说。";
+    els.hint.textContent = mode === "dictate"
+      ? "只有说「确认发送」才发送；说「重说」重录一次，说「取消」放弃。"
+      : "听到「叮」再说。";
   }
 
   function render(event) {
     switch (event.phase) {
       case "start":
-        reset();
+        reset(event.mode);
         break;
       case "listening":
-        setStatus(event.attempt > 1 ? "正在再听一次…" : "正在听…", "hot");
+        setStatus(event.stage === "confirm"
+          ? "正在听你的确认…"
+          : (event.attempt > 1 ? "正在再听一次…" : "正在听…"), "hot");
         break;
       case "heard":
         setHeard(event.text);
         setConfidence(event.confidence);
-        setStatus(event.lowConfidence ? "听到的声音不太确定" : "已识别，正在解析…", event.lowConfidence ? "err" : "hot");
+        if (event.stage === "record" || event.stage === "retry") {
+          setStatus(event.lowConfidence ? "听到的声音不太确定" : "已识别，正在形成草稿…", event.lowConfidence ? "err" : "hot");
+        } else {
+          setStatus(event.lowConfidence ? "听到的声音不太确定" : "已识别，正在解析…", event.lowConfidence ? "err" : "hot");
+        }
         break;
       case "listen-error":
         setStatus("没有听到声音，准备重试…", "err");
         els.hint.textContent = "错误：" + (event.error || "unknown");
+        break;
+      case "target": {
+        setTarget(event.target, event.source, event.ok);
+        if (!event.ok) {
+          const names = (event.candidates || []).map(function (item) { return item.title; }).join("；");
+          els.hint.textContent = names ? ("候选：" + names) : "没有可用的会话。";
+        }
+        break;
+      }
+      case "draft":
+        setTarget(event.target, event.target && event.target.source, event.ok);
+        setDraft(event.text, event.chars);
+        els.intent.textContent = "意图 语音口述";
+        els.intent.className = "badge intent";
+        setStatus(event.ok ? "草稿已生成，正在回读…" : "未发送", event.ok ? "hot" : "err");
+        els.reply.textContent = event.prompt || (event.error ? ("未发送 · " + event.error) : "草稿已生成。");
+        els.reply.className = "reply" + (event.ok ? "" : " err");
+        break;
+      case "retry":
+        setDraft("", 0);
+        setStatus("已丢弃，请重新说…", "hot");
+        els.hint.textContent = "这次重录只再给一次机会。";
+        break;
+      case "sending":
+        setStatus("正在发送…", "hot");
+        els.reply.textContent = "草稿已确认，正在发送给「"
+          + (event.target && event.target.title ? event.target.title : "目标会话") + "」。";
+        els.reply.className = "reply";
         break;
       case "parsed":
         if (event.intent) {
@@ -203,7 +298,8 @@
       case "confirm-heard": {
         setHeard(event.text);
         setConfidence(event.confidence);
-        const label = confirmLabels[event.intent] || (event.confirmed ? "已确认" : "无明确确认");
+        // 口述认「确认发送」；「同意」「确定」不算确认，这里显示为“无明确确认”。
+        const label = event.confirmed ? "已确认" : (confirmLabels[event.intent] || "无明确确认");
         els.intent.textContent = "确认：" + label;
         els.intent.className = "badge " + (event.confirmed ? "confirmed" : "cancelled");
         setStatus(event.confirmed ? "已确认，正在执行…" : "没有确认，未执行", event.confirmed ? "hot" : "err");
@@ -212,19 +308,28 @@
       case "confirm-error":
         setStatus("没有听到确认，准备重试…", "err");
         break;
-      case "result":
-        setStatus(event.ok ? "完成" : "未执行", event.ok ? "ok" : "err");
+      case "result": {
+        const sentTarget = event.ok && event.action === "sent" && event.target && event.target.title
+          ? event.target.title : "";
+        setStatus(sentTarget ? ("已发送给「" + sentTarget + "」") : (event.ok ? "完成" : "未发送"), event.ok ? "ok" : "err");
         if (event.intent) {
           els.intent.textContent = "意图 " + (intentLabels[event.intent] || event.intent);
           els.intent.className = "badge intent";
         }
+        if (event.target) setTarget(event.target, event.target.source, event.ok);
+        if (event.text) setDraft(event.text, event.chars);
         els.reply.textContent = event.reply || "";
         els.reply.className = "reply " + (event.ok ? "ok" : "err");
-        els.hint.textContent = event.ok ? "结果已显示，随后播报。" : "未执行，可以再说一次。";
+        const candidates = (event.candidates || []).map(function (item) { return item.title; }).join("；");
+        els.hint.textContent = event.ok
+          ? "结果已显示，随后播报。"
+          : (candidates ? ("未发送；候选：" + candidates) : "未发送，草稿保留；可以重新点「语音口述任务」。");
         break;
+      }
       case "done":
         if (els.status.classList.contains("err")) break;
-        setStatus(event.ok ? "完成" : "未执行", event.ok ? "ok" : "err");
+        if (event.intent === "dictate" && els.status.textContent.indexOf("已发送给") === 0) break;
+        setStatus(event.ok ? "完成" : "未发送", event.ok ? "ok" : "err");
         break;
       default:
         break;

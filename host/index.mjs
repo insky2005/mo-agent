@@ -20,6 +20,7 @@ import { makeNonce } from "./voice/text.mjs";
 import { createSpeaker } from "./voice/tts.mjs";
 import { createVoiceNotifier } from "./voice/notifier.mjs";
 import { createCommandExecutor } from "./voice/commands.mjs";
+import { createDictationRunner } from "./voice/dictate.mjs";
 import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
@@ -340,6 +341,89 @@ const created = createAdapters({ hub, log, config, profiles, dsh });
 const monitor = created.adapters.find((a) => a.name === "dsh") || null;
 for (const adapter of created.adapters) hub.register(adapter);
 
+// P2 语音口述任务：沿用 P1 的「当前关注会话」，先成草稿，严格确认后只发送一次。
+const dictateRunner = voice
+  ? createDictationRunner({
+    hub,
+    getTargetSessionId: () => (voiceCommands ? voiceCommands.targetSessionId() : null),
+    sendPrompt: (sessionId, text) => dsh.prompt(sessionId, text),
+    listen: voice.listen,
+    speak: voiceSpeaker,
+    prepare: voice.prepare,
+    onEvent: broadcastVoiceEvent,
+    log,
+    maxChars: Number(process.env.MO_AGENT_VOICE_DICTATE_MAX_CHARS || 4000),
+    listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
+    timeoutMs: 45000,
+    confirmTimeoutMs: 15000,
+    silence: 1.6,
+    maxSeconds: 30,
+  })
+  : null;
+
+async function runDictate() {
+  if (!voice || !dictateRunner) {
+    log.warn("语音口述: 未启用，忽略本机请求");
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: "语音未启用。", error: "voice-disabled" });
+    broadcastVoiceEvent({ phase: "done", ok: false, intent: "dictate" });
+    return { ok: false, intent: "dictate", error: "voice-disabled", reply: "语音未启用。" };
+  }
+  if (!dsh) {
+    log.warn("语音口述: DSH 不可用，未发送");
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: "DSH 不可用，未发送。", error: "dsh-unavailable" });
+    broadcastVoiceEvent({ phase: "done", ok: false, intent: "dictate" });
+    return { ok: false, intent: "dictate", error: "dsh-unavailable", reply: "DSH 不可用，未发送。" };
+  }
+  log.info("语音口述: 收到本机请求");
+  voiceRecentEvents.length = 0;
+  const started = Date.now();
+  let result;
+  try {
+    result = await voice.runExclusive(async function () {
+      // 与语音命令一样复用同一个音频会话：先等麦克风出音频，再提示用户开口。
+      const opened = await voice.open();
+      if (opened && opened.ok === false && opened.error === "mic-denied") {
+        const reply = "麦克风权限未授予。请到系统设置，隐私与安全性，麦克风里勾选 mo-agent 语音。";
+        log.warn("语音口述: 麦克风权限未授予");
+        broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: reply, error: "mic-denied" });
+        try { await voiceSpeaker(reply); } catch (error) { /* 播报失败不影响返回 */ }
+        return { ok: false, intent: "dictate", error: "mic-denied", reply: reply };
+      }
+      if (opened && opened.ok === false) {
+        log.warn("语音口述: 开麦失败 " + (opened.error || "unknown")
+          + (opened.startupMs ? " 启动=" + opened.startupMs + "ms" : "")
+          + (opened.buffers !== undefined ? " 缓冲=" + opened.buffers : ""));
+      } else if (opened && opened.ok) {
+        log.info("语音口述: 麦克风会话已就绪 启动=" + (opened.startupMs || 0) + "ms 缓冲=" + (opened.buffers || 0)
+          + " 峰值=" + (typeof opened.peak === "number" ? opened.peak.toFixed(4) : "-"));
+      }
+      try {
+        return await dictateRunner.runFromMicrophone();
+      } finally {
+        await voice.close();
+      }
+    });
+  } catch (error) {
+    log.warn("语音口述: 请求异常: " + (error && error.message ? error.message : String(error)));
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: "口述执行失败，请稍后再试。", error: "exception" });
+    result = { ok: false, intent: "dictate", reply: "口述执行失败，请稍后再试。", error: "exception" };
+  }
+  if (result && result.outcome === "busy") {
+    log.info("语音口述: 正在处理其他语音，忽略本次请求");
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: "正在处理上一条语音，请稍后再试。", error: "voice-busy" });
+    result = { ok: false, intent: "dictate", error: "voice-busy", reply: "正在处理上一条语音，请稍后再试。" };
+  } else if (result && result.outcome === "stopped") {
+    log.info("语音口述: 语音通道已停止，忽略本次请求");
+    broadcastVoiceEvent({ phase: "result", ok: false, intent: "dictate", reply: "语音已停止。", error: "voice-stopped" });
+    result = { ok: false, intent: "dictate", error: "voice-stopped", reply: "语音已停止。" };
+  }
+  const ok = !!(result && result.ok);
+  broadcastVoiceEvent({ phase: "done", ok: ok, intent: "dictate" });
+  log.info("语音口述: 请求结束 耗时=" + (Date.now() - started) + "ms ok=" + ok
+    + (result && result.error ? " 原因=" + result.error : ""));
+  return result;
+}
+
 const moHost = createMoAgentServer({
   config,
   hub,
@@ -354,6 +438,7 @@ const moHost = createMoAgentServer({
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
+  dictate: runDictate,
   voiceEvents,
   pairHandler: handlePairRoutes,
   apkPath,

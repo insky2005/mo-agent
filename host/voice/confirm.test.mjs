@@ -148,6 +148,19 @@ test("口述：含糊应答不放行", async () => {
   assert.ok(!io.said.includes("已发送。"));
 });
 
+test("口述：泛化 CONFIRM（同意/确定）不能直接发送", async () => {
+  const draft = buildDictationDraft({ text: "把登录页改成深色" });
+  const io = makeIo([
+    { ok: true, text: "同意", confidence: 0.9 },
+    { ok: true, text: "确定", confidence: 0.9 },
+    { ok: true, text: "确认发送", confidence: 0.9 },
+  ]);
+  const result = await runVoiceConfirm({ draft, io, maxAttempts: 3 });
+  assert.equal(result.outcome, OUTCOME.ALLOW);
+  assert.equal(result.attempts, 3);
+  assert.equal(io.said.filter(function (line) { return line === "已发送。"; }).length, 1);
+});
+
 test("口述：取消不发", async () => {
   const draft = buildDictationDraft({ text: "把登录页改成深色" });
   const io = makeIo([{ ok: true, text: "取消", confidence: 0.9 }]);
