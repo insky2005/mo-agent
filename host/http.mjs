@@ -232,6 +232,14 @@ export function createMoAgentServer(options) {
         const result = await broker.request(body);
         return json(res, 200, result);
       }
+      if (pathname === "/local/voice-test" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (typeof options.voiceTest !== "function") {
+          return json(res, 503, { ok: false, error: "voice-disabled" });
+        }
+        const result = await options.voiceTest();
+        return json(res, 200, result);
+      }
       if (pathname === "/local/pair-payload" && req.method === "GET") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const addresses = candidateAddresses(localIPv4List());

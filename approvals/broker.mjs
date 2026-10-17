@@ -24,6 +24,8 @@ export class ApprovalBroker {
     this.log = opts.log || (() => {});
     this.timeoutMs = opts.timeoutMs || 120000;
     this.isClientConnected = opts.isClientConnected || (() => false);
+    // 语音等其它决策端可以订阅这个回调，拿到 pending 的 id 后再回 decide。
+    this.onPending = opts.onPending || null;
     this.pending = new Map();
     this.rules = new Map();
   }
@@ -55,7 +57,7 @@ export class ApprovalBroker {
         resolve({ decision: DECISION.DEFER, reason: "timeout", id });
       }, this.timeoutMs);
 
-      this.pending.set(id, {
+      const item = {
         id,
         key,
         payload,
@@ -67,7 +69,8 @@ export class ApprovalBroker {
           this.hub.emit(EVENT.APPROVAL_RESOLVED, { id, decision, reason: reason || "user" });
           resolve({ decision, reason: reason || "user", id });
         },
-      });
+      };
+      this.pending.set(id, item);
 
       this.hub.emit(EVENT.APPROVAL_PENDING, {
         id,
@@ -81,6 +84,13 @@ export class ApprovalBroker {
         timeoutMs: this.timeoutMs,
       });
       this.log.info("已推送批准请求到手机: " + (payload.toolName || key));
+      if (this.onPending) {
+        try {
+          this.onPending(item);
+        } catch (error) {
+          this.log.warn("onPending 回调失败: " + (error && error.message ? error.message : String(error)));
+        }
+      }
     });
   }
 

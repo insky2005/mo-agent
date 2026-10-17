@@ -13,6 +13,12 @@ import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
+import { checkVoiceReady, createVoiceChannel, decisionForOutcome } from "./voice/channel.mjs";
+import { createScriptedListener } from "./voice/io.mjs";
+import { makeNonce } from "./voice/text.mjs";
+import { createSpeaker } from "./voice/tts.mjs";
+import { createVoiceNotifier } from "./voice/notifier.mjs";
+import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
@@ -68,7 +74,132 @@ async function rescan() {
 rescan();
 const procTimer = setInterval(rescan, 5000);
 
-// 远程批准中枢
+// 语音批准（可选）：环境变量或 ~/.mo-agent/voice.json（桌面托盘勾选）开启。
+// 分发包把桥/whisper/模型放在 runtime/voice 下，开发态回退到 .build。
+function firstExisting(candidates, fallback) {
+  for (const file of candidates) {
+    try {
+      if (file && fs.existsSync(file)) return file;
+    } catch (error) {
+      /* 忽略 */
+    }
+  }
+  return fallback;
+}
+
+function readVoiceConfig() {
+  try {
+    const file = path.join(os.homedir(), ".mo-agent", "voice.json");
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    return parsed && parsed.enabled === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+const voiceEnabled = process.env.MO_AGENT_VOICE === "1"
+  || (process.env.MO_AGENT_VOICE !== "0" && readVoiceConfig());
+const voiceRoot = path.join(root, "voice");
+const voiceSmallModel = firstExisting([
+  path.join(voiceRoot, "models", "ggml-small-q8_0.bin"),
+  path.join(root, ".build", "models", "ggml-small-q8_0.bin"),
+], "");
+const voiceBaseModel = firstExisting([
+  path.join(voiceRoot, "models", "ggml-base.bin"),
+  path.join(root, ".build", "models", "ggml-base.bin"),
+], "");
+const voiceModel = process.env.MO_AGENT_WHISPER_MODEL || voiceSmallModel || voiceBaseModel;
+const voicePaths = {
+  bridge: process.env.MO_AGENT_VOICE_BRIDGE || firstExisting([
+    path.join(voiceRoot, "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge"),
+    path.join(root, ".build", "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge"),
+    path.join(voiceRoot, "MoVoiceBridge.app", "Contents", "MacOS", "mo-voice-bridge"),
+    path.join(root, ".build", "MoVoiceBridge.app", "Contents", "MacOS", "mo-voice-bridge"),
+  ], path.join(voiceRoot, "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge")),
+  whisperBinary: process.env.MO_AGENT_WHISPER_BIN || firstExisting([
+    path.join(voiceRoot, "whisper", "bin", "whisper-cli"),
+    path.join(root, ".build", "bin", "whisper-cli"),
+  ], path.join(voiceRoot, "whisper", "bin", "whisper-cli")),
+  model: voiceModel,
+};
+// 授权草稿与 critical 播报共用同一个串行 speaker，避免两句话叠在一起。
+const voiceEventLog = function (event) {
+  const type = event && event.type;
+  const attempt = event && event.attempt ? ("第 " + event.attempt + " 次 ") : "";
+  const confidence = event && typeof event.confidence === "number" ? event.confidence.toFixed(2) : "-";
+  const expected = event && event.expected ? (" 期望口令=" + event.expected) : "";
+
+  if (type === "asr") {
+    log.info(attempt + "语音输入: 「" + (event.text || "") + "」 意图=" + (event.intent || "?") + " 置信度=" + confidence + expected);
+    return;
+  }
+  if (type === "asr-low-confidence") {
+    log.info(attempt + "语音输入置信度低: 「" + (event.text || "") + "」 置信度=" + confidence + expected);
+    return;
+  }
+  if (type === "mic-unavailable" || type === "asr-error") {
+    log.warn(attempt + "语音输入失败: " + JSON.stringify(event));
+    return;
+  }
+  if (typeof log.debug === "function") log.debug(JSON.stringify(event));
+};
+const voiceSpeaker = voiceEnabled
+  ? createSpeaker({ dryRun: process.env.MO_AGENT_VOICE_DRY === "1", log: voiceEventLog })
+  : null;
+// 常驻 helper：open 启动一次，之后所有命令走本地 socket。
+const voiceClient = voiceEnabled && !process.env.MO_AGENT_VOICE_SCRIPT
+  ? createHelperClient({ app: voicePaths.bridge, log })
+  : null;
+let voice = null;
+let voiceStatus = "未启用";
+if (voiceEnabled) {
+  const script = process.env.MO_AGENT_VOICE_SCRIPT;
+  if (script) {
+    const lines = script.split(/[,，\n]/).map(function (item) { return item.trim(); }).filter(Boolean);
+    voice = createVoiceChannel(Object.assign({
+      listener: createScriptedListener(lines, { log: voiceEventLog }),
+      nonceFactory: () => process.env.MO_AGENT_VOICE_NONCE || makeNonce(4),
+      speaker: voiceSpeaker,
+      eventLog: voiceEventLog,
+      log,
+    }, voicePaths));
+    voiceStatus = "已启用（脚本应答）";
+    log.info("语音批准以脚本应答启用（调试）");
+  } else {
+    const ready = await checkVoiceReady(Object.assign({ log, client: voiceClient }, voicePaths));
+    if (ready.ready) {
+      voice = createVoiceChannel(Object.assign({
+        timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
+        maxAttempts: Number(process.env.MO_AGENT_VOICE_ATTEMPTS || 3),
+        speaker: voiceSpeaker,
+        client: voiceClient,
+        eventLog: voiceEventLog,
+        log,
+      }, voicePaths));
+      voiceStatus = ready.micStatus === 0 ? "已启用（首次会请求麦克风）" : "已启用";
+      log.info("语音批准已启用");
+    } else {
+      voiceStatus = "不可用：" + ready.reason;
+      log.warn("语音批准未启用：" + ready.reason);
+    }
+  }
+}
+
+if (voice) {
+  notifier.register(createVoiceNotifier({ speaker: voiceSpeaker, log }));
+  // 保活：helper 空闲 5 分钟会退出，下一次授权又要冷启动；
+  // 每分钟 ping 一次，让它保持热状态。
+  if (voiceClient && typeof voiceClient.keepalive === "function") voiceClient.keepalive();
+  log.info("语音播报已挂到 critical 通知");
+}
+
+async function testVoice() {
+  if (!voice) return { ok: false, error: "voice-disabled" };
+  const result = await voice.test();
+  return Object.assign({ ok: true }, result);
+}
+
+// 远程批准中枢（语音只是另一个决策端）
 const runtime = {};
 const pairing = new PairingManager({ log, ttlMs: config.qrTtlMs || 5 * 60 * 1000 });
 
@@ -76,7 +207,18 @@ const broker = new ApprovalBroker({
   hub,
   log,
   timeoutMs: config.approvalTimeoutMs,
-  isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false),
+  isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false) || !!voice,
+  onPending: (item) => {
+    if (!voice) return;
+    voice.handle(item).then((result) => {
+      const decision = decisionForOutcome(result && result.outcome);
+      // 超时 / 取消 / 麦克风不可用：不落决策，留给手机或 broker 超时。
+      if (!decision) return;
+      broker.decide(item.id, decision);
+    }).catch((error) => {
+      log.warn("语音批准失败: " + (error && error.message ? error.message : String(error)));
+    });
+  },
 });
 
 // 数据源
@@ -98,6 +240,7 @@ const moHost = createMoAgentServer({
   localToken,
   monitor,
   pairing,
+  voiceTest: testVoice,
   pairHandler: handlePairRoutes,
   apkPath,
   logFile,
@@ -129,6 +272,7 @@ function banner(port) {
   lines.push("  数据源:   " + created.adapters.map((a) => a.name).join(", "));
   lines.push("  Agent档案: " + profiles.map((p) => p.id + (p.enabled === false ? "(未启用)" : "")).join(", "));
   lines.push("  远程批准: " + (config.approvalTimeoutMs / 1000) + "s 超时；无手机在线时交回本地终端");
+  lines.push("  语音批准: " + voiceStatus);
   lines.push("");
   return lines.join("\n");
 }
@@ -186,6 +330,7 @@ async function main() {
         /* 忽略 */
       }
     }
+    if (voice) voice.stop();
     broker.cancelAll("shutdown");
     if (dsh) dsh.close();
     moHost.server.close(() => process.exit(0));

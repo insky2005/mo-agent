@@ -58,6 +58,27 @@ else
   echo "[build] 警告：未找到 $APK，分发包将无法扫码安装；先跑 ./scripts/build-android.sh" >&2
 fi
 
+# ---- 语音资源：录音器 + 静态 whisper + 模型，直接进包 ----
+WITH_VOICE="${WITH_VOICE:-1}"
+if [ "$WITH_VOICE" = "1" ]; then
+  if [ ! -d ".build/mo-agent 语音.app" ]; then
+    echo "[build] 构建语音桥…"
+    ./scripts/build-voice-bridge.sh
+  fi
+  if [ ! -x ".build/bin/whisper-cli" ] || [ ! -s ".build/models/ggml-small-q8_0.bin" ]; then
+    echo "[build] 构建 whisper 与模型（首次会下载约 252MB）…"
+    ./scripts/build-whisper.sh
+  fi
+  mkdir -p "$RUNTIME_STAGE/voice/whisper/bin" "$RUNTIME_STAGE/voice/models"
+  cp -R ".build/mo-agent 语音.app" "$RUNTIME_STAGE/voice/"
+  cp -f ".build/bin/whisper-cli" "$RUNTIME_STAGE/voice/whisper/bin/whisper-cli"
+  cp -f ".build/models/ggml-small-q8_0.bin" "$RUNTIME_STAGE/voice/models/ggml-small-q8_0.bin"
+  chmod +x "$RUNTIME_STAGE/voice/whisper/bin/whisper-cli"
+  echo "[build] 语音资源: $(du -sh "$RUNTIME_STAGE/voice" | cut -f1)"
+else
+  echo "[build] WITH_VOICE=0，跳过语音资源"
+fi
+
 printf '{"version":"%s","builtAt":"%s"}\n' "$(date +%Y%m%d%H%M%S)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNTIME_STAGE/runtime.json"
 echo "[build] runtime 体积: $(du -sh "$RUNTIME_STAGE" | cut -f1)"
 
@@ -92,6 +113,10 @@ fi
 PLIST="$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :LSUIElement" "$PLIST" >/dev/null 2>&1 || true
 /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$PLIST"
+
+# 外层 App 也要声明麦克风用途：TCC 探针如果认父 App，就靠这条说明。
+/usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$PLIST" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string mo-agent 需要麦克风来接收你的语音确认，音频只在本机识别。" "$PLIST"
 
 echo "[build] ad-hoc 重签"
 codesign --force --deep --sign - "$APP"

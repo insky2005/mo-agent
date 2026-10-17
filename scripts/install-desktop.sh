@@ -38,10 +38,12 @@ stop_running() {
   pkill -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
   pkill -f "host/index.mjs" 2>/dev/null || true
   pkill -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
+  pkill -f "mo-voice-bridge" 2>/dev/null || true
   sleep 1
   pkill -9 -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
   pkill -9 -f "host/index.mjs" 2>/dev/null || true
   pkill -9 -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
+  pkill -9 -f "mo-voice-bridge" 2>/dev/null || true
   sleep 1
 }
 

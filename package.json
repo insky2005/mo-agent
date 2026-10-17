@@ -1,14 +1,19 @@
 {
   "name": "mo-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "mo-agent：观察这台电脑上所有 Agent，在关键卡点通知你，并支持远程批准",
   "scripts": {
     "start": "node host/index.mjs",
     "dev": "node --watch host/index.mjs",
-    "check": "node --check host/index.mjs && node --check host/http.mjs && node --check host/logs-http.mjs && node --check host/logs-http.test.mjs && node --check host/pair-http.mjs && node --check core/hub.mjs && node --check core/notify.mjs && node --check core/notify.test.mjs && node --check host/notify-webhook.mjs && node --check host/notify-webhook.test.mjs && node --check host/hms-push.mjs && node --check host/hms-push.test.mjs && node --check host/push-tokens.mjs && node --check host/push-tokens.test.mjs && node --check host/notify-config.mjs && node --check host/notify-config.test.mjs && node --check adapters/claude-code.mjs && node --check adapters/dsh-monitor.mjs && node --check adapters/dsh-monitor.test.mjs",
-    "test": "node --test core/ host/ adapters/"
+    "check": "node --check host/index.mjs && node --check host/http.mjs && node --check host/logs-http.mjs && node --check host/logs-http.test.mjs && node --check host/pair-http.mjs && node --check core/hub.mjs && node --check core/notify.mjs && node --check core/notify.test.mjs && node --check host/notify-webhook.mjs && node --check host/notify-webhook.test.mjs && node --check host/hms-push.mjs && node --check host/hms-push.test.mjs && node --check host/push-tokens.mjs && node --check host/push-tokens.test.mjs && node --check host/notify-config.mjs && node --check host/notify-config.test.mjs && node --check adapters/claude-code.mjs && node --check adapters/dsh-monitor.mjs && node --check adapters/dsh-monitor.test.mjs && node --check approvals/broker.mjs && node --check approvals/broker.test.mjs && node --check host/voice/text.mjs && node --check host/voice/confirm.mjs && node --check host/voice/tts.mjs && node --check host/voice/whisper.mjs && node --check host/voice/io.mjs && node --check host/voice/p0.mjs && node --check host/voice/channel.mjs && node --check host/voice/channel.test.mjs && node --check host/voice/whisper.test.mjs && node --check host/voice/e2e.test.mjs && node --check host/voice/host-e2e.test.mjs && node --check host/voice/notifier.mjs && node --check host/voice/notifier.test.mjs && node --check host/voice/helper-client.mjs && node --check host/voice/helper-client.test.mjs",
+    "test": "node --test core/ host/ adapters/ approvals/",
+    "voice:build": "bash scripts/build-voice-bridge.sh",
+    "voice:build:whisper": "bash scripts/build-whisper.sh",
+    "voice:test": "node --test host/voice/",
+    "voice:demo": "node host/voice/p0.mjs --kind approval --nonce 4729 --transcript 四七二九",
+    "voice:live": "node host/voice/p0.mjs --live --kind approval --broker"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

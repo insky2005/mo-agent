@@ -4,7 +4,7 @@ export default {
   app: {
     name: "mo-agent",
     identifier: "dev.moagent.desktop",
-    version: "0.1.0",
+    version: "0.2.0",
   },
   runtime: {
     // 托盘常驻：关掉窗口不等于退出

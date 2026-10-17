@@ -1,6 +1,6 @@
 import { Tray, BrowserWindow, Utils } from "electrobun/main";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, createWriteStream, readdirSync, readFileSync, rmSync, renameSync, chmodSync, type WriteStream } from "node:fs";
+import { existsSync, mkdirSync, createWriteStream, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync, type WriteStream } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -24,6 +24,26 @@ const RUNTIME_VERSION_FILE = "runtime.json";
 
 const LOG_DIR = join(homedir(), "Library", "Logs", "mo-agent");
 const LOG_FILE = join(LOG_DIR, "host.log");
+// 与 host 共用同一份开关；勾选后重启服务生效。
+const VOICE_CONFIG = join(homedir(), ".mo-agent", "voice.json");
+
+function readVoiceEnabled(): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(VOICE_CONFIG, "utf8"));
+    return Boolean(parsed && parsed.enabled === true);
+  } catch (error) {
+    return false;
+  }
+}
+
+function writeVoiceEnabled(enabled: boolean): void {
+  try {
+    mkdirSync(dirname(VOICE_CONFIG), { recursive: true });
+    writeFileSync(VOICE_CONFIG, JSON.stringify({ enabled }, null, 2) + "\n");
+  } catch (error) {
+    logLine("写入语音配置失败: " + error);
+  }
+}
 
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
@@ -294,7 +314,7 @@ async function openLogs(): Promise<void> {
   createLogsWindow();
 }
 
-async function restartHost(): Promise<void> {
+async function restartService(openPanelAfter: boolean): Promise<void> {
   disposePanel();
   if (logs) {
     const current = logs;
@@ -307,24 +327,106 @@ async function restartHost(): Promise<void> {
   }
   await new Promise((resolve) => setTimeout(resolve, 500));
   await ensureHost();
-  // 重启后总是重新打开「设置（安装与配对）」
-  await openPanel();
+  if (openPanelAfter) await openPanel();
+}
+
+async function restartHost(): Promise<void> {
+  return restartService(true);
+}
+
+function trayMenu(): any[] {
+  const voice = readVoiceEnabled();
+  return [
+    { type: "normal", label: "设置（安装与配对）", action: "panel" },
+    {
+      type: "normal",
+      label: "语音",
+      submenu: [
+        { type: "normal", label: "启用语音", action: "voice", checked: voice },
+        { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
+        { type: "divider" },
+        { type: "normal", label: "语音测试", action: "voice-test" },
+      ],
+    },
+    { type: "divider" },
+    { type: "normal", label: "重启服务", action: "restart" },
+    { type: "normal", label: "查看日志", action: "logs" },
+    { type: "divider" },
+    { type: "normal", label: "退出", action: "quit" },
+  ];
+}
+
+async function toggleVoice(): Promise<void> {
+  const enabled = !readVoiceEnabled();
+  writeVoiceEnabled(enabled);
+  tray.setMenu(trayMenu());
+  logLine("启用语音: " + (enabled ? "开启" : "关闭"));
+  await restartService(false);
+}
+
+function openMicSettings(): void {
+  try {
+    Utils.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+  } catch (error) {
+    logLine("打开麦克风设置失败: " + error);
+  }
+}
+
+async function runVoiceTest(): Promise<void> {
+  const ready = await ensureHost();
+  if (!ready) {
+    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
+    return;
+  }
+
+  let token = process.env.MO_AGENT_LOCAL_TOKEN || "";
+  try {
+    const parsed = JSON.parse(readFileSync(join(homedir(), ".mo-agent", "session.json"), "utf8"));
+    token = parsed.token || token;
+  } catch (error) {
+    /* 没有就用环境变量 */
+  }
+  if (!token) {
+    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "找不到本机令牌", detail: "先重启一次服务" });
+    return;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, 120000);
+  try {
+    const response = await fetch(BASE + "/local/voice-test", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: "{}",
+      signal: controller.signal,
+    });
+    const result = await response.json();
+    const heard = Array.isArray(result.heard)
+      ? result.heard.map(function (item: any) { return item.text; }).filter(Boolean).join(" / ")
+      : "";
+    await Utils.showMessageBox({
+      type: result.ok && result.outcome === "allow" ? "info" : "warning",
+      title: "语音测试",
+      message: result.ok ? ("结果：" + result.outcome) : ("失败：" + (result.error || "unknown")),
+      detail: heard ? ("听到：" + heard) : "没有识别到有效回答。",
+    });
+  } catch (error) {
+    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "请求失败", detail: String(error) });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const tray = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
 
-tray.setMenu([
-  { type: "normal", label: "设置（安装与配对）", action: "panel" },
-  { type: "divider" },
-  { type: "normal", label: "重启服务", action: "restart" },
-  { type: "normal", label: "查看日志", action: "logs" },
-  { type: "divider" },
-  { type: "normal", label: "退出", action: "quit" },
-]);
+tray.setMenu(trayMenu());
 
 tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
   if (action === "panel") await openPanel();
+  else if (action === "voice") await toggleVoice();
+  else if (action === "voice-test") await runVoiceTest();
+  else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
   else if (action === "quit") {
