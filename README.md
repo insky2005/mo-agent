@@ -126,6 +126,10 @@ APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/
 - host 的 host/hms-push.mjs 用 App ID / App Secret 换 OAuth token，调用华为推送接口；
 - 通知由系统直接展示：**App 被杀、锁屏、后台都能收到**，不依赖长连接，也不需要华为电池白名单；
 - 首次启动 host 会自动生成 ~/.mo-agent/notify.json（内含 HMS 通道），无需手写。
+- 需在 AGC 申请**自分类权益**（服务与通讯 → 工作事项提醒 WORK）。未申请时华为按营销类频控
+  （非新闻类约 2 条/天），**接口仍返回 80000000，但通知会被静默丢弃**。
+- 报文的 `category` 必须放在 **android.category**（与 android.notification 同级）；
+  放进 notification 里会被华为忽略，自分类不生效。
 
 旧的 SSE 前台服务已停用，「mo-agent 正在守候」常驻通知不再出现。
 
