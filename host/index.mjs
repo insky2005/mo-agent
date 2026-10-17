@@ -9,6 +9,7 @@ import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
 import { loadNotifyChannels } from "./notify-webhook.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
+import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
@@ -37,6 +38,8 @@ const hub = new Hub({ log, historySize: config.historySize });
 // 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
 const notifier = new Notifier({ hub, log });
 const pushTokens = createPushTokenStore({ log });
+// 首次启动自动写默认通知配置，用户（含其他安装者）不用手写 ~/.mo-agent/notify.json
+ensureNotifyConfig({ log });
 for (const channel of loadNotifyChannels({ log, getPushTokens: () => pushTokens.list() })) {
   notifier.register(channel);
   log.info("已注册通知通道: " + channel.name);

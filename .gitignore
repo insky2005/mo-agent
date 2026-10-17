@@ -37,6 +37,8 @@ app/web/build-info.json
 
 # ---- 华为 AGC 配置（含 client_secret，不进仓库）----
 agconnect-services.json
+# 默认通知配置（含 HMS App Secret，不进仓库）
+host/notify-defaults.json
 
 # ---- 含密钥的原始凭据（只留本地）----
 docs/raw/
