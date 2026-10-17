@@ -30,6 +30,8 @@ const LOG_MAX_BYTES = 5 * 1024 * 1024;
 const LOG_KEEP = 3;
 // 与 host 共用同一份开关；勾选后重启服务生效。
 const VOICE_CONFIG = join(homedir(), ".mo-agent", "voice.json");
+// 测试时静音推送：host 每条通知实时读取，不需要重启。
+const QUIET_CONFIG = join(homedir(), ".mo-agent", "quiet.json");
 
 function readVoiceEnabled(): boolean {
   try {
@@ -37,6 +39,24 @@ function readVoiceEnabled(): boolean {
     return Boolean(parsed && parsed.enabled === true);
   } catch (error) {
     return false;
+  }
+}
+
+function readQuietEnabled(): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(QUIET_CONFIG, "utf8"));
+    return Boolean(parsed && parsed.enabled === true);
+  } catch (error) {
+    return false;
+  }
+}
+
+function writeQuietEnabled(enabled: boolean): void {
+  try {
+    mkdirSync(dirname(QUIET_CONFIG), { recursive: true });
+    writeFileSync(QUIET_CONFIG, JSON.stringify({ enabled }, null, 2) + "\n");
+  } catch (error) {
+    logLine("写入通知静音配置失败: " + error);
   }
 }
 
@@ -52,9 +72,42 @@ function writeVoiceEnabled(enabled: boolean): void {
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
+const VOICE_OVERLAY_STATE = join(homedir(), ".mo-agent", "voice-overlay.json");
+const VOICE_OVERLAY_WIDTH = 392;
+const VOICE_OVERLAY_HEIGHT = 272;
+
+function readVoiceOverlayFrame(): { x: number; y: number; width: number; height: number } | null {
+  try {
+    const parsed = JSON.parse(readFileSync(VOICE_OVERLAY_STATE, "utf8"));
+    const frame = {
+      x: Number(parsed.x),
+      y: Number(parsed.y),
+      width: Number(parsed.width) || VOICE_OVERLAY_WIDTH,
+      height: Number(parsed.height) || VOICE_OVERLAY_HEIGHT,
+    };
+    if (!Number.isFinite(frame.x) || !Number.isFinite(frame.y)) return null;
+    // 显示器换了或位置明显不合理时回到居中。
+    if (frame.x < -5000 || frame.x > 8000 || frame.y < -2000 || frame.y > 6000) return null;
+    return frame;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveVoiceOverlayFrame(frame: { x: number; y: number; width: number; height: number }): void {
+  if (!frame || !Number.isFinite(frame.x) || !Number.isFinite(frame.y)) return;
+  if (!(frame.width >= 100) || !(frame.height >= 100)) return;
+  try {
+    mkdirSync(dirname(VOICE_OVERLAY_STATE), { recursive: true });
+    writeFileSync(VOICE_OVERLAY_STATE, JSON.stringify(frame, null, 2) + "\n");
+  } catch (error) {
+    logLine("保存语音浮层位置失败: " + error);
+  }
+}
+
 let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
-let voiceOverlayFrame: { x: number; y: number; width: number; height: number } | null = null;
+let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
@@ -330,6 +383,10 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   cancelVoiceOverlayHide();
   if (voiceOverlay) {
     const current = voiceOverlay;
+    try {
+      voiceOverlayFrame = current.getFrame();
+      saveVoiceOverlayFrame(voiceOverlayFrame);
+    } catch (error) { /* 忽略 */ }
     voiceOverlay = null;
     voiceOverlayToken = "";
     try { current.close(); } catch (error) { /* 已经销毁 */ }
@@ -354,6 +411,7 @@ async function restartHost(): Promise<void> {
 
 function trayMenu(): any[] {
   const voice = readVoiceEnabled();
+  const quiet = readQuietEnabled();
   return [
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
     {
@@ -367,12 +425,20 @@ function trayMenu(): any[] {
         { type: "normal", label: "语音测试", action: "voice-test" },
       ],
     },
+    { type: "normal", label: "暂停通知（测试）", action: "quiet", checked: quiet },
     { type: "divider" },
     { type: "normal", label: "重启服务", action: "restart" },
     { type: "normal", label: "查看日志", action: "logs" },
     { type: "divider" },
     { type: "normal", label: "退出", action: "quit" },
   ];
+}
+
+function toggleQuiet(): void {
+  const enabled = !readQuietEnabled();
+  writeQuietEnabled(enabled);
+  tray.setMenu(trayMenu());
+  logLine("测试静音通知: " + (enabled ? "开启" : "关闭"));
 }
 
 async function toggleVoice(): Promise<void> {
@@ -429,7 +495,10 @@ function cancelVoiceOverlayHide(): void {
 function hideVoiceOverlay(): void {
   cancelVoiceOverlayHide();
   if (!voiceOverlay) return;
-  try { voiceOverlayFrame = voiceOverlay.getFrame(); } catch (error) { /* 忽略 */ }
+  try {
+    voiceOverlayFrame = voiceOverlay.getFrame();
+    saveVoiceOverlayFrame(voiceOverlayFrame);
+  } catch (error) { /* 忽略 */ }
   try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
 }
 
@@ -453,7 +522,10 @@ async function ensureVoiceOverlay(): Promise<boolean> {
   }
 
   if (!voiceOverlay) {
-    const frame = voiceOverlayFrame || { x: 80, y: 80, width: 392, height: 272 };
+    // 第一次打开不传 x/y，交给系统居中；之后用上次保存的位置。
+    const frame: { x?: number; y?: number; width: number; height: number } = voiceOverlayFrame
+      ? { x: voiceOverlayFrame.x, y: voiceOverlayFrame.y, width: VOICE_OVERLAY_WIDTH, height: VOICE_OVERLAY_HEIGHT }
+      : { width: VOICE_OVERLAY_WIDTH, height: VOICE_OVERLAY_HEIGHT };
     const win = new BrowserWindow({
       title: "mo-agent 语音",
       url: BASE + "/voice-overlay.html?token=" + encodeURIComponent(token),
@@ -482,9 +554,17 @@ async function ensureVoiceOverlay(): Promise<boolean> {
       logLine("语音浮层置顶失败: " + error);
     }
     win.on("close", () => {
-      try { voiceOverlayFrame = win.getFrame(); } catch (error) { /* 忽略 */ }
+      try {
+        voiceOverlayFrame = win.getFrame();
+        saveVoiceOverlayFrame(voiceOverlayFrame);
+      } catch (error) { /* 忽略 */ }
       if (voiceOverlay === win) voiceOverlay = null;
     });
+    // 首次居中后把实际位置记下来；之后拖动/隐藏会更新。
+    try {
+      voiceOverlayFrame = win.getFrame();
+      saveVoiceOverlayFrame(voiceOverlayFrame);
+    } catch (error) { /* 忽略 */ }
     // 给页面和 SSE 一点连接时间，避免错过开头的事件。
     await new Promise(function (resolve) { setTimeout(resolve, 260); });
   }
@@ -590,12 +670,14 @@ tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
   if (action === "panel") await openPanel();
   else if (action === "voice") await toggleVoice();
+  else if (action === "quiet") toggleQuiet();
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "voice-test") await runVoiceTest();
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
   else if (action === "quit") {
+    hideVoiceOverlay();
     if (host) host.kill();
     tray.remove();
     process.exit(0);

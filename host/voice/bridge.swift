@@ -140,11 +140,57 @@ func rmsOf(_ buffer: AVAudioPCMBuffer) -> Float {
   return sqrt(sum / Float(count))
 }
 
+/** 生成一个很短的提示音（120ms，1kHz）：系统提示音都有 0.5～1.6 秒，会吃掉开头。 */
+func cueFilePath() -> String? {
+  ensureDir(CACHE_DIR, permissions: 0o700)
+  let path = CACHE_DIR + "/cue-1000hz-120ms.wav"
+  if FileManager.default.fileExists(atPath: path) { return path }
+
+  let sampleRate = 16000
+  let frameCount = Int(Double(sampleRate) * 0.12)
+  var data = Data()
+  func append16(_ value: Int16) {
+    var little = value.littleEndian
+    data.append(Data(bytes: &little, count: 2))
+  }
+  func append32(_ value: UInt32) {
+    var little = value.littleEndian
+    data.append(Data(bytes: &little, count: 4))
+  }
+  let dataSize = UInt32(frameCount * 2)
+  data.append(contentsOf: Array("RIFF".utf8))
+  append32(36 + dataSize)
+  data.append(contentsOf: Array("WAVE".utf8))
+  data.append(contentsOf: Array("fmt ".utf8))
+  append32(16)
+  append16(1)
+  append16(1)
+  append32(UInt32(sampleRate))
+  append32(UInt32(sampleRate * 2))
+  append16(2)
+  append16(16)
+  data.append(contentsOf: Array("data".utf8))
+  append32(dataSize)
+  for i in 0..<frameCount {
+    let t = Double(i) / Double(sampleRate)
+    let fadeIn = min(1.0, Double(i) / (Double(sampleRate) * 0.005))
+    let fadeOut = min(1.0, Double(frameCount - i) / (Double(sampleRate) * 0.02))
+    let value = sin(2.0 * Double.pi * 1000.0 * t) * 0.45 * fadeIn * fadeOut
+    append16(Int16(max(-32767.0, min(32767.0, value * 32767.0))))
+  }
+  do {
+    try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+    return path
+  } catch {
+    return nil
+  }
+}
+
 func playReadySound() {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
-  // Tink 太短太轻，蓝牙 HFP 下经常听不到；Glass 更清晰。
-  process.arguments = ["-v", "1.4", "/System/Library/Sounds/Glass.aiff"]
+  let path = cueFilePath() ?? "/System/Library/Sounds/Glass.aiff"
+  process.arguments = ["-v", "1.2", path]
   do {
     try process.run()
     process.waitUntilExit()
@@ -378,10 +424,10 @@ final class VoiceSession {
     state.reset()
     stats.reset()
 
-    // 提示音必须无条件先响：用户需要知道“现在可以说了”。
-    // 不再等峰值——有些蓝牙耳机在没人说话时输出的是全零，等峰值会永远等不到。
-    playReadySound()
+    // 先开 gate 再响提示音：用户常在提示音一响就开口，晚开 gate 会吃掉第一个字。
+    // 提示音只有 120ms，会进 WAV 开头；VAD 在提示音结束后重置，不会把它当成一句话。
     gate.enable()
+    playReadySound()
     state.reset()
     let started = Date()
 
@@ -404,7 +450,7 @@ final class VoiceSession {
       "startupMs": startupMs,
       "buffers": recordStats.buffers,
       "peak": Double(recordStats.peak),
-      "cue": "Glass",
+      "cue": "beep-120ms",
       "routeChanged": route.marked(),
       "sampleRate": info.sampleRate,
       "channels": info.channels,
