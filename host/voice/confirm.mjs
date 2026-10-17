@@ -39,6 +39,8 @@ export async function listenOnce(options) {
       text: "",
       confidence: null,
       lowConfidence: false,
+      // 录音失败时把 helper 诊断带回去：host 日志能区分没权限、没音频、路由变化。
+      detail: result || null,
     };
   }
 
@@ -49,6 +51,7 @@ export async function listenOnce(options) {
     text,
     confidence,
     lowConfidence: confidence !== null && confidence >= 0 && confidence < minConfidence,
+    record: result.record || null,
   };
 }
 

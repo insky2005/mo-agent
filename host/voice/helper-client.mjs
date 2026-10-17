@@ -140,7 +140,7 @@ export function createHelperClient(options) {
         timeout: seconds,
         silence: (input && input.silence) || 1.1,
         max: (input && input.maxSeconds) || 12,
-        threshold: (input && input.threshold) || 0.012,
+        threshold: (input && input.threshold) || 0.008,
       }, seconds * 1000 + 75000);
       return result;
     },

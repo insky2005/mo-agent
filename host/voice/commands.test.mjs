@@ -94,6 +94,8 @@ test("解析：切换的序号（阿拉伯数字 / 中文数字）", () => {
   assert.deepEqual(parseCommand("切换到第二个").sessionHint, { kind: "index", index: 2 });
   assert.deepEqual(parseCommand("切换到第 10 个").sessionHint, { kind: "index", index: 10 });
   assert.deepEqual(parseCommand("切到第2个会话").sessionHint, { kind: "index", index: 2 });
+  assert.deepEqual(parseCommand("切换第一个会话").sessionHint, { kind: "index", index: 1 });
+  assert.deepEqual(parseCommand("切第二个").sessionHint, { kind: "index", index: 2 });
   assert.equal(parseCommand("切到第2个").intent, COMMAND.SWITCH);
 });
 
@@ -369,7 +371,7 @@ test("入口：第一次超时会自动再听一次", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.intent, COMMAND.STATUS);
   assert.equal(voice.queue.length, 0);
-  assert.ok(voice.said.includes("没有听到，请再说一次。"));
+  assert.ok(voice.said.includes("没有听到，请等提示音再说一次。"));
   const text = logs.join("\n");
   assert.match(text, /监听失败 第1次 错误=timeout/);
   assert.match(text, /监听完成 第2次/);
@@ -391,8 +393,41 @@ test("执行：确认第一次超时会自动再听一次", async () => {
   assert.equal(result.ok, true);
   assert.equal(executor.isMuted(), true);
   assert.equal(voice.queue.length, 0);
-  assert.ok(voice.said.includes("没有听到确认，请再说一次确认。"));
+  assert.ok(voice.said.includes("没有听到确认，请等提示音再说一次确认。"));
   assert.match(logs.join("\n"), /确认尝试 第2次/);
+});
+
+test("入口：mic-silent 也会自动重试", async () => {
+  const voice = makeVoice([
+    { ok: false, error: "mic-silent", startupMs: 3000, buffers: 0, peak: 0 },
+    "汇报状态",
+  ]);
+  const { executor, logs } = makeExecutor({ voice });
+  const result = await executor.runFromMicrophone();
+  assert.equal(result.ok, true);
+  assert.equal(result.intent, COMMAND.STATUS);
+  assert.match(logs.join("\n"), /监听失败 第1次 错误=mic-silent .*启动=3000ms 缓冲=0 峰值=0\.0000/);
+});
+
+test("日志：录音诊断写入监听完成日志", async () => {
+  const voice = makeVoice([{
+    ok: true,
+    text: "汇报状态",
+    confidence: 0.9,
+    record: {
+      startupMs: 420,
+      buffers: 12,
+      peak: 0.03,
+      sampleRate: 16000,
+      routeChanged: false,
+      inputDevice: "HUAWEI FreeBuds SE 3",
+    },
+  }]);
+  const { executor, logs } = makeExecutor({ voice });
+  await executor.runFromMicrophone();
+  const text = logs.join("\n");
+  assert.match(text, /监听完成 第1次 .*启动=420ms 缓冲=12 峰值=0\.0300 采样率=16000/);
+  assert.match(text, /设备=HUAWEI FreeBuds SE 3/);
 });
 
 // ---------- 麦克风入口 ----------
@@ -404,7 +439,7 @@ test("入口：说一句话走完整条命令链路", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.intent, COMMAND.STATUS);
   assert.equal(result.heard.text, "汇报状态");
-  assert.ok(voice.said[0].includes("请说命令"));
+  assert.ok(voice.said[0].includes("请等提示音"));
 });
 
 test("入口：低置信度命令不执行", async () => {

@@ -29,7 +29,8 @@ export function createMicCapture(options) {
     const timeoutMs = (input && input.timeoutMs) || opts.timeoutMs || 15000;
     const result = await client.record({ timeoutMs });
     if (!result || !result.ok) return result || { ok: false, error: "capture-failed" };
-    return { ok: true, raw: result.file, seconds: result.seconds };
+    // 保留 helper 返回的诊断字段（采样率/启动耗时/峰值/路由变化），供 host.log 排查。
+    return Object.assign({}, result, { ok: true, raw: result.file });
   };
 }
 
@@ -51,6 +52,10 @@ export function createVoiceListener(options) {
     await fs.unlink(captured.raw).catch(function () {});
     await fs.unlink(wav16).catch(function () {});
     log({ type: "listen-done", text: result && result.text });
-    return result;
+    const record = {};
+    for (const key of ["seconds", "startupMs", "buffers", "peak", "routeChanged", "sampleRate", "channels", "inputDevice", "micAuthorization"]) {
+      if (captured[key] !== undefined) record[key] = captured[key];
+    }
+    return Object.assign({}, result, { record });
   };
 }

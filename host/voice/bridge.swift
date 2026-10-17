@@ -146,52 +146,140 @@ func playReadySound() {
   }
 }
 
+final class CaptureStats {
+  private let lock = NSLock()
+  private var buffers = 0
+  private var peak: Float = 0
+
+  func observe(_ rms: Float) {
+    lock.lock()
+    buffers += 1
+    if rms > peak { peak = rms }
+    lock.unlock()
+  }
+
+  func snapshot() -> (buffers: Int, peak: Float) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (buffers, peak)
+  }
+}
+
+final class RouteFlag {
+  private let lock = NSLock()
+  private var value = false
+
+  func mark() {
+    lock.lock()
+    value = true
+    lock.unlock()
+  }
+
+  func marked() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return value
+  }
+}
+
+/**
+ * WAV 写入器：tap 用 nil format 安装，第一次拿到真实 buffer 时才建文件。
+ * 这样蓝牙路由从 A2DP 切到 HFP、采样率/声道数变化时，不会用过期 format 写文件。
+ */
+final class WavSink {
+  private let lock = NSLock()
+  private let path: String
+  private var file: AVAudioFile?
+  private var sampleRate: Double = 0
+  private var channels: Int = 0
+  private var wrote = false
+
+  init(path: String) {
+    self.path = path
+  }
+
+  func write(_ buffer: AVAudioPCMBuffer) {
+    lock.lock()
+    defer { lock.unlock() }
+    if file == nil {
+      let settings: [String: Any] = [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVSampleRateKey: buffer.format.sampleRate,
+        AVNumberOfChannelsKey: buffer.format.channelCount,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+      ]
+      file = try? AVAudioFile(
+        forWriting: URL(fileURLWithPath: path),
+        settings: settings,
+        commonFormat: .pcmFormatFloat32,
+        interleaved: false
+      )
+      sampleRate = buffer.format.sampleRate
+      channels = Int(buffer.format.channelCount)
+    }
+    if let file = file {
+      try? file.write(from: buffer)
+      wrote = true
+    }
+  }
+
+  func close() {
+    lock.lock()
+    file = nil
+    lock.unlock()
+  }
+
+  func info() -> (sampleRate: Double, channels: Int, wrote: Bool) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (sampleRate, channels, wrote)
+  }
+}
+
+/**
+ * 录一句。
+ *
+ * 蓝牙耳机从 TTS（A2DP）切到麦克风（HFP）需要时间。旧实现 engine.start() 后立刻敲提示音，
+ * 用户听到提示就说话，但 tap 还没拿到音频，短句（尤其「确认」）整段丢失。
+ *
+ * 现在：
+ * - tap 用 nil format 安装，第一次 buffer 才建 WAV，避免路由切换后 format 过期；
+ * - 先等输入通道真的出音频（buffers + 非零峰值），再敲提示音、开 gate；
+ * - 等待超时返回 mic-silent，录音期间路由变化且没听到语音返回 route-changed，让 host 重试；
+ * - 所有诊断字段随响应返回，写进 host.log。
+ */
 func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: TimeInterval, threshold: Float) -> [String: Any] {
-  if !requestMic(45) {
-    return ["ok": false, "error": "mic-denied", "message": "未获得麦克风权限"]
+  if !requestMic(10) {
+    return ["ok": false, "error": "mic-denied", "message": "未获得麦克风权限", "micAuthorization": micAuthorizationText()]
   }
 
   ensureDir(CACHE_DIR, permissions: 0o700)
   let out = CACHE_DIR + "/utt-" + UUID().uuidString + ".wav"
+  let sink = WavSink(path: out)
 
   let engine = AVAudioEngine()
   let input = engine.inputNode
-  // 播报与录音在 host 侧严格串行，不需要 AEC。
-  // 开 voice processing 会多一次音频路由重配，反而拉长“播完到开麦”的间隔。
-
-  let format = input.outputFormat(forBus: 0)
-  guard format.sampleRate > 0, format.channelCount > 0 else {
-    return ["ok": false, "error": "format-invalid", "message": "输入格式无效"]
-  }
-
-  let settings: [String: Any] = [
-    AVFormatIDKey: kAudioFormatLinearPCM,
-    AVSampleRateKey: format.sampleRate,
-    AVNumberOfChannelsKey: format.channelCount,
-    AVLinearPCMBitDepthKey: 16,
-    AVLinearPCMIsFloatKey: false,
-    AVLinearPCMIsBigEndianKey: false,
-  ]
-
-  let file: AVAudioFile
-  do {
-    file = try AVAudioFile(
-      forWriting: URL(fileURLWithPath: out),
-      settings: settings,
-      commonFormat: .pcmFormatFloat32,
-      interleaved: false
-    )
-  } catch {
-    return ["ok": false, "error": "file-failed", "message": error.localizedDescription]
-  }
-
-  // tap 必须在 start 之前装；用 gate 把提示音期间的音频丢掉。
   let gate = CaptureGate()
   let state = VadState()
-  input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+  let stats = CaptureStats()
+  let route = RouteFlag()
+  let observer = NotificationCenter.default.addObserver(
+    forName: .AVAudioEngineConfigurationChange,
+    object: engine,
+    queue: nil
+  ) { _ in
+    route.mark()
+  }
+
+  input.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+    // 统计必须在 gate 外做：要确认音频路由已经真的出数据。
+    let level = rmsOf(buffer)
+    stats.observe(level)
     guard gate.enabled else { return }
-    try? file.write(from: buffer)
-    state.observe(rms: rmsOf(buffer), threshold: threshold)
+    sink.write(buffer)
+    state.observe(rms: level, threshold: threshold)
   }
 
   do {
@@ -199,11 +287,53 @@ func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: T
     try engine.start()
   } catch {
     input.removeTap(onBus: 0)
+    NotificationCenter.default.removeObserver(observer)
+    sink.close()
     try? FileManager.default.removeItem(atPath: out)
-    return ["ok": false, "error": "engine-failed", "message": error.localizedDescription]
+    return [
+      "ok": false,
+      "error": "engine-failed",
+      "message": error.localizedDescription,
+      "inputDevice": inputDeviceName(),
+      "micAuthorization": micAuthorizationText(),
+    ]
   }
 
-  // 引擎和蓝牙路由就绪后给一声提示音；提示音被 gate 丢掉，不进 WAV。
+  // 等输入通道真正开始出音频，再让用户说话。最多等 3 秒。
+  let startupStarted = Date()
+  var live = false
+  while Date().timeIntervalSince(startupStarted) < 3.0 {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    let snapshot = stats.snapshot()
+    if snapshot.buffers >= 3 && snapshot.peak > 0.0001
+      && Date().timeIntervalSince(startupStarted) >= 0.15 {
+      live = true
+      break
+    }
+  }
+  let startupMs = Int(Date().timeIntervalSince(startupStarted) * 1000)
+  let startupStats = stats.snapshot()
+
+  if !live {
+    engine.stop()
+    input.removeTap(onBus: 0)
+    NotificationCenter.default.removeObserver(observer)
+    sink.close()
+    try? FileManager.default.removeItem(atPath: out)
+    return [
+      "ok": false,
+      "error": "mic-silent",
+      "message": "麦克风没有音频输入",
+      "startupMs": startupMs,
+      "buffers": startupStats.buffers,
+      "peak": Double(startupStats.peak),
+      "routeChanged": route.marked(),
+      "inputDevice": inputDeviceName(),
+      "micAuthorization": micAuthorizationText(),
+    ]
+  }
+
+  // 输入通道已就绪，给一声提示音；提示音被 gate 丢掉，不进 WAV。
   playReadySound()
   gate.enable()
   state.reset()
@@ -220,13 +350,37 @@ func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: T
 
   engine.stop()
   input.removeTap(onBus: 0)
+  NotificationCenter.default.removeObserver(observer)
+  sink.close()
 
+  let finalStats = stats.snapshot()
+  let sinkInfo = sink.info()
   let snapshot = state.snapshot()
+  let diagnostics: [String: Any] = [
+    "startupMs": startupMs,
+    "buffers": finalStats.buffers,
+    "peak": Double(finalStats.peak),
+    "routeChanged": route.marked(),
+    "sampleRate": sinkInfo.sampleRate,
+    "channels": sinkInfo.channels,
+    "inputDevice": inputDeviceName(),
+    "micAuthorization": micAuthorizationText(),
+  ]
+
   if !snapshot.sawSpeech {
     try? FileManager.default.removeItem(atPath: out)
-    return ["ok": false, "error": "timeout", "message": "没有听到语音"]
+    var payload = diagnostics
+    payload["ok"] = false
+    payload["error"] = route.marked() ? "route-changed" : "timeout"
+    payload["message"] = route.marked() ? "音频路由在录音期间发生变化" : "没有听到语音"
+    return payload
   }
-  return ["ok": true, "file": out, "seconds": Date().timeIntervalSince(started)]
+
+  var payload = diagnostics
+  payload["ok"] = true
+  payload["file"] = out
+  payload["seconds"] = Date().timeIntervalSince(started)
+  return payload
 }
 
 // ---- 本地控制协议 ----
@@ -366,7 +520,7 @@ func handleClient(fd: Int32, token: String, activity: Activity) {
     let timeout = (json["timeout"] as? Double) ?? 15
     let silence = (json["silence"] as? Double) ?? 1.1
     let maxSeconds = (json["max"] as? Double) ?? 12
-    let threshold = Float((json["threshold"] as? Double) ?? 0.012)
+    let threshold = Float((json["threshold"] as? Double) ?? 0.008)
     sendJSON(fd: fd, recordUtterance(
       timeout: timeout,
       silence: silence,

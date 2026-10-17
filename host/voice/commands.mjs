@@ -32,7 +32,8 @@ export const HELP_TEXT = "可以这样说：汇报状态、暂停、继续、切
  */
 export const COMMAND_PROMPT = "汇报状态。暂停。继续。切到第一个会话。切换到登录页。帮助。";
 
-const SWITCH_RE = /^(?:请|帮我|麻烦|给我)?(?:切换|切|换|转)(?:到|至|去)(.+)$/;
+// 「切换到第 2 个」和「切换第一个会话」都算；「到/至/去」是可选的。
+const SWITCH_RE = /^(?:请|帮我|麻烦|给我)?(?:切换|切|换|转)(?:到|至|去)?(.+)$/;
 const PAUSE_RE = /(暂停|静音|停一下|停一停|先停|别念|不要念|别播报|不要播报|闭麦|安静)/;
 const RESUME_RE = /(继续|恢复|取消静音|解除静音|别静音|不用静音|开声音|打开声音|取消暂停|解除暂停)/;
 const RESUME_PHRASE_RE = /(取消静音|解除静音|别静音|不用静音|取消暂停|解除暂停)/g;
@@ -78,6 +79,8 @@ function parseNumber(text) {
 function parseSwitchHint(raw) {
   let text = String(raw == null ? "" : raw).trim().replace(/(?:吧|啊|呢|一下)$/u, "");
   text = text.replace(/^(?:名叫|叫|名为)/u, "");
+  // 可选「到」在「切换到」这类残缺句里会退化成目标「到」，必须排除。
+  if (/^(?:到|至|去)$/u.test(text)) return null;
 
   const indexMatch = /^第([0-9零〇○一二两三四五六七八九十百]+)(?:个|号)?(?:会话|任务|窗口|聊天|对话)?(?:的)?$/u.exec(text);
   if (indexMatch) {
@@ -191,6 +194,20 @@ export function createCommandExecutor(options) {
 
   function sleep(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function recordText(record, detail) {
+    const info = record || detail || null;
+    if (!info) return "";
+    const parts = [];
+    if (info.startupMs !== undefined) parts.push("启动=" + info.startupMs + "ms");
+    if (info.buffers !== undefined) parts.push("缓冲=" + info.buffers);
+    if (typeof info.peak === "number") parts.push("峰值=" + info.peak.toFixed(4));
+    if (info.sampleRate) parts.push("采样率=" + info.sampleRate);
+    if (info.routeChanged) parts.push("路由变化");
+    if (info.error) parts.push("错误=" + info.error);
+    if (info.inputDevice) parts.push("设备=" + info.inputDevice);
+    return parts.length ? (" " + parts.join(" ")) : "";
   }
 
   function micState(value) {
@@ -388,12 +405,12 @@ export function createCommandExecutor(options) {
       return {
         ok: true,
         kind: "pause",
-        prompt: "要暂停语音播报与语音审批 " + muteMinutes + " 分钟，确认吗？",
+        prompt: "要暂停语音播报与语音审批 " + muteMinutes + " 分钟，确认吗？听到提示音后说确认。",
       };
     }
     if (intent === COMMAND.RESUME) {
       if (!isMuted()) return { ok: false, action: "noop", reply: "语音没有静音。" };
-      return { ok: true, kind: "resume", prompt: "要恢复语音播报与语音审批，确认吗？" };
+      return { ok: true, kind: "resume", prompt: "要恢复语音播报与语音审批，确认吗？听到提示音后说确认。" };
     }
     if (intent === COMMAND.SWITCH) {
       const resolved = resolveSwitch(hint);
@@ -410,7 +427,7 @@ export function createCommandExecutor(options) {
         kind: "switch",
         session: resolved.session,
         label: resolved.label,
-        prompt: "要切换到" + resolved.label + "，确认吗？",
+        prompt: "要切换到" + resolved.label + "，确认吗？听到提示音后说确认。",
       };
     }
     return { ok: false, action: "unknown", reply: "没听懂。" };
@@ -493,7 +510,7 @@ export function createCommandExecutor(options) {
       if (attempt > 1) {
         // 蓝牙路由/开麦偶发失败：超时后主动再听一次，仍然只认明确确认。
         await safePrepare();
-        await safeSpeak("没有听到确认，请再说一次确认。");
+        await safeSpeak("没有听到确认，请等提示音再说一次确认。");
       }
       if (listenDelayMs > 0) await sleep(listenDelayMs);
       const confirmStarted = Date.now();
@@ -503,11 +520,12 @@ export function createCommandExecutor(options) {
       logInfo("语音命令: 确认尝试 第" + attempt + "次 耗时=" + confirmMs + "ms"
         + (heard.ok
           ? (" 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence))
-          : (" 错误=" + heard.error)));
-      if (heard.ok || heard.error !== "timeout") break;
+          : (" 错误=" + heard.error))
+        + recordText(heard.ok ? heard.record : null, heard.detail));
+      if (heard.ok || ["timeout", "mic-silent", "route-changed"].indexOf(heard.error) === -1) break;
     }
     if (!heard.ok) {
-      logInfo("语音命令: 确认失败 错误=" + heard.error);
+      logInfo("语音命令: 确认失败 错误=" + heard.error + recordText(null, heard.detail));
       const reply = heard.error === "timeout" ? "没有听到确认，未执行。" : "没听清，未执行。";
       await safeSpeak(reply);
       return { ok: false, reply, action: "cancelled", heard, error: heard.error };
@@ -608,7 +626,7 @@ export function createCommandExecutor(options) {
     logInfo("语音命令: 开始监听 超时=" + timeoutMs + "ms 最低置信度=" + minConfidence
       + " 最多尝试=" + listenAttempts + " 次 播报后延迟=" + listenDelayMs + "ms");
     await safePrepare();
-    await safeSpeak("请说命令。");
+    await safeSpeak("请等提示音，然后说命令。");
     let heard = null;
     let attempt = 0;
     while (attempt < listenAttempts) {
@@ -616,7 +634,7 @@ export function createCommandExecutor(options) {
       if (attempt > 1) {
         // 常见于蓝牙耳机刚切回 HFP：第一次没录到，重新预热后再听一次。
         await safePrepare();
-        await safeSpeak("没有听到，请再说一次。");
+        await safeSpeak("没有听到，请等提示音再说一次。");
       }
       if (listenDelayMs > 0) await sleep(listenDelayMs);
       const listenStarted = Date.now();
@@ -624,13 +642,14 @@ export function createCommandExecutor(options) {
       if (heard.ok) {
         logInfo("语音命令: 监听完成 第" + attempt + "次 耗时=" + elapsed(listenStarted) + "ms 文本=「" + heard.text + "」"
           + " 置信度=" + confidenceText(heard.confidence)
-          + (heard.lowConfidence ? " 低置信度" : ""));
+          + (heard.lowConfidence ? " 低置信度" : "")
+          + recordText(heard.record, null));
       } else {
         logInfo("语音命令: 监听失败 第" + attempt + "次 错误=" + (heard.error || "unknown")
-          + " 耗时=" + elapsed(listenStarted) + "ms");
+          + " 耗时=" + elapsed(listenStarted) + "ms" + recordText(null, heard.detail));
       }
       if (heard.ok && (heard.text.trim() || heard.lowConfidence)) break;
-      if (!heard.ok && heard.error !== "timeout") break;
+      if (!heard.ok && ["timeout", "mic-silent", "route-changed"].indexOf(heard.error) === -1) break;
     }
 
     if (!heard.ok) {
