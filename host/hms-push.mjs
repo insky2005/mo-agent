@@ -61,6 +61,8 @@ export function createHmsChannel(config, deps) {
           },
           android: {
             notification: {
+              // 自分类类别：申请「自分类权益」后生效；WORK = 工作事项提醒
+              category: config.category || "WORK",
               // 3 = 点击通知打开 App 首页（1 需要额外 intent，2 需要 url）
               click_action: { type: 3 },
             },
