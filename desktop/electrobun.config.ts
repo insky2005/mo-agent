@@ -25,6 +25,8 @@ export default {
     copy: {
       "src/mainview/index.html": "views/mainview/index.html",
       "src/mainview/tray.png": "views/mainview/tray.png",
+      // 由 scripts/build-desktop.sh 在构建前组装好的 host 运行时（单文件 tar.gz）
+      "runtime.tar.gz": "runtime.tar.gz",
     },
     // codesign: true 需要 Apple 开发者证书（ELECTROBUN_DEVELOPER_ID），
     // 本地改为构建后用 scripts/build-desktop.sh 里的 ad-hoc 重签。

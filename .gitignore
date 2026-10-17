@@ -17,6 +17,8 @@ data/
 # ---- 桌面壳（Electrobun）构建产物 ----
 /build/
 desktop/build/
+desktop/runtime/
+desktop/runtime.tar.gz
 desktop/out/
 desktop/artifacts/
 # Electrobun 的图标源是 desktop/icon.iconset（由 scripts/gen-icons.mjs 生成），

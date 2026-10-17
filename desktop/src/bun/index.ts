@@ -1,7 +1,8 @@
 import { Tray, BrowserWindow, Utils } from "electrobun/main";
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, createWriteStream, readdirSync, type WriteStream } from "node:fs";
-import { join } from "node:path";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, createWriteStream, readdirSync, readFileSync, rmSync, renameSync, chmodSync, type WriteStream } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 // 只驻留菜单栏，不占 Dock
@@ -14,8 +15,12 @@ try {
 const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
 const PANEL_URL = BASE + "/setup";
-const REPO_ROOT = process.env.MO_AGENT_ROOT || "/Users/dev/c/work.ai/deepseek-harness/mo-agent";
-const HOST_ENTRY = REPO_ROOT + "/host/index.mjs";
+// 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
+const DEV_ROOT = process.env.MO_AGENT_ROOT || "";
+const FALLBACK_REPO_ROOT = "/Users/dev/c/work.ai/deepseek-harness/mo-agent";
+const SHELL_DIR = dirname(fileURLToPath(import.meta.url));
+const RUNTIME_DIR = join(homedir(), "Library", "Application Support", "mo-agent", "runtime");
+const RUNTIME_VERSION_FILE = "runtime.json";
 
 const LOG_DIR = join(homedir(), "Library", "Logs", "mo-agent");
 const LOG_FILE = join(LOG_DIR, "host.log");
@@ -78,6 +83,80 @@ function logLine(text: string): void {
   stream.end();
 }
 
+/** .app 内打包的 runtime.tar.gz。 */
+function runtimePayloadTar(): string | null {
+  const candidates = [
+    // build.copy 的落点：Contents/Resources/app/runtime.tar.gz
+    join(SHELL_DIR, "..", "runtime.tar.gz"),
+    join(dirname(process.execPath), "..", "Resources", "app", "runtime.tar.gz"),
+    join(process.cwd(), "app", "runtime.tar.gz"),
+    join(process.cwd(), "runtime.tar.gz"),
+  ];
+  for (const file of candidates) {
+    try {
+      if (existsSync(file)) return file;
+    } catch (error) {
+      /* 忽略 */
+    }
+  }
+  return null;
+}
+
+function readRuntimeVersion(dir: string): string {
+  try {
+    const parsed = JSON.parse(readFileSync(join(dir, RUNTIME_VERSION_FILE), "utf8"));
+    return String(parsed.version || "");
+  } catch (error) {
+    return "";
+  }
+}
+
+/**
+ * 把 .app 里的 runtime 安装/更新到固定目录（版本不同才覆盖）。
+ * 用户数据在 ~/.mo-agent，与这里隔离，升级不会丢配置。
+ */
+function ensureRuntime(): string {
+  if (DEV_ROOT) return DEV_ROOT;
+
+  const payload = runtimePayloadTar();
+  if (!payload) {
+    logLine("未找到打包 runtime，回退到开发仓库路径");
+    return FALLBACK_REPO_ROOT;
+  }
+
+  const staging = RUNTIME_DIR + ".new";
+  try {
+    rmSync(staging, { recursive: true, force: true });
+    mkdirSync(staging, { recursive: true });
+    const result = spawnSync("tar", ["-xzf", payload, "-C", staging], { stdio: "ignore" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error("tar 解包失败，status=" + result.status);
+
+    const payloadVersion = readRuntimeVersion(staging);
+    const installedVersion = readRuntimeVersion(RUNTIME_DIR);
+    if (payloadVersion && payloadVersion === installedVersion) {
+      rmSync(staging, { recursive: true, force: true });
+      return RUNTIME_DIR;
+    }
+
+    if (host) {
+      try { host.kill(); } catch (error) { /* 忽略 */ }
+      host = null;
+    }
+
+    rmSync(RUNTIME_DIR, { recursive: true, force: true });
+    mkdirSync(dirname(RUNTIME_DIR), { recursive: true });
+    renameSync(staging, RUNTIME_DIR);
+    try { chmodSync(join(RUNTIME_DIR, "bin", "mo-agent-host"), 0o755); } catch (error) { /* 忽略 */ }
+    logLine("运行时已安装/更新: " + (payloadVersion || "unknown") + " -> " + RUNTIME_DIR);
+    return RUNTIME_DIR;
+  } catch (error) {
+    logLine("安装运行时失败，回退到开发仓库路径: " + error);
+    try { rmSync(staging, { recursive: true, force: true }); } catch (cleanupError) { /* 忽略 */ }
+    return existsSync(RUNTIME_DIR) ? RUNTIME_DIR : FALLBACK_REPO_ROOT;
+  }
+}
+
 async function isUp(): Promise<boolean> {
   try {
     const res = await fetch(BASE + "/api/health");
@@ -90,25 +169,32 @@ async function isUp(): Promise<boolean> {
 async function ensureHost(): Promise<boolean> {
   if (await isUp()) return true;
 
+  const root = ensureRuntime();
+
   if (!host) {
-    const nodeBin = resolveNode();
     const stream = openLog();
+    const packaged = !DEV_ROOT && existsSync(join(root, "bin", "mo-agent-host"));
+    const command = packaged ? join(root, "bin", "mo-agent-host") : resolveNode();
+    const args = packaged
+      ? ["--port", String(PORT)]
+      : [join(root, "host", "index.mjs"), "--port", String(PORT)];
     try {
       if (stream) {
         stream.write("\n==== " + new Date().toISOString() + " 启动 host ====\n");
-        stream.write("node: " + nodeBin + "\nhost: " + HOST_ENTRY + "\n");
+        stream.write("root: " + root + "\ncommand: " + command + " " + args.join(" ") + "\n");
       }
-      host = spawn(nodeBin, [HOST_ENTRY, "--port", String(PORT)], {
-        cwd: REPO_ROOT,
+      host = spawn(command, args, {
+        cwd: root,
         env: {
           ...process.env,
+          MO_AGENT_ROOT: root,
           MO_AGENT_LOG_FILE: LOG_FILE,
           PATH: (process.env.PATH || "") + ":/opt/homebrew/bin:/usr/local/bin",
         },
         stdio: stream ? ["ignore", stream, stream] : "inherit",
       });
       host.on("error", (error: Error) => {
-        logLine("spawn 失败: " + error.message + "（node 路径: " + nodeBin + "）");
+        logLine("spawn 失败: " + error.message + "（command: " + command + "）");
         host = null;
       });
       host.on("exit", (code: number | null) => {
@@ -249,7 +335,7 @@ tray.on("tray-clicked", async (event: any) => {
 });
 
 ensureHost().then((ready) => {
-  logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（node 解析为 " + resolveNode() + "）");
+  logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_FILE + "）");
   // 启动后默认打开「设置（安装与配对）」面板
   if (ready) openPanel();
 }).catch((error) => logLine("启动流程异常: " + error));

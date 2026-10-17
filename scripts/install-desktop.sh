@@ -37,9 +37,11 @@ fi
 stop_running() {
   pkill -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
   pkill -f "host/index.mjs" 2>/dev/null || true
+  pkill -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
   sleep 1
   pkill -9 -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
   pkill -9 -f "host/index.mjs" 2>/dev/null || true
+  pkill -9 -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
   sleep 1
 }
 
@@ -103,10 +105,14 @@ else
   echo "          日志：$HOME/Library/Logs/mo-agent/host.log" >&2
 fi
 
+# Electrobun 首次解包会在 MacOS 目录留下 .cottontail-tmp，
+# codesign 会因此认为 bundle 格式无效（"bundle format unrecognized"）。
+rm -rf "$DEST/Contents/MacOS/.cottontail-tmp" 2>/dev/null || true
+
 # ---- 关键：提交改写了 bundle，必须重新签名，否则双击会被拒绝 ----
 echo "[install] 重新签名（提交改写过 bundle）"
 sign_bundle "$DEST"
-if codesign --verify --verbose "$DEST" 2>&1 | grep -q "valid on disk"; then
+if codesign --verify "$DEST" >/dev/null 2>&1; then
   echo "[install] 签名校验通过 —— 现在可以双击运行"
 else
   codesign --verify --verbose "$DEST" || true

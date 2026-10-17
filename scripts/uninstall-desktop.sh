@@ -10,14 +10,17 @@ DEST="$APP_DIR/mo-agent.app"
 # 历史遗留：早期装到 /Applications，也一并清理
 LEGACY="/Applications/mo-agent.app"
 CACHE="$HOME/Library/Application Support/dev.moagent.desktop"
+RUNTIME="$HOME/Library/Application Support/mo-agent"
 LOGS="$HOME/Library/Logs/mo-agent"
 
 echo "[uninstall] 停止运行中的实例"
 pkill -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
 pkill -f "host/index.mjs" 2>/dev/null || true
+pkill -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
 sleep 1
 pkill -9 -f "mo-agent.app/Contents/MacOS/" 2>/dev/null || true
 pkill -9 -f "host/index.mjs" 2>/dev/null || true
+pkill -9 -f "mo-agent/runtime/bin/mo-agent-host" 2>/dev/null || true
 sleep 1
 
 failed=0
@@ -43,6 +46,7 @@ echo "[uninstall] 删除文件"
 remove "$LEGACY" || true
 remove "$DEST" || true
 remove "$CACHE" || true
+remove "$RUNTIME" || true
 remove "$LOGS" || true
 
 echo "[uninstall] 刷新 LaunchServices 登记（清掉 Finder 里的残影图标）"

@@ -79,7 +79,7 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
     ./scripts/build-desktop.sh
 
-产物：desktop/build/stable-macos-arm64/mo-agent.app（约 20MB）
+产物：desktop/build/stable-macos-arm64/mo-agent.app（约 46MB，含单文件 host 运行时）
 
 双击启动后菜单栏出现托盘图标，并默认弹出「设置（安装与配对）」面板；菜单项：
 
@@ -89,6 +89,20 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 - 退出
 
 托盘会自己把 host 服务拉起来（默认端口 7788），退出时一并结束。
+
+### 运行时与升级
+
+构建时会把 host 编译成单文件，并连同 app/web、adapters/profiles、HMS 默认配置一起打进 .app。
+首次启动时安装/更新到：
+
+    ~/Library/Application Support/mo-agent/runtime
+
+- 升级 .app 后再次启动，会按 runtime.json 的版本号自动覆盖运行时；
+- 用户数据（配置、设备令牌、push token）在 ~/.mo-agent，升级不会动；
+- 因此分发包不再依赖本机仓库路径，也不需要用户安装 Node；
+- 开发时设置 MO_AGENT_ROOT=<仓库路径> 可直接运行源码。
+
+注意：host/notify-defaults.json 含 HMS App Secret，已加入 .gitignore；发布打包时必须随包提供。
 
 ## 扫码装 App + 扫码配对
 

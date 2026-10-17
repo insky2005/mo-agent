@@ -20,7 +20,9 @@ import QRCode from "qrcode";
 import { scanProcesses } from "../adapters/process-scan.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "..");
+// 打包成单文件运行时时，壳会通过 MO_AGENT_ROOT 指定运行时目录；
+// 开发态则回退到源码目录。
+const root = process.env.MO_AGENT_ROOT ? path.resolve(process.env.MO_AGENT_ROOT) : path.resolve(here, "..");
 const webDir = path.join(root, "app", "web");
 const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
 // 桌面端会把 host 的 stdout/stderr 重定向到日志文件，并通过该环境变量告知路径；
@@ -39,14 +41,19 @@ const hub = new Hub({ log, historySize: config.historySize });
 const notifier = new Notifier({ hub, log });
 const pushTokens = createPushTokenStore({ log });
 // 首次启动自动写默认通知配置，用户（含其他安装者）不用手写 ~/.mo-agent/notify.json
-ensureNotifyConfig({ log });
+const notifyDefaults = process.env.MO_AGENT_NOTIFY_DEFAULTS
+  || (fs.existsSync(path.join(root, "host", "notify-defaults.json"))
+    ? path.join(root, "host", "notify-defaults.json")
+    : path.join(root, "notify-defaults.json"));
+ensureNotifyConfig({ log, defaults: notifyDefaults });
 for (const channel of loadNotifyChannels({ log, getPushTokens: () => pushTokens.list() })) {
   notifier.register(channel);
   log.info("已注册通知通道: " + channel.name);
 }
 notifier.start();
 const localToken = process.env.MO_AGENT_LOCAL_TOKEN || randomBytes(24).toString("base64url");
-const profiles = loadProfiles();
+// profiles 是运行时从磁盘读的，打包成单文件后必须显式指向运行时目录
+const profiles = loadProfiles(path.join(root, "adapters", "profiles"));
 
 // L1：进程发现（独立于会话观测，唯一能覆盖任意 Agent 的手段）
 const procState = { items: [] };
