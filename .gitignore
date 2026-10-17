@@ -34,3 +34,9 @@ app/android/app/src/main/assets/capacitor.config.json
 
 # ---- 构建生成的版本信息 ----
 app/web/build-info.json
+
+# ---- 华为 AGC 配置（含 client_secret，不进仓库）----
+agconnect-services.json
+
+# ---- 含密钥的原始凭据（只留本地）----
+docs/raw/
