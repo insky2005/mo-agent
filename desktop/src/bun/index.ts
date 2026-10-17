@@ -1,6 +1,6 @@
 import { Tray, BrowserWindow, Utils } from "electrobun/main";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, createWriteStream, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync, type WriteStream } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -24,6 +24,10 @@ const RUNTIME_VERSION_FILE = "runtime.json";
 
 const LOG_DIR = join(homedir(), "Library", "Logs", "mo-agent");
 const LOG_FILE = join(LOG_DIR, "host.log");
+// 桌面壳只写自己的 desktop.log；host.log 由 host 自己写并在 5MB 处轮转。
+const DESKTOP_LOG_FILE = join(LOG_DIR, "desktop.log");
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+const LOG_KEEP = 3;
 // 与 host 共用同一份开关；勾选后重启服务生效。
 const VOICE_CONFIG = join(homedir(), ".mo-agent", "voice.json");
 
@@ -87,20 +91,26 @@ function resolveNode(): string {
   return "node";
 }
 
-function openLog(): WriteStream | null {
-  try {
-    mkdirSync(LOG_DIR, { recursive: true });
-    return createWriteStream(LOG_FILE, { flags: "a" });
-  } catch (error) {
-    return null;
+function rotateLog(file: string): void {
+  try { rmSync(file + "." + LOG_KEEP, { force: true }); } catch (error) { /* 忽略 */ }
+  for (let index = LOG_KEEP - 1; index >= 1; index -= 1) {
+    try { renameSync(file + "." + index, file + "." + (index + 1)); } catch (error) { /* 中间几份可能还没生成 */ }
   }
+  try { renameSync(file, file + ".1"); } catch (error) { /* 首次写还没有当前文件 */ }
 }
 
+/** 桌面壳自己的日志：与 host.log 分开写，5MB 轮转，最多保留 3 份。 */
 function logLine(text: string): void {
-  const stream = openLog();
-  if (!stream) return;
-  stream.write("[" + new Date().toISOString() + "] " + text + "\n");
-  stream.end();
+  try {
+    mkdirSync(LOG_DIR, { recursive: true });
+    const line = "[" + new Date().toISOString() + "] " + text + "\n";
+    let size = 0;
+    try { size = statSync(DESKTOP_LOG_FILE).size; } catch (error) { /* 还没写过 */ }
+    if (size > 0 && size + Buffer.byteLength(line) > LOG_MAX_BYTES) rotateLog(DESKTOP_LOG_FILE);
+    appendFileSync(DESKTOP_LOG_FILE, line);
+  } catch (error) {
+    /* 日志写失败不能影响托盘 */
+  }
 }
 
 /** .app 内打包的 runtime.tar.gz。 */
@@ -192,17 +202,13 @@ async function ensureHost(): Promise<boolean> {
   const root = ensureRuntime();
 
   if (!host) {
-    const stream = openLog();
     const packaged = !DEV_ROOT && existsSync(join(root, "bin", "mo-agent-host"));
     const command = packaged ? join(root, "bin", "mo-agent-host") : resolveNode();
     const args = packaged
       ? ["--port", String(PORT)]
       : [join(root, "host", "index.mjs"), "--port", String(PORT)];
     try {
-      if (stream) {
-        stream.write("\n==== " + new Date().toISOString() + " 启动 host ====\n");
-        stream.write("root: " + root + "\ncommand: " + command + " " + args.join(" ") + "\n");
-      }
+      logLine("启动 host: " + command + " " + args.join(" ") + "（root: " + root + "）");
       host = spawn(command, args, {
         cwd: root,
         env: {
@@ -211,7 +217,8 @@ async function ensureHost(): Promise<boolean> {
           MO_AGENT_LOG_FILE: LOG_FILE,
           PATH: (process.env.PATH || "") + ":/opt/homebrew/bin:/usr/local/bin",
         },
-        stdio: stream ? ["ignore", stream, stream] : "inherit",
+        // host 自己写 host.log；这里不再重定向，避免两个进程抢同一个日志文件。
+        stdio: ["ignore", "ignore", "ignore"],
       });
       host.on("error", (error: Error) => {
         logLine("spawn 失败: " + error.message + "（command: " + command + "）");
@@ -259,7 +266,7 @@ function createPanel(): void {
 async function openPanel(): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
-    logLine("本地服务启动失败，详见 " + LOG_FILE);
+    logLine("本地服务启动失败，详见 " + LOG_DIR);
     Utils.openExternal("file://" + LOG_DIR);
     return;
   }
@@ -437,7 +444,7 @@ tray.on("tray-clicked", async (event: any) => {
 });
 
 ensureHost().then((ready) => {
-  logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_FILE + "）");
+  logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_DIR + "）");
   // 启动后默认打开「设置（安装与配对）」面板
   if (ready) openPanel();
 }).catch((error) => logLine("启动流程异常: " + error));

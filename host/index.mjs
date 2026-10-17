@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { loadConfig } from "./config.mjs";
 import { createLogger } from "./log.mjs";
+import { createRotatingSink } from "./log-file.mjs";
 import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
 import { loadNotifyChannels } from "./notify-webhook.mjs";
@@ -31,8 +32,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = process.env.MO_AGENT_ROOT ? path.resolve(process.env.MO_AGENT_ROOT) : path.resolve(here, "..");
 const webDir = path.join(root, "app", "web");
 const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-// 桌面端会把 host 的 stdout/stderr 重定向到日志文件，并通过该环境变量告知路径；
-// 单独的 host 进程也能用默认路径读到桌面端写的日志。
+// host 自己写这份日志并在 5MB 处轮转（.1 -> .3），桌面壳不再重定向 stdout/stderr。
+// 桌面端的启动/退出信息单独写 desktop.log，避免两个进程抢同一个文件。
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
 // 已配对设备令牌落盘，host 重启后不丢（否则每次「重启服务」都要重新配对）
 const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), ".mo-agent", "devices.json");
@@ -40,7 +41,7 @@ const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), "
 const config = loadConfig(process.argv);
 config.transcriptPollMs = config.transcriptPollMs || 2000;
 config.approvalTimeoutMs = config.approvalTimeoutMs || 120000;
-const log = createLogger(config.logLevel);
+const log = createLogger(config.logLevel, createRotatingSink({ file: logFile }));
 
 const hub = new Hub({ log, historySize: config.historySize });
 // 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
@@ -74,7 +75,7 @@ async function rescan() {
 rescan();
 const procTimer = setInterval(rescan, 5000);
 
-// 语音批准（可选）：环境变量或 ~/.mo-agent/voice.json（桌面托盘勾选）开启。
+// 语音确认（可选）：环境变量或 ~/.mo-agent/voice.json（桌面托盘勾选）开启。
 // 分发包把桥/whisper/模型放在 runtime/voice 下，开发态回退到 .build。
 function firstExisting(candidates, fallback) {
   for (const file of candidates) {
@@ -113,8 +114,6 @@ const voicePaths = {
   bridge: process.env.MO_AGENT_VOICE_BRIDGE || firstExisting([
     path.join(voiceRoot, "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge"),
     path.join(root, ".build", "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge"),
-    path.join(voiceRoot, "MoVoiceBridge.app", "Contents", "MacOS", "mo-voice-bridge"),
-    path.join(root, ".build", "MoVoiceBridge.app", "Contents", "MacOS", "mo-voice-bridge"),
   ], path.join(voiceRoot, "mo-agent 语音.app", "Contents", "MacOS", "mo-voice-bridge")),
   whisperBinary: process.env.MO_AGENT_WHISPER_BIN || firstExisting([
     path.join(voiceRoot, "whisper", "bin", "whisper-cli"),
@@ -164,7 +163,7 @@ if (voiceEnabled) {
       log,
     }, voicePaths));
     voiceStatus = "已启用（脚本应答）";
-    log.info("语音批准以脚本应答启用（调试）");
+    log.info("语音以脚本应答启用（调试）");
   } else {
     const ready = await checkVoiceReady(Object.assign({ log, client: voiceClient }, voicePaths));
     if (ready.ready) {
@@ -177,10 +176,10 @@ if (voiceEnabled) {
         log,
       }, voicePaths));
       voiceStatus = ready.micStatus === 0 ? "已启用（首次会请求麦克风）" : "已启用";
-      log.info("语音批准已启用");
+      log.info("语音已启用");
     } else {
       voiceStatus = "不可用：" + ready.reason;
-      log.warn("语音批准未启用：" + ready.reason);
+      log.warn("语音未启用：" + ready.reason);
     }
   }
 }
@@ -216,7 +215,7 @@ const broker = new ApprovalBroker({
       if (!decision) return;
       broker.decide(item.id, decision);
     }).catch((error) => {
-      log.warn("语音批准失败: " + (error && error.message ? error.message : String(error)));
+      log.warn("语音确认失败: " + (error && error.message ? error.message : String(error)));
     });
   },
 });
@@ -272,7 +271,7 @@ function banner(port) {
   lines.push("  数据源:   " + created.adapters.map((a) => a.name).join(", "));
   lines.push("  Agent档案: " + profiles.map((p) => p.id + (p.enabled === false ? "(未启用)" : "")).join(", "));
   lines.push("  远程批准: " + (config.approvalTimeoutMs / 1000) + "s 超时；无手机在线时交回本地终端");
-  lines.push("  语音批准: " + voiceStatus);
+  lines.push("  语音:     " + voiceStatus);
   lines.push("");
   return lines.join("\n");
 }

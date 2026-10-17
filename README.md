@@ -19,8 +19,8 @@
 | core/notify.mjs 统一通知路由（分级 + 去重 + 通道） | 已实现 |
 | host/notify-webhook.mjs 第三方通道（Bark/钉钉/企业微信/飞书/通用） | 已实现 |
 | host/hms-push.mjs 华为 HMS 推送（OAuth + messages:send） | 已实现并验证送达 |
-| desktop/ 桌面壳 | 已完成 |
-| host/voice/ 两段式语音确认（TTS 播报 + 口令 + 草稿回读） | 已并入桌面分发包（默认关闭，托盘可勾选）；正式签名/升级验证暂缓 |
+| desktop/ 桌面壳（含日志轮转、语音开关） | 已完成 |
+| host/voice/ 两段式语音确认（TTS 播报 + 口令 + 草稿回读） | 已并入桌面分发包（默认关闭，托盘可勾选）；手册见 docs/voice.md，正式签名/升级验证暂缓 |
 
 ## 快速开始
 
@@ -79,12 +79,15 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 ## 桌面托盘（macOS）
 
     ./scripts/build-desktop.sh
+    ./scripts/install-desktop.sh   # 装到 /Applications（无写权限时 ~/Applications）并刷新壳缓存
 
-产物：desktop/build/stable-macos-arm64/mo-agent.app（约 46MB，含单文件 host 运行时）
+产物：desktop/build/stable-macos-arm64/mo-agent.app（含单文件 host 运行时；默认带语音约 282MB，
+不带语音用 `WITH_VOICE=0 ./scripts/build-desktop.sh` 约 46MB）
 
 双击启动后菜单栏出现托盘图标，并默认弹出「设置（安装与配对）」面板；菜单项：
 
 - 设置（安装与配对）：弹出面板窗口，里面就是「扫码装 App」和「扫码配对」两个二维码
+- 语音：启用语音 / 麦克风权限设置… / 语音测试（详见 [docs/voice.md](docs/voice.md)）
 - 重启服务：重启本地 host 服务，随后自动打开「设置」面板
 - 查看日志：在面板窗口里实时查看 host 日志（仅本机可打开 /logs）
 - 退出
@@ -142,83 +145,38 @@ APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/
     adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
 
 
-## 语音免手操作（P0）
+## 语音免手确认
 
-目标：**不打字、不按键**。Agent 卡住时用 TTS 把草稿念出来，你回一句话确认，才交给 Agent。
-设计见 [ADR-0002](docs/adr/adr-0002-hands-free-voice.md)。
+Agent 卡在授权时，host 用 TTS 念出动作、目标和 4 位口令，你复述口令才放行；说「拒绝」可直接拒绝。
+全程本机识别，音频不上传。完整说明（权限、配置、日志、排障、构建）见 [docs/voice.md](docs/voice.md)。
 
-### 桌面 App 里怎么用
-
-分发包已经自带语音桥、静态 whisper 和 `ggml-small-q8_0` 模型（约 264MB），装完即用，不需要联网下载模型。
+分发包默认自带语音桥、静态 whisper 和 `ggml-small-q8_0` 模型（语音资源约 254MB，App 约 282MB），
+装完即用，不需要联网下载模型。
 
 1. 菜单栏托盘 → **语音** → 勾选 **「启用语音」**；
 2. 首次使用会弹「mo-agent 语音」麦克风授权，点允许；
 3. 之后 Agent 卡住时会念出草稿和口令，你复述口令即可。
 
-语音桥是常驻 helper：由 host 通过本地 socket 调用，空闲 5 分钟自动退出，不再每次录音都写临时文件。
+同一子菜单还有 **「麦克风权限设置…」** 和 **「语音测试」**；勾选状态存在 `~/.mo-agent/voice.json`，
+取消勾选会重启 host 并关闭语音。
 
-同一子菜单里还有 **「麦克风权限设置…」** 和 **「语音测试」**；语音测试会念一个口令，让你复述后返回结果。
+**两段式规则**：语音先转草稿，**不执行、不发送**；TTS 回读后才认明确口令；「拒绝」安全直达；
+超时、低置信度、听不懂 → 丢弃并交回手机，绝不猜。最多 3 次尝试。
 
-勾选状态存在 `~/.mo-agent/voice.json`；取消勾选会重启 host 并关闭语音。
-带语音的分发包约 282MB（不带语音约 46MB）；构建时如不想带语音资源，用 `WITH_VOICE=0 ./scripts/build-desktop.sh`。
+**已知限制**：仅 macOS；目前只覆盖授权确认；从播完到开麦约 1 秒延迟。ad-hoc 签名导致重建/升级后
+麦克风权限可能重置，重新授权一次即可。
 
-已在打包 runtime 上验证：host 能从 `runtime/voice/` 加载，启动日志显示「语音批准: 已启用」，
-说明随包的语音桥保留了此前的麦克风授权（同一签名副本）。
-
-**已知限制**：目前是 ad-hoc 签名。重新构建/升级后，麦克风权限可能被 macOS 当成新 App 而重置；
-正式 Developer ID 签名与「升级后权限是否保留」的验证暂缓。
-
-### 两段式规则
-
-1. 语音先转成草稿，**不执行、不发送**；
-2. TTS 回读草稿，授权类还要念出 4 位口令；
-3. 只有听到明确的「确认发送 / 同意 + 口令」才放行；「拒绝」安全直达；
-4. 超时、低置信度、听不懂 → 丢弃并交回手机，绝不猜。
-
-### 构建
+### 构建与开发诊断
 
     npm run voice:build          # Swift 桥：麦克风 + VAD + 录音
     npm run voice:build:whisper  # whisper.cpp + ggml-small-q8_0（约 252MB，走 hf-mirror）
 
-### 试跑（不碰麦克风）
+不想带语音资源时用 `WITH_VOICE=0 ./scripts/build-desktop.sh`（App 约 46MB）。
 
-    npm run voice:demo
-    node host/voice/p0.mjs --mode replay --audio /path/to/utterance.wav --broker --nonce 4729 --dry-tts
+`host/voice/p0.mjs` 是**开发诊断**工具，不是用户入口：
 
-### 真实麦克风
-
-    npm run voice:live
-
-首次会弹出「mo-agent 语音」的麦克风授权，**需要点一次「允许」**，然后再说口令。
-没有弹窗时，到系统设置 → 隐私与安全性 → 麦克风 里手动打开。
-未授权时命令返回 `mic-denied`，不会放行任何操作。
-
-播报与收音串行，避免耳机自激；识别全部在本机完成，不上传音频。输出走系统默认扬声器、
-输入走系统默认麦克风——耳机连上并选中后就是耳机。
-
-### 接进 host（可选）
-
-    MO_AGENT_VOICE=1 npm start
-
-启动日志会出现「语音批准: 已启用」。没有手机在线时，授权请求会先由语音接住；
-语音只对**明确的放行/拒绝**落决策——超时、取消、麦克风不可用都不落决策，
-仍留给手机或 broker 超时，避免因为没听清就提前关掉请求。
-
-critical 通知（提问 / 失败 / 注意）也会念出来；**授权不重复念**——授权由草稿流程
-负责念动作、目标与口令，避免两句话叠在一起。
-
-调试时可以不用麦克风：
-
-    MO_AGENT_VOICE=1 MO_AGENT_VOICE_SCRIPT=四七二九 MO_AGENT_VOICE_NONCE=4729 \
-      MO_AGENT_VOICE_DRY=1 npm start
-
-常用环境变量：`MO_AGENT_VOICE_TIMEOUT_MS`（默认 15000）、`MO_AGENT_VOICE_ATTEMPTS`
-（默认 2）、`MO_AGENT_VOICE_BRIDGE`、`MO_AGENT_WHISPER_BIN`、`MO_AGENT_WHISPER_MODEL`。
-
-结果是一段 JSON（stdout）；每次决策追加审计到 `.build/voice-audit.jsonl`。
-
-P0 边界：还没有唤醒词；耳机 AEC 未在真机验证；中文技术词仍可能听错，所以才有回读与口令。
-裸命令行进程访问麦克风会被 macOS 直接终止，所以语音桥打包成了 `.build/mo-agent 语音.app`。
+    npm run voice:demo   # 不碰麦克风，用脚本台词跑完整确认流程
+    npm run voice:live   # 真实麦克风 + 真实 broker
 
 ## 通知通道（可选）
 
@@ -245,14 +203,15 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
     adapters/      观测适配层，每 Agent 一份 profile（adapters/profiles/*.json）
     approvals/     远程批准：broker + hook 命令行入口
     host/          主程序：HTTP / SSE / 配对 / 二维码 / 编排
-    host/voice/    两段式语音：文本规则、确认状态机、TTS、whisper、P0 CLI
+    host/voice/    两段式语音：文本规则、确认状态机、TTS、whisper、常驻 helper 客户端、p0 诊断 CLI
     app/web/       手机端 PWA 源码
     app/android/   Capacitor 原生工程
     app/ios/       暂缓
-    desktop/       桌面壳（Electrobun，待开始）
+    desktop/       桌面壳（Electrobun 托盘，含语音开关与语音测试）
     hooks/         各 Agent 的 hook 安装模板
-    docs/          adr/ 决策 · research/ 预研 · spec/ 规格
-    scripts/       probe-dsh（探针）、inspect-sessions（会话排查看派生关系）、e2e-approval（回归）、build-android
+    docs/          adr/ 决策 · research/ 预研 · spec/ 规格 · voice.md 语音手册
+    scripts/       probe-dsh（探针）、inspect-sessions（会话排查看派生关系）、e2e-approval（回归）、
+                   build-android / build-desktop / build-voice-bridge / build-whisper
 
 ## 架构
 
@@ -275,7 +234,7 @@ mo-agent 的处理：
 
 排查用：node scripts/inspect-sessions.mjs
 
-自检：npm run check（语法）· npm test（host/logs-http 单测）
+自检：npm run check（语法）· npm test（全量单测）
 
 ## 接口速查
 

@@ -59,6 +59,16 @@ else
 fi
 
 # ---- 语音资源：录音器 + 静态 whisper + 模型，直接进包 ----
+# 0.2.x 的明确决策：模型内置，不做首次下载。
+#   - 语音资源约 254MB（whisper-cli 约 1.3MB + ggml-small-q8_0 约 252MB），成品 App 约 282MB
+#   - 升级 App 会带全量模型重新解包，没有增量下载
+#   - 运行时可用 MO_AGENT_WHISPER_MODEL=/path/to/ggml-*.bin 覆盖模型路径；
+#     host 的选择顺序：MO_AGENT_WHISPER_MODEL > runtime/voice/models/ggml-small-q8_0.bin
+#     > runtime/voice/models/ggml-base.bin
+#   - WITH_VOICE=0 打出不带语音资源的轻量包（约 46MB），此时语音开关会报不可用
+# 以后若减包体，单独开任务：首次启用时下载到
+# ~/Library/Application Support/mo-agent/models/，并处理 SHA256、镜像回退、进度与失败降级。
+# 本轮只固化策略，不实现下载。
 WITH_VOICE="${WITH_VOICE:-1}"
 if [ "$WITH_VOICE" = "1" ]; then
   if [ ! -d ".build/mo-agent 语音.app" ]; then

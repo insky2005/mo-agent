@@ -432,9 +432,6 @@ case "serve":
   serve()
 case "selftest":
   emit(selftestPayload())
-case "record":
-  let seconds = args.count > 2 ? (Double(args[2]) ?? 3) : 3
-  emit(recordUtterance(timeout: seconds, silence: 1.1, maxSeconds: 12, threshold: 0.012))
 default:
   fail("usage", "未知模式: " + mode)
 }

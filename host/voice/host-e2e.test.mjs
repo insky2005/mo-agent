@@ -60,7 +60,7 @@ test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { s
   child.stderr.on("data", function (chunk) { output += chunk.toString(); });
 
   try {
-    await waitForOutput(function () { return output; }, "语音批准以脚本应答启用", 10000);
+    await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
     await waitForOutput(function () { return output; }, "本机:", 5000);
 
     const response = await fetch("http://127.0.0.1:" + port + "/local/approval", {
