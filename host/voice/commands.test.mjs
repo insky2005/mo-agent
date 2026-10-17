@@ -56,6 +56,18 @@ test("解析：状态查询的常见说法", () => {
   }
 });
 
+test("解析：whisper 输出繁体也能归一", () => {
+  assert.equal(parseCommand("匯報狀態").intent, COMMAND.STATUS);
+  assert.equal(parseCommand("現在怎麼樣").intent, COMMAND.STATUS);
+  assert.equal(parseCommand("幾個會話").intent, COMMAND.STATUS);
+  assert.equal(parseCommand("暫停").intent, COMMAND.PAUSE);
+  assert.equal(parseCommand("靜音").intent, COMMAND.PAUSE);
+  assert.equal(parseCommand("繼續").intent, COMMAND.RESUME);
+  assert.equal(parseCommand("恢復").intent, COMMAND.RESUME);
+  assert.equal(parseCommand("幫助").intent, COMMAND.HELP);
+  assert.deepEqual(parseCommand("切換到登錄頁").sessionHint, { kind: "title", text: "登录页" });
+});
+
 test("解析：暂停的常见说法", () => {
   for (const text of ["暂停", "暂停一下", "停一下", "静音", "帮我暂停"]) {
     assert.equal(parseCommand(text).intent, COMMAND.PAUSE, text);

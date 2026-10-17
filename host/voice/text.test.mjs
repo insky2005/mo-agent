@@ -10,6 +10,7 @@ import {
   matchesNonce,
   parseReply,
   spellPaths,
+  toSimplified,
 } from "./text.mjs";
 
 test("digitSequence 认中文数字、阿拉伯数字与混合", () => {
@@ -38,6 +39,13 @@ test("parseReply 只认明确词，拒绝优先于确认", () => {
   assert.equal(parseReply("拒絕").intent, INTENT.REJECT);
   assert.equal(parseReply("確認發送").intent, INTENT.CONFIRM);
   assert.equal(parseReply("重複").intent, INTENT.REPEAT);
+});
+
+test("toSimplified 覆盖语音命令常见繁体字", () => {
+  assert.equal(toSimplified("匯報狀態"), "汇报状态");
+  assert.equal(toSimplified("暫停 / 繼續 / 恢復"), "暂停 / 继续 / 恢复");
+  assert.equal(toSimplified("切換到登錄頁"), "切换到登录页");
+  assert.equal(toSimplified("幾個會話"), "几个会话");
 });
 
 test("matchesNonce 必须逐位一致", () => {
