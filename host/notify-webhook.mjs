@@ -200,7 +200,7 @@ export function loadNotifyChannels(options) {
         log.warn("HMS 通道缺少 appId/appSecret，已跳过");
         continue;
       }
-      result.push(createHmsChannel(config, { log, getPushTokens }));
+      result.push(createHmsChannel(config, { log, getTokens: getPushTokens, fetchImpl: opts.fetchImpl }));
     } else if (config.url) {
       result.push(createWebhookChannel(config, { log }));
     }

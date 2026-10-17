@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmsChannel } from "./hms-push.mjs";
 
-const log = { warn() {} };
+const log = { warn() {}, info() {} };
 
 function fakeFetch(script) {
   const calls = [];

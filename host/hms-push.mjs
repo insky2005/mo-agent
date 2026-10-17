@@ -61,7 +61,8 @@ export function createHmsChannel(config, deps) {
           },
           android: {
             notification: {
-              click_action: { type: 1 },
+              // 3 = 点击通知打开 App 首页（1 需要额外 intent，2 需要 url）
+              click_action: { type: 3 },
             },
           },
         },
@@ -76,6 +77,7 @@ export function createHmsChannel(config, deps) {
       if (!response.ok || (data.code && data.code !== "80000000")) {
         throw new Error("HMS 推送失败: " + JSON.stringify(data).slice(0, 300));
       }
+      if (typeof log.info === "function") log.info("HMS 推送已发送（" + tokens.length + " 个设备）");
     },
   };
 }

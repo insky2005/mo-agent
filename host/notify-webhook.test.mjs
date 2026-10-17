@@ -12,6 +12,7 @@ import {
   genericRequest,
   createWebhookChannel,
   loadWebhookChannels,
+  loadNotifyChannels,
 } from "./notify-webhook.mjs";
 
 const critical = { severity: "critical", kind: "approval", title: "需要授权", body: "运行 rm -rf" };
@@ -97,6 +98,26 @@ test("loadWebhookChannels 读配置文件与环境变量，过滤掉没有 url �
   const env = { MO_AGENT_NOTIFY_WEBHOOKS: JSON.stringify([{ type: "wecom", url: "https://qyapi.weixin.qq.com/x" }]) };
   const channels = loadWebhookChannels({ file, env, log: { warn() {} } });
   assert.deepEqual(channels.map((c) => c.name), ["webhook:bark", "webhook:wecom"]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("loadNotifyChannels 会把 push token 交给 HMS 通道", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-hms-"));
+  const file = path.join(dir, "notify.json");
+  fs.writeFileSync(file, JSON.stringify({ channels: [{ type: "hms", appId: "1", appSecret: "x" }] }));
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    const body = url.includes("oauth") ? { access_token: "AT", expires_in: 3600 } : { code: "80000000" };
+    return { ok: true, status: 200, json: async () => body };
+  };
+  const channels = loadNotifyChannels({ file, env: {}, log: { warn() {}, info() {} }, getPushTokens: () => ["tok"], fetchImpl });
+  assert.equal(channels.length, 1);
+  assert.equal(channels[0].name, "hms");
+  await channels[0].send({ title: "t", body: "b" });
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].url, /messages:send/);
+  assert.deepEqual(JSON.parse(calls[1].init.body).message.token, ["tok"]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
