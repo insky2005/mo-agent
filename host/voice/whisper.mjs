@@ -52,8 +52,10 @@ export function createWhisperTranscriber(options) {
   const threads = String(opts.threads || 4);
   const log = opts.log || function () {};
 
-  return async function transcribe(wavPath) {
+  return async function transcribe(wavPath, options) {
     const started = Date.now();
+    // 初始提示词只影响解码偏置，不改变音频；命令词表能显著减少同音字（会话 -> 绘画）。
+    const prompt = String((options && options.prompt) || opts.prompt || "");
     let padded = wavPath;
     let stem = wavPath.replace(/\.wav$/i, "");
     let parsed = null;
@@ -71,6 +73,7 @@ export function createWhisperTranscriber(options) {
         "-of", stem,
         "-t", threads,
       ];
+      if (prompt) args.push("--prompt", prompt);
       await execFileP(binary, args, {
         timeout: opts.timeoutMs || 120000,
         maxBuffer: 8 * 1024 * 1024,

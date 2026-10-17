@@ -240,9 +240,11 @@ if (voice) {
     broker,
     speak: voiceSpeaker,
     listen: voice.listen,
+    prepare: voice.prepare,
     log,
     muteMinutes: Number(process.env.MO_AGENT_VOICE_MUTE_MINUTES || 15),
     timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
+    listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
   });
 }
 

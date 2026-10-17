@@ -4,12 +4,15 @@ import { COMMAND, createCommandExecutor, parseCommand } from "./commands.mjs";
 
 function makeVoice(script) {
   const said = [];
+  const inputs = [];
   const queue = (script || []).slice();
   return {
     said,
+    inputs,
     queue,
     speak: async function (text) { said.push(text); },
-    listen: async function () {
+    listen: async function (input) {
+      inputs.push(input || {});
       if (!queue.length) return { ok: false, error: "timeout" };
       const next = queue.shift();
       if (typeof next === "string") return { ok: true, text: next, confidence: 1 };
@@ -41,6 +44,8 @@ function makeExecutor(input) {
     broker,
     speak: voice.speak,
     listen: voice.listen,
+    prepare: opts.prepare || async function () { return { ok: true, simulated: true }; },
+    listenDelayMs: 0,
     log: {
       info: function (line) { logs.push(line); },
       warn: function (line) { logs.push(line); },
@@ -329,6 +334,65 @@ test("日志：繁体输入记录归一后的文本", async () => {
   const { executor, logs } = makeExecutor({ voice: makeVoice([]) });
   await executor.dispatch("匯報狀態");
   assert.match(logs.join("\n"), /文本=「匯報狀態」 intent=status 结果=reported .*归一=「汇报状态」/);
+});
+
+test("入口：命令监听带提示词，并先预热 helper", async () => {
+  const voice = makeVoice(["汇报状态"]);
+  let prepared = 0;
+  const { executor, logs } = makeExecutor({
+    voice,
+    prepare: async function () {
+      prepared += 1;
+      return {
+        ok: true,
+        inputDevice: "HUAWEI FreeBuds SE 3",
+        micAuthorization: "AVAuthorizationStatus(rawValue: 3)",
+      };
+    },
+  });
+  const result = await executor.runFromMicrophone();
+  assert.equal(result.ok, true);
+  assert.equal(prepared, 1);
+  assert.ok(voice.inputs[0].prompt.includes("汇报状态"));
+  assert.ok(voice.inputs[0].prompt.includes("会话"));
+  assert.ok(!voice.inputs[0].prompt.includes("确认"), "命令提示词不应包含确认词");
+  const text = logs.join("\n");
+  assert.match(text, /预热 完成/);
+  assert.match(text, /设备=HUAWEI FreeBuds SE 3/);
+  assert.match(text, /麦克风=已授权/);
+});
+
+test("入口：第一次超时会自动再听一次", async () => {
+  const voice = makeVoice([{ ok: false, error: "timeout" }, "汇报状态"]);
+  const { executor, logs } = makeExecutor({ voice });
+  const result = await executor.runFromMicrophone();
+  assert.equal(result.ok, true);
+  assert.equal(result.intent, COMMAND.STATUS);
+  assert.equal(voice.queue.length, 0);
+  assert.ok(voice.said.includes("没有听到，请再说一次。"));
+  const text = logs.join("\n");
+  assert.match(text, /监听失败 第1次 错误=timeout/);
+  assert.match(text, /监听完成 第2次/);
+});
+
+test("入口：连续两次超时才失败", async () => {
+  const voice = makeVoice([{ ok: false, error: "timeout" }, { ok: false, error: "timeout" }]);
+  const { executor } = makeExecutor({ voice });
+  const result = await executor.runFromMicrophone();
+  assert.equal(result.ok, false);
+  assert.match(result.reply, /没有听到命令/);
+  assert.equal(voice.inputs.length, 2);
+});
+
+test("执行：确认第一次超时会自动再听一次", async () => {
+  const voice = makeVoice([{ ok: false, error: "timeout" }, "确认"]);
+  const { executor, logs } = makeExecutor({ voice });
+  const result = await executor.dispatch("暂停");
+  assert.equal(result.ok, true);
+  assert.equal(executor.isMuted(), true);
+  assert.equal(voice.queue.length, 0);
+  assert.ok(voice.said.includes("没有听到确认，请再说一次确认。"));
+  assert.match(logs.join("\n"), /确认尝试 第2次/);
 });
 
 // ---------- 麦克风入口 ----------

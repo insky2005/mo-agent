@@ -25,6 +25,13 @@ export const COMMAND = Object.freeze({
 
 export const HELP_TEXT = "可以这样说：汇报状态、暂停、继续、切到第 2 个、切换到会话名、帮助。";
 
+/**
+ * 命令识别的初始提示词。
+ * whisper 对短中文同音字很敏感（「会话」会被听成「绘画」），
+ * 给一组期望词做解码偏置，实测能把「切到第一个绘画」纠正成「切到第一个会话」。
+ */
+export const COMMAND_PROMPT = "汇报状态。暂停。继续。切到第一个会话。切换到登录页。帮助。";
+
 const SWITCH_RE = /^(?:请|帮我|麻烦|给我)?(?:切换|切|换|转)(?:到|至|去)(.+)$/;
 const PAUSE_RE = /(暂停|静音|停一下|停一停|先停|别念|不要念|别播报|不要播报|闭麦|安静)/;
 const RESUME_RE = /(继续|恢复|取消静音|解除静音|别静音|不用静音|开声音|打开声音|取消暂停|解除暂停)/;
@@ -152,12 +159,16 @@ export function createCommandExecutor(options) {
   const broker = opts.broker || { list: function () { return []; } };
   const speak = typeof opts.speak === "function" ? opts.speak : async function () {};
   const listen = opts.listen;
+  const prepare = typeof opts.prepare === "function" ? opts.prepare : null;
   const log = opts.log || { info: function () {}, warn: function () {} };
   const now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   const muteMinutes = Math.max(1, Number(opts.muteMinutes) || 15);
   const timeoutMs = Number(opts.timeoutMs) || 15000;
   const minConfidence = typeof opts.minConfidence === "number" ? opts.minConfidence : 0.35;
   const maxCandidates = Math.max(1, Number(opts.maxCandidates) || 5);
+  // 播报结束后给蓝牙 A2DP -> HFP 路由切换留时间；可通过环境变量调整。
+  const listenDelayMs = opts.listenDelayMs === 0 ? 0 : Math.max(0, Number(opts.listenDelayMs) || 500);
+  const listenAttempts = Math.max(1, Number(opts.listenAttempts) || 2);
 
   let targetSessionId = null;
   let mutedUntil = 0;
@@ -176,6 +187,34 @@ export function createCommandExecutor(options) {
 
   function elapsed(started) {
     return Date.now() - started;
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function micState(value) {
+    const match = /rawValue:\s*(\d+)/.exec(String(value || ""));
+    if (!match) return value ? String(value) : "-";
+    const labels = { "0": "未授权", "1": "受限", "2": "被拒绝", "3": "已授权" };
+    return labels[match[1]] || match[1];
+  }
+
+  async function safePrepare() {
+    if (!prepare) return null;
+    const started = Date.now();
+    let result;
+    try {
+      result = await prepare();
+    } catch (error) {
+      result = { ok: false, error: "prepare-failed", message: String(error && error.message ? error.message : error) };
+    }
+    const ok = !!(result && result.ok);
+    logInfo("语音命令: 预热 " + (ok ? "完成" : ("失败:" + ((result && result.error) || "unknown")))
+      + " 耗时=" + elapsed(started) + "ms"
+      + (result && result.inputDevice ? " 设备=" + result.inputDevice : "")
+      + (result && result.micAuthorization ? " 麦克风=" + micState(result.micAuthorization) : ""));
+    return result;
   }
 
   function isMuted() {
@@ -341,7 +380,7 @@ export function createCommandExecutor(options) {
     };
   }
 
-  function prepare(intent, hint) {
+  function preparePlan(intent, hint) {
     if (intent === COMMAND.PAUSE) {
       if (isMuted()) {
         return { ok: false, action: "noop", reply: "语音已经静音，还剩 " + remainingMinutes() + " 分钟。" };
@@ -436,7 +475,7 @@ export function createCommandExecutor(options) {
       return { ok: false, reply, action: "unknown" };
     }
 
-    const plan = prepare(intent, parsed && parsed.sessionHint);
+    const plan = preparePlan(intent, parsed && parsed.sessionHint);
     if (!plan.ok) {
       await safeSpeak(plan.reply);
       return { ok: false, reply: plan.reply, action: plan.action, candidates: plan.candidates };
@@ -444,18 +483,38 @@ export function createCommandExecutor(options) {
 
     // 有副作用的命令：先回读，再听一次明确确认；不认数字口令。
     logInfo("语音命令: 需要确认 intent=" + intent + " 回读=「" + plan.prompt + "」");
+    await safePrepare();
     await safeSpeak(plan.prompt);
-    const confirmStarted = Date.now();
-    const heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence });
+    let heard = null;
+    let attempt = 0;
+    let confirmMs = 0;
+    while (attempt < listenAttempts) {
+      attempt += 1;
+      if (attempt > 1) {
+        // 蓝牙路由/开麦偶发失败：超时后主动再听一次，仍然只认明确确认。
+        await safePrepare();
+        await safeSpeak("没有听到确认，请再说一次确认。");
+      }
+      if (listenDelayMs > 0) await sleep(listenDelayMs);
+      const confirmStarted = Date.now();
+      // 确认阶段刻意不加提示词：避免把 TTS 回读的「确认吗」残音偏置成「确认」。
+      heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence });
+      confirmMs = elapsed(confirmStarted);
+      logInfo("语音命令: 确认尝试 第" + attempt + "次 耗时=" + confirmMs + "ms"
+        + (heard.ok
+          ? (" 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence))
+          : (" 错误=" + heard.error)));
+      if (heard.ok || heard.error !== "timeout") break;
+    }
     if (!heard.ok) {
-      logInfo("语音命令: 确认失败 错误=" + heard.error + " 耗时=" + elapsed(confirmStarted) + "ms");
+      logInfo("语音命令: 确认失败 错误=" + heard.error);
       const reply = heard.error === "timeout" ? "没有听到确认，未执行。" : "没听清，未执行。";
       await safeSpeak(reply);
       return { ok: false, reply, action: "cancelled", heard, error: heard.error };
     }
     if (!heard.text.trim() || heard.lowConfidence) {
       logInfo("语音命令: 确认无效 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence)
-        + (heard.lowConfidence ? " 低置信度" : " 空文本") + " 耗时=" + elapsed(confirmStarted) + "ms");
+        + (heard.lowConfidence ? " 低置信度" : " 空文本"));
       const reply = "没听清，未执行。";
       await safeSpeak(reply);
       return { ok: false, reply, action: "cancelled", heard };
@@ -463,7 +522,7 @@ export function createCommandExecutor(options) {
 
     const replyIntent = parseReply(heard.text).intent;
     logInfo("语音命令: 确认输入 文本=「" + heard.text + "」 置信度=" + confidenceText(heard.confidence)
-      + " 判定=" + replyIntent + " 耗时=" + elapsed(confirmStarted) + "ms");
+      + " 判定=" + replyIntent + " 耗时=" + confirmMs + "ms");
     if (replyIntent !== REPLY.CONFIRM) {
       const cancelled = replyIntent === REPLY.CANCEL || replyIntent === REPLY.REJECT;
       const reply = cancelled ? "已取消，未执行。" : "没有确认，未执行。";
@@ -546,22 +605,40 @@ export function createCommandExecutor(options) {
       return { ok: false, intent: COMMAND.UNKNOWN, heard: null, reply: "语音输入不可用。", error: "no-listener" };
     }
 
-    logInfo("语音命令: 开始监听 超时=" + timeoutMs + "ms 最低置信度=" + minConfidence);
+    logInfo("语音命令: 开始监听 超时=" + timeoutMs + "ms 最低置信度=" + minConfidence
+      + " 最多尝试=" + listenAttempts + " 次 播报后延迟=" + listenDelayMs + "ms");
+    await safePrepare();
     await safeSpeak("请说命令。");
-    const listenStarted = Date.now();
-    const heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence });
+    let heard = null;
+    let attempt = 0;
+    while (attempt < listenAttempts) {
+      attempt += 1;
+      if (attempt > 1) {
+        // 常见于蓝牙耳机刚切回 HFP：第一次没录到，重新预热后再听一次。
+        await safePrepare();
+        await safeSpeak("没有听到，请再说一次。");
+      }
+      if (listenDelayMs > 0) await sleep(listenDelayMs);
+      const listenStarted = Date.now();
+      heard = await listenOnce({ io: { listen }, timeoutMs, minConfidence, prompt: COMMAND_PROMPT });
+      if (heard.ok) {
+        logInfo("语音命令: 监听完成 第" + attempt + "次 耗时=" + elapsed(listenStarted) + "ms 文本=「" + heard.text + "」"
+          + " 置信度=" + confidenceText(heard.confidence)
+          + (heard.lowConfidence ? " 低置信度" : ""));
+      } else {
+        logInfo("语音命令: 监听失败 第" + attempt + "次 错误=" + (heard.error || "unknown")
+          + " 耗时=" + elapsed(listenStarted) + "ms");
+      }
+      if (heard.ok && (heard.text.trim() || heard.lowConfidence)) break;
+      if (!heard.ok && heard.error !== "timeout") break;
+    }
 
     if (!heard.ok) {
-      logInfo("语音命令: 监听失败 错误=" + (heard.error || "unknown") + " 耗时=" + elapsed(listenStarted) + "ms");
       const reply = heard.error === "timeout" ? "没有听到命令。" : "麦克风不可用，请检查语音设置。";
       logInfo("语音命令: 文本=「」 intent=unknown 结果=failed:" + (heard.error || "unknown"));
       await safeSpeak(reply);
       return { ok: false, intent: COMMAND.UNKNOWN, heard, reply, error: heard.error };
     }
-
-    logInfo("语音命令: 监听完成 耗时=" + elapsed(listenStarted) + "ms 文本=「" + heard.text + "」"
-      + " 置信度=" + confidenceText(heard.confidence)
-      + (heard.lowConfidence ? " 低置信度" : ""));
 
     if (!heard.text.trim()) {
       logInfo("语音命令: 文本=「」 intent=unknown 结果=empty");

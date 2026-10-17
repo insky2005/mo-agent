@@ -47,7 +47,7 @@ export function createVoiceListener(options) {
     await execFileP("afconvert", ["-f", "WAVE", "-d", "LEI16@16000", "-c", "1", captured.raw, wav16], {
       timeout: 30000,
     });
-    const result = await transcribe(wav16);
+    const result = await transcribe(wav16, { prompt: input && input.prompt });
     await fs.unlink(captured.raw).catch(function () {});
     await fs.unlink(wav16).catch(function () {});
     log({ type: "listen-done", text: result && result.text });

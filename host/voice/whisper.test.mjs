@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWhisperTranscriber } from "./whisper.mjs";
+import { COMMAND_PROMPT } from "./commands.mjs";
 import { synthesizeWav } from "./tts.mjs";
 import { digitSequence, parseReply } from "./text.mjs";
 
@@ -36,6 +37,16 @@ test("whisper 能识别确认词", { skip: !ready }, async () => {
   const result = await transcribe(wav);
   assert.equal(result.ok, true);
   assert.ok(result.text.includes("确认"), "实际识别: " + result.text);
+});
+
+test("whisper：命令提示词把同音字拉回「会话」", { skip: !ready }, async () => {
+  fs.mkdirSync(tmp, { recursive: true });
+  const wav = path.join(tmp, "test-switch.wav");
+  await synthesizeWav("切到第一个会话", wav);
+  const transcribe = createWhisperTranscriber({ binary, model });
+  const result = await transcribe(wav, { prompt: COMMAND_PROMPT });
+  assert.equal(result.ok, true);
+  assert.ok(result.text.includes("会话"), "实际识别: " + result.text);
 });
 
 test("whisper 能识别拒绝词", { skip: !ready }, async () => {

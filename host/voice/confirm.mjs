@@ -23,10 +23,11 @@ export async function listenOnce(options) {
   if (!io || typeof io.listen !== "function") throw new Error("listenOnce 需要 io.listen");
   const timeoutMs = opts.timeoutMs || 15000;
   const minConfidence = typeof opts.minConfidence === "number" ? opts.minConfidence : 0.35;
+  const prompt = String(opts.prompt || "");
 
   let result = null;
   try {
-    result = await io.listen({ timeoutMs });
+    result = await io.listen({ timeoutMs, prompt });
   } catch (error) {
     result = { ok: false, error: "listen-failed:" + (error && error.message ? error.message : String(error)) };
   }

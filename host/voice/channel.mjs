@@ -95,6 +95,23 @@ export function createVoiceChannel(options) {
    * 同一时间只处理一路语音：审批确认、语音测试、语音命令都从这里排队，
    * 避免两段录音/播报叠在一起。命令路由也复用它做互斥。
    */
+  /** 提前拉起 helper / 检查麦克风权限，避免用户听完提示才开始冷启动。 */
+  async function prepare() {
+    if (!client) return { ok: true, simulated: true };
+    const started = Date.now();
+    try {
+      const result = await client.selftest();
+      return Object.assign({ ms: Date.now() - started }, result || {});
+    } catch (error) {
+      return {
+        ok: false,
+        error: "selftest-failed",
+        message: String(error && error.message ? error.message : error),
+        ms: Date.now() - started,
+      };
+    }
+  }
+
   async function exclusive(task) {
     if (stopped) return { outcome: "stopped" };
     if (busy) return { outcome: "busy" };
@@ -118,6 +135,8 @@ export function createVoiceChannel(options) {
         nonce,
       });
       log.info("语音询问: " + (payload.toolName || "approval") + "，口令 " + nonce);
+      const warmed = await prepare();
+      if (warmed && warmed.ok === false) log.warn("语音预热失败: " + (warmed.error || "unknown"));
       const result = await runVoiceConfirm({
         draft,
         io: { speak: say, listen },
@@ -140,6 +159,8 @@ export function createVoiceChannel(options) {
         nonce,
       };
       log.info("语音测试，口令 " + nonce);
+      const warmed = await prepare();
+      if (warmed && warmed.ok === false) log.warn("语音预热失败: " + (warmed.error || "unknown"));
       const result = await runVoiceConfirm({
         draft,
         io: { speak: say, listen },
@@ -158,6 +179,7 @@ export function createVoiceChannel(options) {
     test,
     // P1 语音命令复用同一条录音/ASR 链路，并和审批确认共享互斥。
     listen,
+    prepare,
     runExclusive: exclusive,
     isBusy: function () { return busy; },
     stop: function () {
