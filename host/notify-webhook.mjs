@@ -155,6 +155,8 @@ export function loadChannelConfigs(options) {
   const opts = options || {};
   const log = opts.log || (() => {});
   const env = opts.env || process.env;
+  // 测试脚本启动的 host 不应真的往手机推通知。
+  if (env.MO_AGENT_NOTIFY_DISABLE === "1") return [];
   const file = opts.file || path.join(os.homedir(), ".mo-agent", "notify.json");
   const configs = [];
 

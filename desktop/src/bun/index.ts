@@ -30,8 +30,6 @@ const LOG_MAX_BYTES = 5 * 1024 * 1024;
 const LOG_KEEP = 3;
 // 与 host 共用同一份开关；勾选后重启服务生效。
 const VOICE_CONFIG = join(homedir(), ".mo-agent", "voice.json");
-// 测试时静音推送：host 每条通知实时读取，不需要重启。
-const QUIET_CONFIG = join(homedir(), ".mo-agent", "quiet.json");
 
 function readVoiceEnabled(): boolean {
   try {
@@ -39,24 +37,6 @@ function readVoiceEnabled(): boolean {
     return Boolean(parsed && parsed.enabled === true);
   } catch (error) {
     return false;
-  }
-}
-
-function readQuietEnabled(): boolean {
-  try {
-    const parsed = JSON.parse(readFileSync(QUIET_CONFIG, "utf8"));
-    return Boolean(parsed && parsed.enabled === true);
-  } catch (error) {
-    return false;
-  }
-}
-
-function writeQuietEnabled(enabled: boolean): void {
-  try {
-    mkdirSync(dirname(QUIET_CONFIG), { recursive: true });
-    writeFileSync(QUIET_CONFIG, JSON.stringify({ enabled }, null, 2) + "\n");
-  } catch (error) {
-    logLine("写入通知静音配置失败: " + error);
   }
 }
 
@@ -411,7 +391,6 @@ async function restartHost(): Promise<void> {
 
 function trayMenu(): any[] {
   const voice = readVoiceEnabled();
-  const quiet = readQuietEnabled();
   return [
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
     {
@@ -425,20 +404,12 @@ function trayMenu(): any[] {
         { type: "normal", label: "语音测试", action: "voice-test" },
       ],
     },
-    { type: "normal", label: "暂停通知（测试）", action: "quiet", checked: quiet },
     { type: "divider" },
     { type: "normal", label: "重启服务", action: "restart" },
     { type: "normal", label: "查看日志", action: "logs" },
     { type: "divider" },
     { type: "normal", label: "退出", action: "quit" },
   ];
-}
-
-function toggleQuiet(): void {
-  const enabled = !readQuietEnabled();
-  writeQuietEnabled(enabled);
-  tray.setMenu(trayMenu());
-  logLine("测试静音通知: " + (enabled ? "开启" : "关闭"));
 }
 
 async function toggleVoice(): Promise<void> {
@@ -670,7 +641,6 @@ tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
   if (action === "panel") await openPanel();
   else if (action === "voice") await toggleVoice();
-  else if (action === "quiet") toggleQuiet();
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "voice-test") await runVoiceTest();
   else if (action === "mic-settings") openMicSettings();

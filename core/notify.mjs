@@ -126,8 +126,6 @@ export class Notifier {
     this.hub = opts.hub;
     this.log = opts.log || (() => {});
     this.maxSeen = opts.maxSeen || 500;
-    // 测试/演示时可以只广播本地 notify 事件，不向手机/第三方推送。
-    this.isQuiet = typeof opts.isQuiet === "function" ? opts.isQuiet : () => false;
     this.channels = [];
     this.seen = new Set();
     this.unsubscribe = null;
@@ -162,10 +160,6 @@ export class Notifier {
     const payload = Object.assign({}, intent, { sourceSeq: event.seq, createdAt: Date.now() });
     this.log.info("通知 " + payload.severity + " · " + payload.title + (payload.body ? " · " + payload.body : ""));
     this.hub.emit(EVENT.NOTIFY, payload);
-    if (this.isQuiet()) {
-      this.log.info("通知静音（测试模式），跳过外部推送: " + payload.title);
-      return;
-    }
     for (const channel of this.channels) {
       try {
         const result = channel.send(payload);

@@ -151,17 +151,6 @@
 | `MO_AGENT_VOICE_NONCE` | 随机 | 固定口令（配合脚本调试） |
 | `MO_AGENT_VOICE_DRY` | 无 | `1` 时只记录播报文本，不出声 |
 
-## 测试时静音通知
-
-托盘菜单勾选 **「暂停通知（测试）」** 后：
-
-- host 仍会广播本地 notify 事件（手机 App 界面能看到状态和通知卡片）；
-- **不再发 HMS 推送、Webhook、语音播报**；
-- 取消勾选立即恢复，不需要重启 host；
-- 状态存在 `~/.mo-agent/quiet.json`，也可用 `MO_AGENT_QUIET=1` 强制开启。
-
-适合调试语音/浮层时不想让手机一直响的场景。注意：语音命令自己的 TTS 与审批语音不受这个开关影响。
-
 ## 日志
 
 host 日志：`~/Library/Logs/mo-agent/host.log`，超过 5MB 轮转，保留 `host.log.1` ~ `host.log.3`。

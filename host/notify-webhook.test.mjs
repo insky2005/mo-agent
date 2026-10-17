@@ -127,3 +127,8 @@ test("loadWebhookChannels 遇到坏 JSON 只记警告", () => {
   assert.equal(channels.length, 0);
   assert.equal(warned.length, 1);
 });
+
+test("MO_AGENT_NOTIFY_DISABLE=1 时不加载任何通知通道（测试隔离）", () => {
+  assert.deepEqual(loadNotifyChannels({ env: { MO_AGENT_NOTIFY_DISABLE: "1" } }), []);
+  assert.deepEqual(loadWebhookChannels({ env: { MO_AGENT_NOTIFY_DISABLE: "1" } }), []);
+});

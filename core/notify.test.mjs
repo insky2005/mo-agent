@@ -94,19 +94,6 @@ test("channel 会收到翻译后的意图", () => {
   assert.equal(got[0].severity, SEVERITY.CRITICAL);
 });
 
-test("quiet 时仍广播 notify，但不发外部通道", () => {
-  const hub = new Hub({ log: quiet });
-  const notifies = [];
-  hub.store.subscribe((e) => { if (e.type === EVENT.NOTIFY) notifies.push(e.payload); });
-  const got = [];
-  const notifier = new Notifier({ hub, log: quiet, isQuiet: () => true });
-  notifier.register({ send: (payload) => got.push(payload) });
-  notifier.start();
-  hub.emit(EVENT.NOTICE, { kind: "error", title: "Agent 出错", body: "boom" });
-  assert.equal(notifies.length, 1, "本地 notify 事件仍应发出");
-  assert.equal(got.length, 0, "quiet 时不应调用外部通道");
-});
-
 test("去重键：有 eventId 用 id，否则用 seq", () => {
   assert.equal(notificationKey({ type: "pending.added", seq: 3 }, { eventId: "x" }), "pending.added:x");
   assert.equal(notificationKey({ type: "notice", seq: 3 }, { eventId: null }), "notice:3");

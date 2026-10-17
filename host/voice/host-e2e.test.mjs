@@ -46,6 +46,7 @@ test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { s
     cwd: root,
     env: Object.assign({}, process.env, {
       MO_AGENT_VOICE: "1",
+      MO_AGENT_NOTIFY_DISABLE: "1",
       MO_AGENT_VOICE_SCRIPT: "四七二九,四七二九",
       MO_AGENT_VOICE_NONCE: "4729",
       MO_AGENT_VOICE_DRY: "1",
@@ -62,6 +63,7 @@ test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { s
   try {
     await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
     await waitForOutput(function () { return output; }, "本机:", 5000);
+    assert.ok(!output.includes("已注册通知通道"), "测试 host 不应加载通知通道");
 
     const response = await fetch("http://127.0.0.1:" + port + "/local/approval", {
       method: "POST",
@@ -114,6 +116,7 @@ test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { s
     assert.equal(testResult.ok, true);
     assert.equal(testResult.outcome, "allow");
     assert.ok(output.includes("语音测试"), "应打印语音测试日志");
+    assert.ok(!output.includes("HMS 推送"), "测试不应发送 HMS 推送");
   } finally {
     await stop(child);
   }
@@ -127,6 +130,7 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
     cwd: root,
     env: Object.assign({}, process.env, {
       MO_AGENT_VOICE: "1",
+      MO_AGENT_NOTIFY_DISABLE: "1",
       MO_AGENT_VOICE_SCRIPT: "暂停,确认,汇报状态,继续,确认",
       MO_AGENT_VOICE_DRY: "1",
       MO_AGENT_VOICE_MUTE_MINUTES: "15",
@@ -162,6 +166,7 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
   try {
     await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
     await waitForOutput(function () { return output; }, "本机:", 5000);
+    assert.ok(!output.includes("已注册通知通道"), "测试 host 不应加载通知通道");
 
     // 浮层用的实时事件流：先连上，再发命令。
     const sseAbort = new AbortController();
@@ -256,6 +261,7 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
     await waitForOutput(function () {
       return output;
     }, '"type":"tts-dry","text":"' + resumedNotice, 3000);
+    assert.ok(!output.includes("HMS 推送"), "测试不应发送 HMS 推送");
   } finally {
     try { sseAbort.abort(); } catch (error) { /* 忽略 */ }
     await stop(child);

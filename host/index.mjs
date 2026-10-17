@@ -38,16 +38,6 @@ const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "ap
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
 // 已配对设备令牌落盘，host 重启后不丢（否则每次「重启服务」都要重新配对）
 const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), ".mo-agent", "devices.json");
-// 测试模式：托盘勾选「暂停通知（测试）」时写这个文件；host 每条通知实时读取，不用重启。
-const quietFile = process.env.MO_AGENT_QUIET_FILE || path.join(os.homedir(), ".mo-agent", "quiet.json");
-function readQuietMode() {
-  if (process.env.MO_AGENT_QUIET === "1") return true;
-  try {
-    return JSON.parse(fs.readFileSync(quietFile, "utf8")).enabled === true;
-  } catch (error) {
-    return false;
-  }
-}
 
 const config = loadConfig(process.argv);
 config.transcriptPollMs = config.transcriptPollMs || 2000;
@@ -56,7 +46,7 @@ const log = createLogger(config.logLevel, createRotatingSink({ file: logFile }))
 
 const hub = new Hub({ log, historySize: config.historySize });
 // 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
-const notifier = new Notifier({ hub, log, isQuiet: readQuietMode });
+const notifier = new Notifier({ hub, log });
 const pushTokens = createPushTokenStore({ log });
 // 首次启动自动写默认通知配置，用户（含其他安装者）不用手写 ~/.mo-agent/notify.json
 const notifyDefaults = process.env.MO_AGENT_NOTIFY_DEFAULTS
