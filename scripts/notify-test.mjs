@@ -11,7 +11,7 @@ const res = await fetch(url + "/local/notify", {
   headers: { "content-type": "application/json", "x-mo-agent-local": token },
   body: JSON.stringify({
     agentLabel: "mo-agent",
-    title: "测试通知",
+    noticeTitle: "测试通知",
     body: "收到这条说明通道已通 " + new Date().toLocaleTimeString("zh-CN"),
   }),
 });

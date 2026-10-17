@@ -244,10 +244,12 @@ export function createMoAgentServer(options) {
       if (pathname === "/local/notify" && req.method === "POST") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const body = await readBody(req);
+        const agentLabel = body.agentLabel || "Agent";
+        // 默认标题是「<Agent> 需要你注意」；需要自定义时传 noticeTitle
         hub.emit("notice", {
           kind: "attention",
-          title: (body.agentLabel || "Agent") + " 需要你注意",
-          body: body.title || body.toolName || "",
+          title: body.noticeTitle || (agentLabel + " 需要你注意"),
+          body: body.body || body.title || body.toolName || "",
           sessionId: body.sessionId || null,
         });
         return json(res, 200, { ok: true });
