@@ -3,11 +3,21 @@ apply plugin: 'com.android.application'
 android {
     namespace "dev.moagent.app"
     compileSdk rootProject.ext.compileSdkVersion
+    // HMS Push 要求 APK 签名指纹与 AGC 登记的一致。固定用仓库里的这把 key，
+    // 避免构建脚本切换 ANDROID_USER_HOME 时指纹漂移、导致推送失效。
+    signingConfigs {
+        debug {
+            storeFile file("keystore/moagent-debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
     defaultConfig {
         applicationId "dev.moagent.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 18
+        versionCode 19
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -17,6 +27,9 @@ android {
         }
     }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
