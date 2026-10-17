@@ -91,11 +91,23 @@ export function createVoiceChannel(options) {
   let busy = false;
   let stopped = false;
 
-  async function handle(item) {
+  /**
+   * 同一时间只处理一路语音：审批确认、语音测试、语音命令都从这里排队，
+   * 避免两段录音/播报叠在一起。命令路由也复用它做互斥。
+   */
+  async function exclusive(task) {
     if (stopped) return { outcome: "stopped" };
     if (busy) return { outcome: "busy" };
     busy = true;
     try {
+      return await task();
+    } finally {
+      busy = false;
+    }
+  }
+
+  function handle(item) {
+    return exclusive(async function () {
       const payload = (item && item.payload) || {};
       const nonce = String(nonceFactory(4));
       const draft = buildApprovalDraft({
@@ -116,16 +128,11 @@ export function createVoiceChannel(options) {
       });
       log.info("语音结果: " + result.outcome);
       return result;
-    } finally {
-      busy = false;
-    }
+    });
   }
 
-  async function test() {
-    if (stopped) return { outcome: "stopped" };
-    if (busy) return { outcome: "busy" };
-    busy = true;
-    try {
+  function test() {
+    return exclusive(async function () {
       const nonce = String(nonceFactory(4));
       const draft = {
         kind: "approval",
@@ -143,14 +150,15 @@ export function createVoiceChannel(options) {
       });
       log.info("语音测试结果: " + result.outcome);
       return result;
-    } finally {
-      busy = false;
-    }
+    });
   }
 
   return {
     handle,
     test,
+    // P1 语音命令复用同一条录音/ASR 链路，并和审批确认共享互斥。
+    listen,
+    runExclusive: exclusive,
     isBusy: function () { return busy; },
     stop: function () {
       stopped = true;

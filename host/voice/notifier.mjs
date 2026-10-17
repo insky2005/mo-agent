@@ -8,11 +8,14 @@ export function createVoiceNotifier(options) {
   const opts = options || {};
   const speaker = opts.speaker;
   const log = opts.log || { warn: function () {} };
+  const isMuted = typeof opts.isMuted === "function" ? opts.isMuted : function () { return false; };
   if (typeof speaker !== "function") throw new Error("voice notifier 需要 speaker 函数");
 
   return {
     name: "voice",
     send(notification) {
+      // 静音只关语音，不影响手机/终端的通知；审批也仍会进 pending。
+      if (isMuted()) return;
       if (!notification || notification.severity !== "critical") return;
       if (notification.kind === "approval") return;
 

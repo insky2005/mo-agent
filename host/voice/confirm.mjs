@@ -10,6 +10,48 @@ export const OUTCOME = Object.freeze({
 });
 
 /**
+ * 只「听一次」：开麦、VAD、ASR，返回文本与置信度。
+ *
+ * 审批确认与 P1 语音命令共用这一层，避免两处各写一套录音/异常处理。
+ * 不在这里做任何业务判断：不解析意图、不决定重试。
+ *
+ * io = { listen({ timeoutMs }) -> { ok, text, confidence, error } }
+ */
+export async function listenOnce(options) {
+  const opts = options || {};
+  const io = opts.io;
+  if (!io || typeof io.listen !== "function") throw new Error("listenOnce 需要 io.listen");
+  const timeoutMs = opts.timeoutMs || 15000;
+  const minConfidence = typeof opts.minConfidence === "number" ? opts.minConfidence : 0.35;
+
+  let result = null;
+  try {
+    result = await io.listen({ timeoutMs });
+  } catch (error) {
+    result = { ok: false, error: "listen-failed:" + (error && error.message ? error.message : String(error)) };
+  }
+
+  if (!result || result.ok === false) {
+    return {
+      ok: false,
+      error: (result && result.error) || "listen-failed",
+      text: "",
+      confidence: null,
+      lowConfidence: false,
+    };
+  }
+
+  const text = String(result.text || "");
+  const confidence = typeof result.confidence === "number" ? result.confidence : null;
+  return {
+    ok: true,
+    text,
+    confidence,
+    lowConfidence: confidence !== null && confidence >= 0 && confidence < minConfidence,
+  };
+}
+
+/**
  * 两段式语音确认：先念草稿，再听回话，只有明确同意才返回 ALLOW。
  *
  * io = { speak(text), listen({ timeoutMs }) -> { ok, text, confidence, error } }
@@ -44,14 +86,10 @@ export async function runVoiceConfirm(options) {
       await say(message + "，已结束语音确认，请用手机或终端处理。");
       return { outcome: OUTCOME.DEFER, attempts: attempt, heard };
     };
-    let result = null;
-    try {
-      result = await io.listen({ timeoutMs });
-    } catch (error) {
-      result = { ok: false, error: "listen-failed:" + (error && error.message ? error.message : String(error)) };
-    }
+    // 审批与命令共用同一次「听」：异常在这里归一成 ok:false，业务语义留在下面。
+    const result = await listenOnce({ io, timeoutMs, minConfidence });
 
-    if (!result || result.ok === false) {
+    if (!result.ok) {
       if (result && result.error === "timeout") {
         await say("没有听到回应，已结束语音确认。");
         return { outcome: OUTCOME.TIMEOUT, attempts: attempt, heard };
@@ -74,7 +112,7 @@ export async function runVoiceConfirm(options) {
       continue;
     }
 
-    if (typeof result.confidence === "number" && result.confidence >= 0 && result.confidence < minConfidence) {
+    if (result.lowConfidence) {
       log({ type: "asr-low-confidence", attempt, text, confidence: result.confidence, expected: draft.kind === "approval" ? nonce : undefined });
       if (isLast) return finalize("没听清");
       await say("没听清，请再说一遍。");

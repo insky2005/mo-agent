@@ -352,6 +352,7 @@ function trayMenu(): any[] {
         { type: "normal", label: "启用语音", action: "voice", checked: voice },
         { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
         { type: "divider" },
+        { type: "normal", label: "语音命令", action: "voice-command" },
         { type: "normal", label: "语音测试", action: "voice-test" },
       ],
     },
@@ -379,13 +380,7 @@ function openMicSettings(): void {
   }
 }
 
-async function runVoiceTest(): Promise<void> {
-  const ready = await ensureHost();
-  if (!ready) {
-    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
-    return;
-  }
-
+function readLocalToken(): string {
   let token = process.env.MO_AGENT_LOCAL_TOKEN || "";
   try {
     const parsed = JSON.parse(readFileSync(join(homedir(), ".mo-agent", "session.json"), "utf8"));
@@ -393,6 +388,65 @@ async function runVoiceTest(): Promise<void> {
   } catch (error) {
     /* 没有就用环境变量 */
   }
+  return token;
+}
+
+async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
+  const token = readLocalToken();
+  if (!token) throw new Error("找不到本机令牌，先重启一次服务");
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  try {
+    const response = await fetch(BASE + pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: "{}",
+      signal: controller.signal,
+    });
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** P1：点一次、说一条命令；结果用弹窗显示，播报由 host 负责。 */
+async function runVoiceCommand(): Promise<void> {
+  const ready = await ensureHost();
+  if (!ready) {
+    await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
+    return;
+  }
+
+  try {
+    const result = await postLocal("/local/voice-command", 180000);
+    const heard = result.heard && result.heard.text ? String(result.heard.text) : "";
+    const lines: string[] = [];
+    if (heard) lines.push("听到：" + heard);
+    if (result.intent) lines.push("意图：" + result.intent);
+    if (Array.isArray(result.candidates) && result.candidates.length) {
+      lines.push("候选：" + result.candidates.map(function (item: any) {
+        return (item.index ? item.index + ". " : "") + (item.title || item.id);
+      }).join(" / "));
+    }
+    await Utils.showMessageBox({
+      type: result.ok ? "info" : "warning",
+      title: "语音命令",
+      message: result.reply || (result.error ? ("失败：" + result.error) : "没有结果"),
+      detail: lines.join("\n") || "没有识别到有效命令。",
+    });
+  } catch (error) {
+    await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "请求失败", detail: String(error) });
+  }
+}
+
+async function runVoiceTest(): Promise<void> {
+  const ready = await ensureHost();
+  if (!ready) {
+    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
+    return;
+  }
+
+  const token = readLocalToken();
   if (!token) {
     await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "找不到本机令牌", detail: "先重启一次服务" });
     return;
@@ -432,6 +486,7 @@ tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
   if (action === "panel") await openPanel();
   else if (action === "voice") await toggleVoice();
+  else if (action === "voice-command") await runVoiceCommand();
   else if (action === "voice-test") await runVoiceTest();
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();

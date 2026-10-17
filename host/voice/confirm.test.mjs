@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OUTCOME, runVoiceConfirm } from "./confirm.mjs";
+import { OUTCOME, listenOnce, runVoiceConfirm } from "./confirm.mjs";
 import { buildApprovalDraft, buildDictationDraft } from "./text.mjs";
 
 function makeIo(script) {
@@ -165,3 +165,24 @@ test("空转写不算确认", async () => {
   assert.equal(result.outcome, OUTCOME.ALLOW);
   assert.equal(result.attempts, 2);
 });
+
+test("listenOnce：一次监听返回文本、置信度与低置信度标记", async () => {
+  const result = await listenOnce({ io: { listen: async function () { return { ok: true, text: "确认", confidence: 0.2 }; } } });
+  assert.equal(result.ok, true);
+  assert.equal(result.text, "确认");
+  assert.equal(result.confidence, 0.2);
+  assert.equal(result.lowConfidence, true);
+});
+
+test("listenOnce：监听异常归一成 ok:false", async () => {
+  const result = await listenOnce({ io: { listen: async function () { throw new Error("mic exploded"); } } });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /listen-failed:mic exploded/);
+});
+
+test("listenOnce：超时原样返回 error", async () => {
+  const result = await listenOnce({ io: { listen: async function () { return { ok: false, error: "timeout" }; } } });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "timeout");
+});
+

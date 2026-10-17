@@ -118,3 +118,89 @@ test("host 集成：HTTP 授权 → broker → 脚本语音 → allow_once", { s
     await stop(child);
   }
 });
+
+test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, timeout: 30000 }, async function () {
+  const port = 17900 + Math.floor(Math.random() * 100);
+  const token = "voice-cmd-" + Date.now();
+  let output = "";
+  const child = spawn(process.execPath, ["host/index.mjs", "--port", String(port), "--no-auth", "--log-level", "debug"], {
+    cwd: root,
+    env: Object.assign({}, process.env, {
+      MO_AGENT_VOICE: "1",
+      MO_AGENT_VOICE_SCRIPT: "暂停,确认,汇报状态,继续,确认",
+      MO_AGENT_VOICE_DRY: "1",
+      MO_AGENT_VOICE_MUTE_MINUTES: "15",
+      MO_AGENT_LOCAL_TOKEN: token,
+      MO_AGENT_NO_PARENT_WATCH: "1",
+      MO_AGENT_DEVICE_FILE: path.join(root, ".build", "devices-e2e-cmd.json"),
+    }),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.on("data", function (chunk) { output += chunk.toString(); });
+  child.stderr.on("data", function (chunk) { output += chunk.toString(); });
+
+  const command = async function () {
+    const response = await fetch("http://127.0.0.1:" + port + "/local/voice-command", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: "{}",
+    });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+
+  const notify = async function (title) {
+    const response = await fetch("http://127.0.0.1:" + port + "/local/notify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: JSON.stringify({ agentLabel: "Claude", noticeTitle: title, body: "x" }),
+    });
+    assert.equal(response.status, 200);
+  };
+
+  try {
+    await waitForOutput(function () { return output; }, "语音以脚本应答启用", 10000);
+    await waitForOutput(function () { return output; }, "本机:", 5000);
+
+    const paused = await command();
+    assert.equal(paused.ok, true);
+    assert.equal(paused.intent, "pause");
+    assert.match(paused.reply, /已暂停/);
+    await waitForOutput(function () { return output; }, "语音命令: 文本=「暂停」 intent=pause 结果=muted 15min", 3000);
+
+    // 静音期间 critical 通知不播报，但通知本身照常发出
+    const mutedNotice = "静音期间不播报XYZ";
+    await notify(mutedNotice);
+    await waitForOutput(function () { return output; }, mutedNotice, 3000);
+    assert.ok(!output.includes('"type":"tts-dry","text":"' + mutedNotice), "静音时不应 TTS 播报");
+
+    // 静音期间没有手机在线：审批直接交回终端，且不进入语音询问
+    const approval = await fetch("http://127.0.0.1:" + port + "/local/approval", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mo-agent-local": token },
+      body: JSON.stringify({ agent: "claude", toolName: "Bash", title: "静音期间审批", toolInput: { command: "ls" } }),
+    });
+    const decision = await approval.json();
+    assert.equal(decision.decision, "defer");
+    assert.equal(decision.reason, "no-client");
+    assert.ok(!output.includes("语音询问"), "静音时不应发起语音审批");
+
+    const status = await command();
+    assert.equal(status.intent, "status");
+    assert.match(status.reply, /语音已静音，还剩 15 分钟/);
+
+    const resumed = await command();
+    assert.equal(resumed.ok, true);
+    assert.equal(resumed.intent, "resume");
+    assert.match(resumed.reply, /已恢复/);
+
+    const resumedNotice = "恢复后播报XYZ";
+    await notify(resumedNotice);
+    await waitForOutput(function () {
+      return output;
+    }, '"type":"tts-dry","text":"' + resumedNotice, 3000);
+  } finally {
+    await stop(child);
+  }
+});

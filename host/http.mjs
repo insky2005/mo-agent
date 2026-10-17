@@ -240,6 +240,15 @@ export function createMoAgentServer(options) {
         const result = await options.voiceTest();
         return json(res, 200, result);
       }
+      // P1 语音命令：一次请求 = 提示语 + 听一次 + 解析 + 执行（需要时再回读确认）。
+      if (pathname === "/local/voice-command" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (typeof options.voiceCommand !== "function") {
+          return json(res, 503, { ok: false, error: "voice-disabled" });
+        }
+        const result = await options.voiceCommand();
+        return json(res, 200, result);
+      }
       if (pathname === "/local/pair-payload" && req.method === "GET") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const addresses = candidateAddresses(localIPv4List());

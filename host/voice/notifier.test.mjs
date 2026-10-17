@@ -48,3 +48,21 @@ test("speaker 抛错不影响通知通道", async () => {
   await notifier.send({ severity: "critical", kind: "error", title: "失败" });
   assert.ok(warnings[0].includes("say 挂了"));
 });
+
+test("静音时不播报", async () => {
+  const speaker = makeSpeaker();
+  const notifier = createVoiceNotifier({ speaker: speaker.speak, isMuted: function () { return true; } });
+  await notifier.send({ severity: "critical", kind: "error", title: "失败" });
+  assert.equal(speaker.said.length, 0);
+});
+
+test("取消静音后恢复播报", async () => {
+  let muted = true;
+  const speaker = makeSpeaker();
+  const notifier = createVoiceNotifier({ speaker: speaker.speak, isMuted: function () { return muted; } });
+  await notifier.send({ severity: "critical", kind: "error", title: "失败" });
+  assert.equal(speaker.said.length, 0);
+  muted = false;
+  await notifier.send({ severity: "critical", kind: "error", title: "失败" });
+  assert.deepEqual(speaker.said, ["失败"]);
+});

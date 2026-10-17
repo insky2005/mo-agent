@@ -19,6 +19,7 @@ import { createScriptedListener } from "./voice/io.mjs";
 import { makeNonce } from "./voice/text.mjs";
 import { createSpeaker } from "./voice/tts.mjs";
 import { createVoiceNotifier } from "./voice/notifier.mjs";
+import { createCommandExecutor } from "./voice/commands.mjs";
 import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
@@ -184,8 +185,15 @@ if (voiceEnabled) {
   }
 }
 
+let voiceCommands = null;
+
 if (voice) {
-  notifier.register(createVoiceNotifier({ speaker: voiceSpeaker, log }));
+  // 静音只影响语音播报与语音审批，手机/终端通知不受影响。
+  notifier.register(createVoiceNotifier({
+    speaker: voiceSpeaker,
+    log,
+    isMuted: function () { return voiceCommands ? voiceCommands.isMuted() : false; },
+  }));
   // 保活：helper 空闲 5 分钟会退出，下一次授权又要冷启动；
   // 每分钟 ping 一次，让它保持热状态。
   if (voiceClient && typeof voiceClient.keepalive === "function") voiceClient.keepalive();
@@ -206,9 +214,13 @@ const broker = new ApprovalBroker({
   hub,
   log,
   timeoutMs: config.approvalTimeoutMs,
-  isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false) || !!voice,
+  // 静音时语音不再算作「在线决策端」：没有手机就直接交回终端，不白等。
+  isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false)
+    || (!!voice && !(voiceCommands && voiceCommands.isMuted())),
   onPending: (item) => {
     if (!voice) return;
+    // 静音期间审批仍进 pending，只是不念、不接语音决策。
+    if (voiceCommands && voiceCommands.isMuted()) return;
     voice.handle(item).then((result) => {
       const decision = decisionForOutcome(result && result.outcome);
       // 超时 / 取消 / 麦克风不可用：不落决策，留给手机或 broker 超时。
@@ -219,6 +231,36 @@ const broker = new ApprovalBroker({
     });
   },
 });
+
+// P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。
+// 只持有内存状态（voiceTargetSessionId、voiceMutedUntil），host 重启即复位。
+if (voice) {
+  voiceCommands = createCommandExecutor({
+    hub,
+    broker,
+    speak: voiceSpeaker,
+    listen: voice.listen,
+    log,
+    muteMinutes: Number(process.env.MO_AGENT_VOICE_MUTE_MINUTES || 15),
+    timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
+  });
+}
+
+async function runVoiceCommand() {
+  if (!voice || !voiceCommands) {
+    return { ok: false, intent: "unknown", error: "voice-disabled", reply: "语音未启用。" };
+  }
+  const result = await voice.runExclusive(function () {
+    return voiceCommands.runFromMicrophone();
+  });
+  if (result && result.outcome === "busy") {
+    return { ok: false, intent: "unknown", error: "voice-busy", reply: "正在处理上一条语音，请稍后再试。" };
+  }
+  if (result && result.outcome === "stopped") {
+    return { ok: false, intent: "unknown", error: "voice-stopped", reply: "语音已停止。" };
+  }
+  return result;
+}
 
 // 数据源
 const dshEnabled = profiles.some((p) => p.id === "dsh" && p.enabled !== false);
@@ -240,6 +282,7 @@ const moHost = createMoAgentServer({
   monitor,
   pairing,
   voiceTest: testVoice,
+  voiceCommand: runVoiceCommand,
   pairHandler: handlePairRoutes,
   apkPath,
   logFile,
