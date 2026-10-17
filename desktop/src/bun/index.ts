@@ -503,6 +503,7 @@ async function ensureVoiceOverlay(): Promise<boolean> {
       frame,
       titleBarStyle: "hidden",
       transparent: true,
+      hidden: true,
       activate: false,
       styleMask: {
         Borderless: true,
@@ -536,8 +537,8 @@ async function ensureVoiceOverlay(): Promise<boolean> {
       voiceOverlayFrame = win.getFrame();
       saveVoiceOverlayFrame(voiceOverlayFrame);
     } catch (error) { /* 忽略 */ }
-    // 给页面和 SSE 一点连接时间，避免错过开头的事件。
-    await new Promise(function (resolve) { setTimeout(resolve, 260); });
+    // 先在隐藏状态下把页面/透明合成跑起来，再 show，避免第一帧出现不透明的底色。
+    await new Promise(function (resolve) { setTimeout(resolve, 420); });
   }
 
   cancelVoiceOverlayHide();
