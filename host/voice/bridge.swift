@@ -91,6 +91,12 @@ final class CaptureGate {
     value = true
     lock.unlock()
   }
+
+  func disable() {
+    lock.lock()
+    value = false
+    lock.unlock()
+  }
 }
 
 final class VadState {
@@ -164,6 +170,13 @@ final class CaptureStats {
     defer { lock.unlock() }
     return (buffers, peak)
   }
+
+  func reset() {
+    lock.lock()
+    buffers = 0
+    peak = 0
+    lock.unlock()
+  }
 }
 
 final class RouteFlag {
@@ -194,6 +207,7 @@ final class WavSink {
   private var sampleRate: Double = 0
   private var channels: Int = 0
   private var wrote = false
+  private var closed = false
 
   init(path: String) {
     self.path = path
@@ -202,6 +216,7 @@ final class WavSink {
   func write(_ buffer: AVAudioPCMBuffer) {
     lock.lock()
     defer { lock.unlock() }
+    if closed { return }
     if file == nil {
       let settings: [String: Any] = [
         AVFormatIDKey: kAudioFormatLinearPCM,
@@ -228,6 +243,7 @@ final class WavSink {
 
   func close() {
     lock.lock()
+    closed = true
     file = nil
     lock.unlock()
   }
@@ -240,57 +256,221 @@ final class WavSink {
 }
 
 /**
- * 录一句。
+ * 一次 click-to-talk 的音频会话。
  *
- * 蓝牙耳机从 TTS（A2DP）切到麦克风（HFP）需要时间。旧实现 engine.start() 后立刻敲提示音，
- * 用户听到提示就说话，但 tap 还没拿到音频，短句（尤其「确认」）整段丢失。
- *
- * 现在：
- * - tap 用 nil format 安装，第一次 buffer 才建 WAV，避免路由切换后 format 过期；
- * - 先等输入通道真的出音频（buffers + 非零峰值），再敲提示音、开 gate；
- * - 等待超时返回 mic-silent，录音期间路由变化且没听到语音返回 route-changed，让 host 重试；
- * - 所有诊断字段随响应返回，写进 host.log。
+ * 为什么要把引擎保持到整条命令结束：蓝牙耳机从 TTS（A2DP）切到麦克风（HFP）要 2～4 秒。
+ * 旧实现每次 record 都新建引擎，TTS 播完再切路由，经常 3 秒都拿不到 buffer（日志里
+ * mic-silent / buffers=0）。现在 host 先 open，等输入通道真的出音频，再播提示语；
+ * 命令与确认两次 record 复用同一个引擎，不再反复切路由。
  */
-func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: TimeInterval, threshold: Float) -> [String: Any] {
-  if !requestMic(10) {
-    return ["ok": false, "error": "mic-denied", "message": "未获得麦克风权限", "micAuthorization": micAuthorizationText()]
-  }
-
-  ensureDir(CACHE_DIR, permissions: 0o700)
-  let out = CACHE_DIR + "/utt-" + UUID().uuidString + ".wav"
-  let sink = WavSink(path: out)
-
+final class VoiceSession {
   let engine = AVAudioEngine()
-  let input = engine.inputNode
+  let input: AVAudioInputNode
   let gate = CaptureGate()
   let state = VadState()
   let stats = CaptureStats()
   let route = RouteFlag()
-  let observer = NotificationCenter.default.addObserver(
-    forName: .AVAudioEngineConfigurationChange,
-    object: engine,
-    queue: nil
-  ) { _ in
-    route.mark()
+  let threshold: Float
+  let startupMs: Int
+
+  private let lock = NSLock()
+  private var sink: WavSink?
+  private var observer: NSObjectProtocol?
+
+  init(threshold: Float, startupMs: Int) {
+    self.threshold = threshold
+    self.startupMs = startupMs
+    self.input = engine.inputNode
   }
 
-  input.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
-    // 统计必须在 gate 外做：要确认音频路由已经真的出数据。
-    let level = rmsOf(buffer)
-    stats.observe(level)
-    guard gate.enabled else { return }
-    sink.write(buffer)
-    state.observe(rms: level, threshold: threshold)
+  var isRunning: Bool {
+    return engine.isRunning
   }
 
-  do {
+  func start() throws {
+    input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+      guard let self = self else { return }
+      let level = rmsOf(buffer)
+      self.stats.observe(level)
+      guard self.gate.enabled else { return }
+      self.lock.lock()
+      let current = self.sink
+      self.lock.unlock()
+      current?.write(buffer)
+      self.state.observe(rms: level, threshold: self.threshold)
+    }
     engine.prepare()
     try engine.start()
-  } catch {
+    observer = NotificationCenter.default.addObserver(
+      forName: .AVAudioEngineConfigurationChange,
+      object: engine,
+      queue: nil
+    ) { [weak self] _ in
+      guard let self = self else { return }
+      self.route.mark()
+      // 路由变化后引擎可能停了；尽量原地重启，保持会话。
+      if !self.engine.isRunning {
+        try? self.engine.start()
+      }
+    }
+  }
+
+  func attachSink(_ next: WavSink?) {
+    lock.lock()
+    let old = sink
+    sink = next
+    lock.unlock()
+    old?.close()
+  }
+
+  /** 等输入通道真的出音频；返回状态并保留诊断。 */
+  func waitLive(timeout: TimeInterval) -> (live: Bool, elapsedMs: Int, buffers: Int, peak: Float) {
+    stats.reset()
+    let started = Date()
+    while Date().timeIntervalSince(started) < timeout {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+      let snapshot = stats.snapshot()
+      let elapsed = Date().timeIntervalSince(started)
+      if snapshot.buffers >= 3 && snapshot.peak > 0.0001 && elapsed >= 0.15 {
+        return (true, Int(elapsed * 1000), snapshot.buffers, snapshot.peak)
+      }
+    }
+    let snapshot = stats.snapshot()
+    return (false, Int(Date().timeIntervalSince(started) * 1000), snapshot.buffers, snapshot.peak)
+  }
+
+  func status(reused: Bool) -> [String: Any] {
+    let snapshot = stats.snapshot()
+    let format = input.outputFormat(forBus: 0)
+    return [
+      "ok": true,
+      "reused": reused,
+      "startupMs": startupMs,
+      "buffers": snapshot.buffers,
+      "peak": Double(snapshot.peak),
+      "routeChanged": route.marked(),
+      "sampleRate": format.sampleRate,
+      "channels": Int(format.channelCount),
+      "inputDevice": inputDeviceName(),
+      "micAuthorization": micAuthorizationText(),
+    ]
+  }
+
+  func record(timeout: TimeInterval, silence: TimeInterval, maxSeconds: TimeInterval) -> [String: Any] {
+    if !engine.isRunning {
+      do { try engine.start() } catch {
+        return [
+          "ok": false,
+          "error": "engine-failed",
+          "message": error.localizedDescription,
+          "inputDevice": inputDeviceName(),
+          "micAuthorization": micAuthorizationText(),
+        ]
+      }
+    }
+
+    let out = CACHE_DIR + "/utt-" + UUID().uuidString + ".wav"
+    let next = WavSink(path: out)
+    attachSink(next)
+    gate.disable()
+    state.reset()
+
+    // 会话已经 open 过，但 TTS 播报期间路由可能又变；再给 2 秒确认音频在流。
+    let live = waitLive(timeout: 2.0)
+    if !live.live {
+      gate.disable()
+      attachSink(nil)
+      try? FileManager.default.removeItem(atPath: out)
+      return [
+        "ok": false,
+        "error": "mic-silent",
+        "message": "麦克风没有音频输入",
+        "startupMs": startupMs,
+        "buffers": live.buffers,
+        "peak": Double(live.peak),
+        "routeChanged": route.marked(),
+        "inputDevice": inputDeviceName(),
+        "micAuthorization": micAuthorizationText(),
+      ]
+    }
+
+    // 输入通道已就绪，给一声提示音；提示音被 gate 丢掉，不进 WAV。
+    playReadySound()
+    gate.enable()
+    state.reset()
+    let started = Date()
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+      let snapshot = state.snapshot()
+      let now = Date()
+      if snapshot.sawSpeech && now.timeIntervalSince(snapshot.lastVoice) >= silence { break }
+      if now.timeIntervalSince(snapshot.started) >= maxSeconds { break }
+    }
+
+    gate.disable()
+    attachSink(nil)
+
+    let snapshot = state.snapshot()
+    let info = next.info()
+    var payload: [String: Any] = [
+      "startupMs": startupMs,
+      "buffers": live.buffers,
+      "peak": Double(live.peak),
+      "routeChanged": route.marked(),
+      "sampleRate": info.sampleRate,
+      "channels": info.channels,
+      "inputDevice": inputDeviceName(),
+      "micAuthorization": micAuthorizationText(),
+    ]
+
+    if !snapshot.sawSpeech {
+      try? FileManager.default.removeItem(atPath: out)
+      payload["ok"] = false
+      payload["error"] = route.marked() ? "route-changed" : "timeout"
+      payload["message"] = route.marked() ? "音频路由在录音期间发生变化" : "没有听到语音"
+      return payload
+    }
+
+    payload["ok"] = true
+    payload["file"] = out
+    payload["seconds"] = Date().timeIntervalSince(started)
+    return payload
+  }
+
+  func stop() {
+    engine.stop()
     input.removeTap(onBus: 0)
-    NotificationCenter.default.removeObserver(observer)
-    sink.close()
-    try? FileManager.default.removeItem(atPath: out)
+    if let observer = observer {
+      NotificationCenter.default.removeObserver(observer)
+      self.observer = nil
+    }
+    attachSink(nil)
+  }
+}
+
+var voiceSession: VoiceSession? = nil
+
+func closeVoiceSession() {
+  voiceSession?.stop()
+  voiceSession = nil
+}
+
+func openVoiceSession(threshold: Float) -> [String: Any] {
+  if let existing = voiceSession {
+    if existing.isRunning {
+      return existing.status(reused: true)
+    }
+    closeVoiceSession()
+  }
+
+  let started = Date()
+  let session = VoiceSession(threshold: threshold, startupMs: 0)
+  do {
+    try session.start()
+  } catch {
+    session.stop()
     return [
       "ok": false,
       "error": "engine-failed",
@@ -300,88 +480,58 @@ func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: T
     ]
   }
 
-  // 等输入通道真正开始出音频，再让用户说话。最多等 3 秒。
-  let startupStarted = Date()
-  var live = false
-  while Date().timeIntervalSince(startupStarted) < 3.0 {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-    let snapshot = stats.snapshot()
-    if snapshot.buffers >= 3 && snapshot.peak > 0.0001
-      && Date().timeIntervalSince(startupStarted) >= 0.15 {
-      live = true
-      break
-    }
-  }
-  let startupMs = Int(Date().timeIntervalSince(startupStarted) * 1000)
-  let startupStats = stats.snapshot()
-
-  if !live {
-    engine.stop()
-    input.removeTap(onBus: 0)
-    NotificationCenter.default.removeObserver(observer)
-    sink.close()
-    try? FileManager.default.removeItem(atPath: out)
+  // 最多等 6 秒：蓝牙 A2DP -> HFP 的切换经常超过 3 秒。
+  let live = session.waitLive(timeout: 6.0)
+  if !live.live {
+    session.stop()
     return [
       "ok": false,
       "error": "mic-silent",
       "message": "麦克风没有音频输入",
-      "startupMs": startupMs,
-      "buffers": startupStats.buffers,
-      "peak": Double(startupStats.peak),
-      "routeChanged": route.marked(),
+      "startupMs": live.elapsedMs,
+      "buffers": live.buffers,
+      "peak": Double(live.peak),
+      "routeChanged": session.route.marked(),
       "inputDevice": inputDeviceName(),
       "micAuthorization": micAuthorizationText(),
     ]
   }
 
-  // 输入通道已就绪，给一声提示音；提示音被 gate 丢掉，不进 WAV。
-  playReadySound()
-  gate.enable()
-  state.reset()
-  let started = Date()
-
-  let deadline = Date().addingTimeInterval(timeout)
-  while Date() < deadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-    let snapshot = state.snapshot()
-    let now = Date()
-    if snapshot.sawSpeech && now.timeIntervalSince(snapshot.lastVoice) >= silence { break }
-    if now.timeIntervalSince(snapshot.started) >= maxSeconds { break }
-  }
-
-  engine.stop()
-  input.removeTap(onBus: 0)
-  NotificationCenter.default.removeObserver(observer)
-  sink.close()
-
-  let finalStats = stats.snapshot()
-  let sinkInfo = sink.info()
-  let snapshot = state.snapshot()
-  let diagnostics: [String: Any] = [
-    "startupMs": startupMs,
-    "buffers": finalStats.buffers,
-    "peak": Double(finalStats.peak),
-    "routeChanged": route.marked(),
-    "sampleRate": sinkInfo.sampleRate,
-    "channels": sinkInfo.channels,
+  voiceSession = session
+  let format = session.input.outputFormat(forBus: 0)
+  return [
+    "ok": true,
+    "reused": false,
+    "startupMs": Int(Date().timeIntervalSince(started) * 1000),
+    "buffers": live.buffers,
+    "peak": Double(live.peak),
+    "routeChanged": session.route.marked(),
+    "sampleRate": format.sampleRate,
+    "channels": Int(format.channelCount),
     "inputDevice": inputDeviceName(),
     "micAuthorization": micAuthorizationText(),
   ]
+}
 
-  if !snapshot.sawSpeech {
-    try? FileManager.default.removeItem(atPath: out)
-    var payload = diagnostics
-    payload["ok"] = false
-    payload["error"] = route.marked() ? "route-changed" : "timeout"
-    payload["message"] = route.marked() ? "音频路由在录音期间发生变化" : "没有听到语音"
-    return payload
+/**
+ * 录一句。若 host 没有先 open，这里会自己开一个会话并在录完后关闭。
+ */
+func recordUtterance(timeout: TimeInterval, silence: TimeInterval, maxSeconds: TimeInterval, threshold: Float) -> [String: Any] {
+  if voiceSession == nil {
+    let opened = openVoiceSession(threshold: threshold)
+    if (opened["ok"] as? Bool) != true {
+      return opened
+    }
   }
-
-  var payload = diagnostics
-  payload["ok"] = true
-  payload["file"] = out
-  payload["seconds"] = Date().timeIntervalSince(started)
-  return payload
+  guard let session = voiceSession else {
+    return ["ok": false, "error": "mic-silent", "message": "音频会话不存在"]
+  }
+  let result = session.record(timeout: timeout, silence: silence, maxSeconds: maxSeconds)
+  if (result["ok"] as? Bool) != true && (result["error"] as? String) == "mic-silent" {
+    // 会话可能已经死了；下一次重试重新建。
+    closeVoiceSession()
+  }
+  return result
 }
 
 // ---- 本地控制协议 ----
@@ -517,6 +667,12 @@ func handleClient(fd: Int32, token: String, activity: Activity) {
     sendJSON(fd: fd, ["ok": true])
   case "selftest":
     sendJSON(fd: fd, selftestPayload())
+  case "open":
+    let threshold = Float((json["threshold"] as? Double) ?? 0.008)
+    sendJSON(fd: fd, openVoiceSession(threshold: threshold))
+  case "close":
+    closeVoiceSession()
+    sendJSON(fd: fd, ["ok": true])
   case "record":
     let timeout = (json["timeout"] as? Double) ?? 15
     let silence = (json["silence"] as? Double) ?? 1.1
@@ -556,7 +712,12 @@ func serve() -> Never {
   let idleTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
   idleTimer.schedule(deadline: .now() + 30, repeating: 30)
   idleTimer.setEventHandler {
+    // host 异常退出时兜底：别让麦克风一直开着。
+    if activity.idleSeconds() > 120 {
+      closeVoiceSession()
+    }
     if activity.idleSeconds() > 300 {
+      closeVoiceSession()
       removeInfo()
       exit(0)
     }

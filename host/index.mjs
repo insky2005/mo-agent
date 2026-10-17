@@ -287,8 +287,23 @@ async function runVoiceCommand() {
   const started = Date.now();
   let result;
   try {
-    result = await voice.runExclusive(function () {
-      return voiceCommands.runFromMicrophone();
+    result = await voice.runExclusive(async function () {
+      // 先开麦克风并等音频真的在流，再让执行器播提示语；整条命令（含确认）复用同一会话。
+      const opened = await voice.open();
+      if (opened && opened.ok === false) {
+        log.warn("语音命令: 开麦失败 " + (opened.error || "unknown")
+          + (opened.startupMs ? " 启动=" + opened.startupMs + "ms" : "")
+          + (opened.buffers !== undefined ? " 缓冲=" + opened.buffers : ""));
+      } else if (opened && opened.ok) {
+        log.info("语音命令: 麦克风会话已就绪 启动=" + (opened.startupMs || 0) + "ms 缓冲=" + (opened.buffers || 0)
+          + " 峰值=" + (typeof opened.peak === "number" ? opened.peak.toFixed(4) : "-")
+          + (opened.routeChanged ? " 路由变化" : ""));
+      }
+      try {
+        return await voiceCommands.runFromMicrophone();
+      } finally {
+        await voice.close();
+      }
     });
   } catch (error) {
     log.warn("语音命令: 请求异常: " + (error && error.message ? error.message : String(error)));

@@ -131,6 +131,23 @@ export function createHelperClient(options) {
       return request(info, { cmd: "selftest" }, 5000);
     },
 
+    /** 提前打开音频会话：等麦克风真出音频后再让 host 播提示语。 */
+    async open(input) {
+      const info = await ensure();
+      if (!info) return { ok: false, error: "helper-unavailable" };
+      return request(info, {
+        cmd: "open",
+        threshold: (input && input.threshold) || 0.008,
+      }, 20000);
+    },
+
+    /** 命令结束后关掉会话，麦克风指示灯随之熄灭。 */
+    async close() {
+      const info = await readInfo();
+      if (!info || !info.port) return { ok: true, skipped: true };
+      return request(info, { cmd: "close" }, 3000);
+    },
+
     async record(input) {
       const info = await ensure();
       if (!info) return { ok: false, error: "helper-unavailable" };

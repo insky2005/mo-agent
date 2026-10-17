@@ -112,6 +112,29 @@ export function createVoiceChannel(options) {
     }
   }
 
+  /** 打开音频会话并等麦克风真出音频；TTS 播报期间保持引擎运行。 */
+  async function open() {
+    if (!client) return { ok: true, simulated: true };
+    try {
+      return await client.open();
+    } catch (error) {
+      return {
+        ok: false,
+        error: "open-failed",
+        message: String(error && error.message ? error.message : error),
+      };
+    }
+  }
+
+  async function close() {
+    if (!client) return { ok: true, simulated: true };
+    try {
+      return await client.close();
+    } catch (error) {
+      return { ok: false, error: "close-failed", message: String(error && error.message ? error.message : error) };
+    }
+  }
+
   async function exclusive(task) {
     if (stopped) return { outcome: "stopped" };
     if (busy) return { outcome: "busy" };
@@ -137,16 +160,22 @@ export function createVoiceChannel(options) {
       log.info("语音询问: " + (payload.toolName || "approval") + "，口令 " + nonce);
       const warmed = await prepare();
       if (warmed && warmed.ok === false) log.warn("语音预热失败: " + (warmed.error || "unknown"));
-      const result = await runVoiceConfirm({
-        draft,
-        io: { speak: say, listen },
-        nonce,
-        timeoutMs,
-        maxAttempts,
-        log: eventLog,
-      });
-      log.info("语音结果: " + result.outcome);
-      return result;
+      const opened = await open();
+      if (opened && opened.ok === false) log.warn("语音开麦失败: " + (opened.error || "unknown"));
+      try {
+        const result = await runVoiceConfirm({
+          draft,
+          io: { speak: say, listen },
+          nonce,
+          timeoutMs,
+          maxAttempts,
+          log: eventLog,
+        });
+        log.info("语音结果: " + result.outcome);
+        return result;
+      } finally {
+        await close();
+      }
     });
   }
 
@@ -161,16 +190,22 @@ export function createVoiceChannel(options) {
       log.info("语音测试，口令 " + nonce);
       const warmed = await prepare();
       if (warmed && warmed.ok === false) log.warn("语音预热失败: " + (warmed.error || "unknown"));
-      const result = await runVoiceConfirm({
-        draft,
-        io: { speak: say, listen },
-        nonce,
-        timeoutMs,
-        maxAttempts,
-        log: eventLog,
-      });
-      log.info("语音测试结果: " + result.outcome);
-      return result;
+      const opened = await open();
+      if (opened && opened.ok === false) log.warn("语音开麦失败: " + (opened.error || "unknown"));
+      try {
+        const result = await runVoiceConfirm({
+          draft,
+          io: { speak: say, listen },
+          nonce,
+          timeoutMs,
+          maxAttempts,
+          log: eventLog,
+        });
+        log.info("语音测试结果: " + result.outcome);
+        return result;
+      } finally {
+        await close();
+      }
     });
   }
 
@@ -180,6 +215,8 @@ export function createVoiceChannel(options) {
     // P1 语音命令复用同一条录音/ASR 链路，并和审批确认共享互斥。
     listen,
     prepare,
+    open,
+    close,
     runExclusive: exclusive,
     isBusy: function () { return busy; },
     stop: function () {
