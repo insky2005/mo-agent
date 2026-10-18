@@ -1,4 +1,4 @@
-import { Tray, BrowserWindow, Utils, Screen } from "electrobun/main";
+import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut } from "electrobun/main";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -94,6 +94,8 @@ let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 // 拖动停下后吸附到屏幕可视区域边缘；留一点距离，避免吸得太“黏”。
 const VOICE_OVERLAY_SNAP_MARGIN = 18;
 const VOICE_OVERLAY_SNAP_DELAY_MS = 160;
+const VOICE_OVERLAY_SHORTCUT = process.env.MO_AGENT_VOICE_OVERLAY_SHORTCUT || "CommandOrControl+Shift+Space";
+let voiceOverlayShortcutRegistered = false;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -416,7 +418,8 @@ function trayMenu(): any[] {
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
     {
       type: "normal",
-      label: voiceOverlayVisible ? "隐藏语音浮层" : "显示语音浮层",
+      label: (voiceOverlayVisible ? "隐藏语音浮层" : "显示语音浮层")
+        + "（" + voiceOverlayShortcutLabel() + "）",
       action: "toggle-overlay",
       // 设置窗口打开时浮层固定收起，等设置窗口关闭后再显示。
       enabled: voice && !panel,
@@ -442,6 +445,7 @@ async function toggleVoice(): Promise<void> {
   const enabled = !readVoiceEnabled();
   writeVoiceEnabled(enabled);
   refreshTrayMenu();
+  syncVoiceOverlayShortcut();
   logLine("启用语音: " + (enabled ? "开启" : "关闭"));
   await restartService(false);
 }
@@ -501,6 +505,40 @@ async function syncVoiceOverlay(): Promise<void> {
     await ensureVoiceOverlay();
   } catch (error) {
     logLine("显示语音浮层失败: " + error);
+  }
+}
+
+function voiceOverlayShortcutLabel(): string {
+  return VOICE_OVERLAY_SHORTCUT
+    .replace(/CommandOrControl/g, "⌘")
+    .replace(/Command/g, "⌘")
+    .replace(/Control/g, "⌃")
+    .replace(/Option/g, "⌥")
+    .replace(/Alt/g, "⌥")
+    .replace(/Shift/g, "⇧")
+    .replace(/\+/g, "");
+}
+
+async function toggleVoiceOverlay(): Promise<void> {
+  if (!readVoiceEnabled() || panel) return;
+  if (voiceOverlayVisible) hideVoiceOverlay();
+  else await syncVoiceOverlay();
+}
+
+/** 只有启用语音时才占用全局快捷键；关闭语音立即释放。 */
+function syncVoiceOverlayShortcut(): void {
+  const enabled = readVoiceEnabled();
+  if (enabled && !voiceOverlayShortcutRegistered) {
+    const ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT, () => {
+      toggleVoiceOverlay().catch((error) => logLine("切换语音浮层失败: " + error));
+    });
+    voiceOverlayShortcutRegistered = ok;
+    if (ok) logLine("语音浮层快捷键已注册: " + voiceOverlayShortcutLabel());
+    else logLine("语音浮层快捷键注册失败（可能被其他 App 占用）: " + VOICE_OVERLAY_SHORTCUT);
+  } else if (!enabled && voiceOverlayShortcutRegistered) {
+    GlobalShortcut.unregister(VOICE_OVERLAY_SHORTCUT);
+    voiceOverlayShortcutRegistered = false;
+    logLine("语音浮层快捷键已释放");
   }
 }
 
@@ -604,6 +642,18 @@ async function ensureVoiceOverlay(): Promise<boolean> {
       win.setVisibleOnAllWorkspaces(true);
     } catch (error) {
       logLine("语音浮层置顶失败: " + error);
+    }
+    // 浮层里的 × 通过 host-message 请求桌面端隐藏，而不是直接 window.close()。
+    const webview = win.webview as unknown as {
+      on?: (name: string, handler: (event: unknown) => void) => void;
+    } | undefined;
+    if (webview && typeof webview.on === "function") {
+      webview.on("host-message", (event: unknown) => {
+        const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
+        if (detail && typeof detail === "object" && (detail as { type?: string }).type === "overlay-hide") {
+          hideVoiceOverlay();
+        }
+      });
     }
     // 拖动期间事件很密：停下 160ms 再吸附，避免和系统拖动互相打架。
     win.on("move", () => { scheduleVoiceOverlaySnap(); });
@@ -773,6 +823,7 @@ async function runVoiceTest(): Promise<void> {
 const tray = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
 
 tray.setMenu(trayMenu());
+syncVoiceOverlayShortcut();
 
 tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
@@ -781,15 +832,12 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "dictate") await runDictate();
   else if (action === "voice-test") await runVoiceTest();
-  else if (action === "toggle-overlay") {
-    if (!readVoiceEnabled()) return;
-    if (voiceOverlayVisible) hideVoiceOverlay();
-    else await syncVoiceOverlay();
-  }
+  else if (action === "toggle-overlay") await toggleVoiceOverlay();
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
   else if (action === "quit") {
+    GlobalShortcut.unregisterAll();
     hideVoiceOverlay();
     if (host) host.kill();
     tray.remove();

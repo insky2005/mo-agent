@@ -486,6 +486,16 @@
   }
 
   els.close.addEventListener("click", function () {
+    // 通过 Electrobun 的 host 消息让桌面端真正隐藏窗口；window.close() 在无边框面板里不可靠。
+    const sendToHost = window.__electrobunSendToHost;
+    if (typeof sendToHost === "function") {
+      try {
+        sendToHost({ type: "overlay-hide" });
+        return;
+      } catch (error) {
+        /* 回退到 window.close */
+      }
+    }
     try { window.close(); } catch (error) { /* 忽略 */ }
   });
 })();
