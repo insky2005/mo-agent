@@ -96,7 +96,6 @@ let voiceOrb: BrowserWindow | null = null;
 let voiceOrbVisible = false;
 let voiceOrbCursorInside = false;
 let voiceOrbPending = false;
-let voiceOrbDragged = false;
 let voiceOrbDragPos: { x: number; y: number } | null = null;
 let voiceOrbDragLastCursor: { x: number; y: number } | null = null;
 let voiceOrbDragTimer: ReturnType<typeof setInterval> | null = null;
@@ -630,7 +629,6 @@ function startVoiceOrbDrag(): void {
   const frame = voiceOrb.getFrame();
   voiceOrbDragPos = { x: frame.x, y: frame.y };
   voiceOrbDragLastCursor = null;
-  voiceOrbDragged = true;
   // 用系统光标位置的增量驱动，避免绝对坐标或窗口反馈造成跳变。
   voiceOrbDragTimer = setInterval(moveVoiceOrbWithCursor, 16);
   voiceOrbDragSafety = setTimeout(stopVoiceOrbDrag, 30000);
@@ -734,7 +732,8 @@ async function showVoiceOrb(): Promise<void> {
       });
       // 透明窗口先预热一帧，避免首次出现时闪一下不透明底色。
       await new Promise(function (resolve) { setTimeout(resolve, 240); });
-    } else if (!voiceOrbDragged) {
+    } else {
+      // 浮层可能刚被拖动过：每次隐藏都让 Logo 重新贴到浮层当前右上角。
       try { voiceOrb.setFrame(frame.x, frame.y, frame.width, frame.height); } catch (error) { /* 忽略 */ }
     }
 
