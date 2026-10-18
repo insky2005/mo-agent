@@ -395,7 +395,7 @@
         const candidates = (event.candidates || []).map(function (item) { return item.title; }).join("；");
         els.hint.textContent = event.ok
           ? "结果已显示，随后播报。"
-          : (candidates ? ("未发送；候选：" + candidates) : "未发送，草稿保留；可以重新点「语音口述任务」。");
+          : (candidates ? ("未发送；候选：" + candidates) : "未发送，草稿保留；可以重新点「语音口述」。");
         break;
       }
       case "done":

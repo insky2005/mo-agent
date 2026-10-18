@@ -576,7 +576,7 @@ function trayMenu(): any[] {
     { type: "normal", label: "辅助功能权限设置…", action: "accessibility-settings" },
     { type: "divider" },
     { type: "normal", label: "语音命令", action: "voice-command" },
-    { type: "normal", label: "语音口述任务", action: "dictate" },
+    { type: "normal", label: "语音口述", action: "dictate" },
     { type: "normal", label: "语音测试", action: "voice-test" },
   ];
   return [
@@ -1395,13 +1395,13 @@ async function runVoiceCommand(): Promise<void> {
 async function runDictate(): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
-    await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
+    await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
     return;
   }
 
   const token = readLocalToken();
   if (!token) {
-    await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "找不到本机令牌", detail: "先重启一次服务" });
+    await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "找不到本机令牌", detail: "先重启一次服务" });
     return;
   }
 
@@ -1420,7 +1420,7 @@ async function runDictate(): Promise<void> {
       const target = result.target && result.target.title ? ("目标：" + result.target.title + " · ") : "";
       await Utils.showMessageBox({
         type: result.ok ? "info" : "warning",
-        title: "语音口述任务",
+        title: "语音口述",
         message: result.reply || (result.error ? ("失败：" + result.error) : "没有结果"),
         detail: target + draft,
       });
@@ -1428,7 +1428,7 @@ async function runDictate(): Promise<void> {
   } catch (error) {
     logLine("语音口述请求失败: " + error);
     if (!overlayReady) {
-      await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "请求失败", detail: String(error) });
+      await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "请求失败", detail: String(error) });
     }
   }
 }
