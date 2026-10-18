@@ -90,6 +90,17 @@
     color: rgba(255, 255, 255, 0.88); white-space: pre-wrap; word-break: break-word;
   }
   .hint { flex: 0 0 auto; font-size: 10px; color: rgba(255, 255, 255, 0.34); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  .actions button {
+    flex: 1 1 0; border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.82);
+    border-radius: 10px; padding: 6px 4px; font-size: 11px; font-weight: 600;
+    cursor: pointer;
+  }
+  .actions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .actions button:active:not(:disabled) { transform: scale(0.98); }
+  .actions button:disabled { opacity: 0.4; cursor: default; }
+  #btn-dictate { color: #a7f3d0; border-color: rgba(167, 243, 208, 0.25); }
   .bars { display: none; align-items: flex-end; gap: 2px; height: 18px; }
   .bars.on { display: flex; }
   .bars span { display: block; width: 3px; border-radius: 2px; background: #a7f3d0; animation: wave 1s ease-in-out infinite; }
@@ -107,7 +118,7 @@
     <span class="dot" id="dot"></span>
     <span class="title">mo-agent · 语音</span>
     <div class="bars" id="bars"><span></span><span></span><span></span><span></span><span></span></div>
-    <button class="close electrobun-webkit-app-region-no-drag" id="close" title="隐藏">×</button>
+    <button class="close electrobun-webkit-app-region-no-drag" id="close" title="隐藏浮层（可从托盘重新打开）">×</button>
   </div>
   <div class="status" id="status">等待命令…</div>
   <div>
@@ -126,6 +137,11 @@
   </div>
   <div class="reply" id="reply">点托盘「语音」→「语音命令」，听到提示音后再说。</div>
   <div class="hint" id="hint">听到「叮」再说；有副作用的命令会先回读，再等你说确认。</div>
+  <div class="actions no-drag">
+    <button type="button" id="btn-command">语音命令</button>
+    <button type="button" id="btn-dictate">语音口述</button>
+    <button type="button" id="btn-test">语音测试</button>
+  </div>
 </div>
 <script>
 (function () {
@@ -146,6 +162,9 @@
     draftArea: document.getElementById("draftArea"),
     draftMeta: document.getElementById("draftMeta"),
     draftText: document.getElementById("draftText"),
+    btnCommand: document.getElementById("btn-command"),
+    btnDictate: document.getElementById("btn-dictate"),
+    btnTest: document.getElementById("btn-test"),
   };
   const intentLabels = {
     status: "状态查询",
@@ -154,6 +173,7 @@
     switch: "切换会话",
     help: "帮助",
     dictate: "语音口述",
+    test: "语音测试",
     unknown: "未识别",
   };
   const confirmLabels = {
@@ -336,14 +356,98 @@
     }
   }
 
+  // 浮层里的三个按钮直接调 host 的本机接口；命令/口述的实时进度仍走 SSE。
+  let busy = false;
+  let eventCount = 0;
+  const endpoints = {
+    command: "/local/voice-command",
+    dictate: "/local/dictate",
+    test: "/local/voice-test",
+  };
+
+  function setBusy(value) {
+    busy = value;
+    els.btnCommand.disabled = value;
+    els.btnDictate.disabled = value;
+    els.btnTest.disabled = value;
+  }
+
+  function renderTest(result) {
+    const heard = Array.isArray(result.heard)
+      ? result.heard.map(function (item) { return item.text; }).filter(Boolean).join(" / ")
+      : "";
+    const outcome = result.outcome || (result.ok ? "ok" : (result.error || "unknown"));
+    const passed = !!result.ok && result.outcome === "allow";
+    setStatus(result.ok ? ("测试完成：" + outcome) : ("测试结束：" + outcome), passed ? "ok" : "err");
+    setHeard(heard);
+    setConfidence(null);
+    els.intent.textContent = "意图 语音测试";
+    els.intent.className = "badge intent";
+    els.reply.textContent = result.ok ? "语音链路已跑通。" : "测试没有完成，请查看 host.log。";
+    els.reply.className = "reply " + (passed ? "ok" : "err");
+    els.hint.textContent = "结果已显示，随后播报。";
+  }
+
+  function renderFallback(kind, result) {
+    if (result.draft && result.draft.text) setDraft(result.draft.text, result.draft.chars);
+    if (result.target) setTarget(result.target, result.target.source, result.ok);
+    render({
+      phase: "result",
+      ok: !!result.ok,
+      intent: result.intent || (kind === "dictate" ? "dictate" : (kind === "test" ? "test" : "unknown")),
+      action: result.action,
+      reply: result.reply || (result.error ? ("未执行 · " + result.error) : ""),
+      error: result.error,
+      target: result.target,
+      candidates: result.candidates,
+      text: result.draft && result.draft.text,
+      chars: result.draft && result.draft.chars,
+    });
+  }
+
+  async function invoke(kind) {
+    if (!token) {
+      setStatus("缺少本机令牌，无法执行", "err");
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const before = eventCount;
+    try {
+      const response = await fetch(endpoints[kind], {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-mo-agent-local": token },
+        body: "{}",
+      });
+      const result = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(result.error || ("HTTP " + response.status));
+      // SSE 在线时以实时事件为准；断线时用接口返回值兜底，避免按钮看起来没反应。
+      if (eventCount === before) {
+        if (kind === "test") renderTest(result);
+        else renderFallback(kind, result);
+      }
+    } catch (error) {
+      setStatus("请求失败", "err");
+      els.hint.textContent = String(error && error.message ? error.message : error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  els.btnCommand.addEventListener("click", function () { invoke("command"); });
+  els.btnDictate.addEventListener("click", function () { invoke("dictate"); });
+  els.btnTest.addEventListener("click", function () { invoke("test"); });
+
   let source = null;
   if (!token) {
     setStatus("缺少本机令牌，无法连接", "err");
-    els.hint.textContent = "从托盘重新打开语音命令。";
+    els.hint.textContent = "从托盘重新打开语音浮层。";
+    setBusy(true);
   } else {
     source = new EventSource("/local/voice-events?token=" + encodeURIComponent(token));
     source.onmessage = function (message) {
       try {
+        eventCount += 1;
         render(JSON.parse(message.data));
       } catch (error) {
         /* 忽略坏事件 */

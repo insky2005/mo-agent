@@ -203,7 +203,21 @@ if (voice) {
 
 async function testVoice() {
   if (!voice) return { ok: false, error: "voice-disabled" };
+  // 语音测试也从浮层按钮触发：广播与命令/口述一致的开始/结果/结束事件。
+  broadcastVoiceEvent({ phase: "start", mode: "test", intent: "test" });
+  const started = Date.now();
   const result = await voice.test();
+  const ok = !!(result && result.outcome === "allow");
+  const outcome = (result && (result.outcome || result.error)) || "unknown";
+  broadcastVoiceEvent({
+    phase: "result",
+    ok: ok,
+    intent: "test",
+    action: outcome,
+    reply: ok ? "语音测试完成，结果 allow。" : "语音测试结束，结果 " + outcome + "。",
+  });
+  broadcastVoiceEvent({ phase: "done", ok: ok, intent: "test" });
+  log.info("语音测试: 请求结束 耗时=" + (Date.now() - started) + "ms ok=" + ok);
   return Object.assign({ ok: true }, result);
 }
 

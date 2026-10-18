@@ -54,8 +54,8 @@ let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
 const VOICE_OVERLAY_STATE = join(homedir(), ".mo-agent", "voice-overlay.json");
 const VOICE_OVERLAY_WIDTH = 392;
-// 口述任务需要显示草稿全文，比 P1 的命令浮层高一档。
-const VOICE_OVERLAY_HEIGHT = 360;
+// 常驻浮层同时显示草稿区与三个操作按钮，比 P1 的命令浮层高一档。
+const VOICE_OVERLAY_HEIGHT = 400;
 
 function readVoiceOverlayFrame(): { x: number; y: number; width: number; height: number } | null {
   try {
@@ -89,7 +89,6 @@ function saveVoiceOverlayFrame(frame: { x: number; y: number; width: number; hei
 let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
-let voiceOverlayHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -361,7 +360,6 @@ async function openLogs(): Promise<void> {
 
 async function restartService(openPanelAfter: boolean): Promise<void> {
   disposePanel();
-  cancelVoiceOverlayHide();
   if (voiceOverlay) {
     const current = voiceOverlay;
     try {
@@ -384,6 +382,8 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 500));
   await ensureHost();
   if (openPanelAfter) await openPanel();
+  // 语音开启时浮层常驻：服务重启后自动恢复，不再等下一次命令才出现。
+  await syncVoiceOverlay();
 }
 
 async function restartHost(): Promise<void> {
@@ -392,20 +392,21 @@ async function restartHost(): Promise<void> {
 
 function trayMenu(): any[] {
   const voice = readVoiceEnabled();
+  const voiceMenu: any[] = [
+    { type: "normal", label: "启用语音", action: "voice", checked: voice },
+    { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
+    { type: "divider" },
+    { type: "normal", label: "语音命令", action: "voice-command" },
+    { type: "normal", label: "语音口述任务", action: "dictate" },
+    { type: "normal", label: "语音测试", action: "voice-test" },
+  ];
+  if (voice) {
+    voiceMenu.push({ type: "divider" });
+    voiceMenu.push({ type: "normal", label: "显示语音浮层", action: "show-overlay" });
+  }
   return [
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
-    {
-      type: "normal",
-      label: "语音",
-      submenu: [
-        { type: "normal", label: "启用语音", action: "voice", checked: voice },
-        { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
-        { type: "divider" },
-        { type: "normal", label: "语音命令", action: "voice-command" },
-        { type: "normal", label: "语音口述任务", action: "dictate" },
-        { type: "normal", label: "语音测试", action: "voice-test" },
-      ],
-    },
+    { type: "normal", label: "语音", submenu: voiceMenu },
     { type: "divider" },
     { type: "normal", label: "重启服务", action: "restart" },
     { type: "normal", label: "查看日志", action: "logs" },
@@ -459,14 +460,7 @@ async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
   }
 }
 
-function cancelVoiceOverlayHide(): void {
-  if (!voiceOverlayHideTimer) return;
-  clearTimeout(voiceOverlayHideTimer);
-  voiceOverlayHideTimer = null;
-}
-
 function hideVoiceOverlay(): void {
-  cancelVoiceOverlayHide();
   if (!voiceOverlay) return;
   try {
     voiceOverlayFrame = voiceOverlay.getFrame();
@@ -475,12 +469,14 @@ function hideVoiceOverlay(): void {
   try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
 }
 
-function scheduleVoiceOverlayHide(delayMs: number): void {
-  cancelVoiceOverlayHide();
-  voiceOverlayHideTimer = setTimeout(function () {
-    voiceOverlayHideTimer = null;
-    hideVoiceOverlay();
-  }, delayMs);
+/** 语音开启时浮层常驻；关闭语音或手动隐藏后，只在明确的打开动作里恢复。 */
+async function syncVoiceOverlay(): Promise<void> {
+  if (!readVoiceEnabled()) return;
+  try {
+    await ensureVoiceOverlay();
+  } catch (error) {
+    logLine("显示语音浮层失败: " + error);
+  }
 }
 
 /** 磨砂半透明浮层：置顶、不抢焦点、可拖动。 */
@@ -543,7 +539,6 @@ async function ensureVoiceOverlay(): Promise<boolean> {
     await new Promise(function (resolve) { setTimeout(resolve, 420); });
   }
 
-  cancelVoiceOverlayHide();
   try {
     voiceOverlay.showInactive();
   } catch (error) {
@@ -586,13 +581,10 @@ async function runVoiceCommand(): Promise<void> {
         detail: result.heard && result.heard.text ? ("听到：" + result.heard.text) : "没有识别到有效命令。",
       });
     }
-    if (overlayReady) scheduleVoiceOverlayHide(result.ok ? 6500 : 4500);
   } catch (error) {
     logLine("语音命令请求失败: " + error);
     if (!overlayReady) {
       await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "请求失败", detail: String(error) });
-    } else {
-      scheduleVoiceOverlayHide(3000);
     }
   }
 }
@@ -631,13 +623,10 @@ async function runDictate(): Promise<void> {
         detail: target + draft,
       });
     }
-    if (overlayReady) scheduleVoiceOverlayHide(result.ok ? 6500 : 5500);
   } catch (error) {
     logLine("语音口述请求失败: " + error);
     if (!overlayReady) {
       await Utils.showMessageBox({ type: "warning", title: "语音口述任务", message: "请求失败", detail: String(error) });
-    } else {
-      scheduleVoiceOverlayHide(3000);
     }
   }
 }
@@ -655,29 +644,32 @@ async function runVoiceTest(): Promise<void> {
     return;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(function () { controller.abort(); }, 120000);
+  let overlayReady = false;
   try {
-    const response = await fetch(BASE + "/local/voice-test", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-mo-agent-local": token },
-      body: "{}",
-      signal: controller.signal,
-    });
-    const result = await response.json();
-    const heard = Array.isArray(result.heard)
-      ? result.heard.map(function (item: any) { return item.text; }).filter(Boolean).join(" / ")
-      : "";
-    await Utils.showMessageBox({
-      type: result.ok && result.outcome === "allow" ? "info" : "warning",
-      title: "语音测试",
-      message: result.ok ? ("结果：" + result.outcome) : ("失败：" + (result.error || "unknown")),
-      detail: heard ? ("听到：" + heard) : "没有识别到有效回答。",
-    });
+    overlayReady = await ensureVoiceOverlay();
   } catch (error) {
-    await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "请求失败", detail: String(error) });
-  } finally {
-    clearTimeout(timer);
+    logLine("创建语音浮层失败: " + error);
+  }
+
+  try {
+    const result = await postLocal("/local/voice-test", 120000);
+    // 测试结果也走浮层；浮层起不来时才退回弹框。
+    if (!overlayReady) {
+      const heard = Array.isArray(result.heard)
+        ? result.heard.map(function (item: any) { return item.text; }).filter(Boolean).join(" / ")
+        : "";
+      await Utils.showMessageBox({
+        type: result.ok && result.outcome === "allow" ? "info" : "warning",
+        title: "语音测试",
+        message: result.ok ? ("结果：" + result.outcome) : ("失败：" + (result.error || "unknown")),
+        detail: heard ? ("听到：" + heard) : "没有识别到有效回答。",
+      });
+    }
+  } catch (error) {
+    logLine("语音测试请求失败: " + error);
+    if (!overlayReady) {
+      await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "请求失败", detail: String(error) });
+    }
   }
 }
 
@@ -692,6 +684,7 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "dictate") await runDictate();
   else if (action === "voice-test") await runVoiceTest();
+  else if (action === "show-overlay") await syncVoiceOverlay();
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
@@ -703,9 +696,13 @@ tray.on("tray-clicked", async (event: any) => {
   }
 });
 
-ensureHost().then((ready) => {
+ensureHost().then(async (ready) => {
   logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_DIR + "）");
   // 启动后默认打开「设置（安装与配对）」面板
-  if (ready) openPanel();
+  if (ready) {
+    await openPanel();
+    // 启用语音后浮层常驻：启动即显示，不再等第一次命令。
+    await syncVoiceOverlay();
+  }
 }).catch((error) => logLine("启动流程异常: " + error));
 
