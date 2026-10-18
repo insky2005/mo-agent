@@ -112,6 +112,7 @@ const VOICE_OVERLAY_SHORTCUT = process.env.MO_AGENT_VOICE_OVERLAY_SHORTCUT || "C
 const VOICE_OVERLAY_SHORTCUT_KEY = VOICE_OVERLAY_SHORTCUT.toLowerCase();
 let voiceOverlayShortcutRegistered = false;
 let lastOverlayShortcutAt = 0;
+let overlayShortcutPending = false;
 let accessibilityChecked = false;
 let accessibilityTrusted: boolean | null = null;
 let carbonTarget = 0;
@@ -901,7 +902,9 @@ function ensureCarbonHotkey(): boolean {
     }) as unknown as typeof carbonLib;
     if (!carbonLib) return false;
     carbonEventHandler = new JSCallback(function () {
-      triggerOverlayShortcut();
+      // Carbon 回调在主线程；这里只置标记，立刻返回，避免和窗口 FFI 互相等待卡死。
+      // 真正的切换由 JS 线程上的轮询处理。
+      overlayShortcutPending = true;
       return 0;
     }, { args: [FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: FFIType.i32, threadsafe: true });
     carbonTarget = carbonLib.symbols.GetApplicationEventTarget();
@@ -1332,6 +1335,13 @@ syncVoiceOverlayShortcut();
 // 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
 const focusPoll = setInterval(focusVisibleOverlayOnCursorEnter, 40);
 if (typeof focusPoll.unref === "function") focusPoll.unref();
+// Carbon 回调只置标记；在 JS 线程里统一处理，避免跨线程直接调窗口 API。
+const shortcutPoll = setInterval(function () {
+  if (!overlayShortcutPending) return;
+  overlayShortcutPending = false;
+  triggerOverlayShortcut();
+}, 80);
+if (typeof shortcutPoll.unref === "function") shortcutPoll.unref();
 
 tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
