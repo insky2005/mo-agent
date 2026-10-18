@@ -282,6 +282,39 @@
     els.draftMeta.textContent = count + " 字";
     els.chars.textContent = count + " 字";
   }
+  let idleResetTimer = null;
+  const FAILURE_RESET_MS = 6000;
+
+  function clearIdleReset() {
+    if (idleResetTimer === null) return;
+    clearTimeout(idleResetTimer);
+    idleResetTimer = null;
+  }
+
+  function resetToIdle() {
+    clearIdleReset();
+    document.body.classList.remove("dictate");
+    setStatus("等待命令…");
+    setHeard("");
+    setConfidence(null);
+    els.intent.textContent = "意图 unknown";
+    els.intent.className = "badge intent";
+    els.target.textContent = "目标 —";
+    els.target.className = "badge target dictate-only";
+    setDraft("", 0);
+    els.reply.textContent = "点托盘「语音」→「语音命令」或「语音口述」，也可以直接点下面的按钮。";
+    els.reply.className = "reply";
+    els.hint.textContent = "听到「叮」再说；有副作用的命令会先回读，再等你说确认。";
+  }
+
+  function scheduleFailureReset() {
+    clearIdleReset();
+    idleResetTimer = setTimeout(function () {
+      idleResetTimer = null;
+      resetToIdle();
+    }, FAILURE_RESET_MS);
+  }
+
   function reset(mode) {
     document.body.classList.toggle("dictate", mode === "dictate");
     setStatus("正在准备麦克风…", "hot");
@@ -302,6 +335,9 @@
   }
 
   function render(event) {
+    if (event.phase === "start" || event.phase === "listening" || event.phase === "sending") {
+      clearIdleReset();
+    }
     switch (event.phase) {
       case "start":
         reset(event.mode);
@@ -381,6 +417,8 @@
         setStatus("没有听到确认，准备重试…", "err");
         break;
       case "result": {
+        if (event.ok) clearIdleReset();
+        else scheduleFailureReset();
         const sentTarget = event.ok && event.action === "sent" && event.target && event.target.title
           ? event.target.title : "";
         setStatus(sentTarget ? ("已发送给「" + sentTarget + "」") : (event.ok ? "完成" : "未发送"), event.ok ? "ok" : "err");
@@ -463,6 +501,7 @@
       return;
     }
     if (busy) return;
+    clearIdleReset();
     setBusy(true);
     const before = eventCount;
     try {
