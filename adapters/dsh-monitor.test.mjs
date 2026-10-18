@@ -46,6 +46,10 @@ test("轮询抓到 RUNNING -> 结束：发 run.completed，状态 completed", ()
   assert.equal(done[0].payload.agentLabel, "DeepSeek Harness");
   assert.equal(monitor.sessions.get("s1").status, TASK.COMPLETED);
   assert.equal(monitor.sessions.get("s1").agentLabel, "DeepSeek Harness");
+  const upsert = events.find((event) => event.type === EVENT.SESSION_UPSERT);
+  assert.ok(upsert);
+  assert.equal("turnOutline" in upsert.payload, false, "对外状态不带历史全文");
+  assert.equal("asOfSeq" in upsert.payload, false);
 });
 
 test("快轮次：实时 status 报结束后，下一次轮询补发完成通知", () => {

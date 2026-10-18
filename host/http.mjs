@@ -476,14 +476,9 @@ export function createMoAgentServer(options) {
   };
 }
 
-/**
- * SSE 帧格式化。
- * 旧客户端用 named event（event: session.upsert），新客户端用统一信封（event: message）。
- * 迁移期通过 ?envelope=1 协商，M4 再删除旧格式。
- */
-export function formatSseEvent(event, envelope) {
-  const name = envelope ? "message" : event.type;
-  return "id: " + event.seq + "\nevent: " + name + "\ndata: " + JSON.stringify(event) + "\n\n";
+/** M4 起只发统一 message 信封；旧 named event 已删除。 */
+export function formatSseEvent(event) {
+  return "id: " + event.seq + "\nevent: message\ndata: " + JSON.stringify(event) + "\n\n";
 }
 
 function streamEvents(req, res, url, store, log, onOpen) {
@@ -501,8 +496,7 @@ function streamEvents(req, res, url, store, log, onOpen) {
   const hdr = Array.isArray(lastEventId) ? lastEventId[0] : lastEventId;
   const since = Number(hdr || url.searchParams.get("since") || 0) || 0;
 
-  const envelope = url.searchParams.get("envelope") === "1";
-  const write = (event) => res.write(formatSseEvent(event, envelope));
+  const write = (event) => res.write(formatSseEvent(event));
 
   const backlog = store.since(since);
   if (backlog.length) log.debug("SSE 重放 " + backlog.length + " 条事件 (since=" + since + ")");

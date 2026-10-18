@@ -26,30 +26,6 @@ export const EVENT = Object.freeze({
   NOTICE: "notice",
   SOURCE_ERROR: "source.error",
   NOTIFY: "notify",
-
-  // 迁移期别名（不要在新增代码里使用）
-  AGENT_ADDED: "agent.added",
-  AGENT_UPDATED: "agent.updated",
-  AGENT_REMOVED: "agent.removed",
-  AGENT_RUN_STARTED: "agent.run.started",
-  AGENT_RUN_COMPLETED: "agent.run.completed",
-  AGENT_RUN_FAILED: "agent.run.failed",
-  AGENT_RUN_CANCELED: "agent.run.canceled",
-  AGENT_NEEDS_INPUT: "agent.needs.input",
-  AGENT_NEEDS_AUTH: "agent.needs.auth",
-  SESSION_STARTED: "session.started",
-  DSH_ERROR: "dsh.error",
-});
-
-/** 旧名 -> 规范名。只在 Hub 入口归一化一次。 */
-export const LEGACY_ALIASES = Object.freeze({
-  [EVENT.AGENT_ADDED]: EVENT.SESSION_UPSERT,
-  [EVENT.AGENT_UPDATED]: EVENT.SESSION_UPSERT,
-  [EVENT.AGENT_REMOVED]: EVENT.SESSION_REMOVED,
-  [EVENT.AGENT_RUN_STARTED]: EVENT.RUN_STARTED,
-  [EVENT.AGENT_RUN_COMPLETED]: EVENT.RUN_COMPLETED,
-  [EVENT.AGENT_RUN_FAILED]: EVENT.RUN_FAILED,
-  [EVENT.AGENT_RUN_CANCELED]: EVENT.RUN_CANCELED,
 });
 
 /**
@@ -73,9 +49,6 @@ export const EVENT_META = Object.freeze({
   [EVENT.APPROVAL_PENDING]: { category: "state", replay: true, required: ["id"] },
   [EVENT.APPROVAL_RESOLVED]: { category: "state", replay: true, required: ["id"] },
   [EVENT.NOTICE]: { category: "signal", replay: false, required: ["title"] },
-  // 迁移期：旧 hook/适配器可能还在发这两个事件
-  [EVENT.AGENT_NEEDS_AUTH]: { category: "signal", replay: false, required: [] },
-  [EVENT.AGENT_NEEDS_INPUT]: { category: "signal", replay: false, required: [] },
   [EVENT.SOURCE_ERROR]: { category: "state", replay: true, required: ["source", "message"] },
   [EVENT.NOTIFY]: { category: "derived", replay: false, required: ["severity", "kind", "title"] },
 });
@@ -88,9 +61,6 @@ export const SILENT_EVENTS = Object.freeze(new Set([
   EVENT.PENDING_RESOLVED,
   EVENT.APPROVAL_RESOLVED,
   EVENT.SOURCE_ERROR,
-  // 迁移期：手机端仍在用的旧事件
-  EVENT.SESSION_STARTED,
-  EVENT.DSH_ERROR,
 ]));
 
 export const STATE_EVENTS = Object.freeze(new Set(
@@ -100,14 +70,13 @@ export const SIGNAL_EVENTS = Object.freeze(new Set(
   Object.entries(EVENT_META).filter(([, meta]) => meta.category === "signal").map(([type]) => type)
 ));
 
-/** 把旧事件名归一化成规范名；未知事件返回 null。 */
+/** 未知事件返回 null；M4 起不再接受旧别名。 */
 export function canonicalEventType(type) {
-  if (EVENT_META[type]) return type;
-  return LEGACY_ALIASES[type] || null;
+  return EVENT_META[type] ? type : null;
 }
 
 export function isKnownEventType(type) {
-  return !!canonicalEventType(type) || type === EVENT.SESSION_STARTED || type === EVENT.DSH_ERROR;
+  return !!canonicalEventType(type);
 }
 
 /** 统一生成 runId：同一轮的开始与结束必须用同一个 key。 */
@@ -196,42 +165,17 @@ export const NOTIFY_POLICY = Object.freeze({
     };
   },
 
-  [EVENT.AGENT_NEEDS_AUTH]: (p) => ({
+  // notice 只用于 hook 的「需要关注」，完成/失败走 run.*，避免重复分支。
+  [EVENT.NOTICE]: (p) => ({
     severity: SEVERITY.CRITICAL,
-    kind: "approval",
-    title: "授权请求",
-    body: withPrefix(p.sessionTitle || p.agentLabel || p.agent, p.title || p.body || p.text || ""),
-    eventId: p.id || p.eventId || null,
+    kind: p.kind || "attention",
+    title: p.title || "提醒",
+    body: withPrefix(labelOf(p), p.body || ""),
+    eventId: null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
-    toolName: p.toolName || null,
+    toolName: null,
   }),
-
-  [EVENT.AGENT_NEEDS_INPUT]: (p) => ({
-    severity: SEVERITY.CRITICAL,
-    kind: "question",
-    title: "等待回答",
-    body: withPrefix(p.sessionTitle || p.agentLabel || p.agent, p.title || p.body || p.text || ""),
-    eventId: p.id || p.eventId || null,
-    sessionId: p.sessionId || null,
-    agent: p.agent || null,
-    toolName: p.toolName || null,
-  }),
-
-  [EVENT.NOTICE]: (p) => {
-    const kind = p.kind || "notice";
-    const fixedTitle = kind === "completed" ? "任务完成" : kind === "error" ? "出错了" : "";
-    return {
-      severity: kind === "completed" ? SEVERITY.NORMAL : SEVERITY.CRITICAL,
-      kind,
-      title: fixedTitle || p.title || "提醒",
-      body: withPrefix(labelOf(p), p.body || ""),
-      eventId: null,
-      sessionId: p.sessionId || null,
-      agent: p.agent || null,
-      toolName: null,
-    };
-  },
 
   [EVENT.RUN_COMPLETED]: (p) => ({
     severity: SEVERITY.NORMAL,

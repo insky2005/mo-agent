@@ -5,7 +5,6 @@ import {
   EVENT_META,
   NOTIFY_POLICY,
   SILENT_EVENTS,
-  LEGACY_ALIASES,
   canonicalEventType,
   missingFields,
   SEVERITY,
@@ -23,7 +22,7 @@ test("每个规范事件都有通知策略，或显式标记为静默", () => {
 
 test("通知策略只引用已知事件", () => {
   for (const type of Object.keys(NOTIFY_POLICY)) {
-    assert.ok(EVENT_META[type] || LEGACY_ALIASES[type], "策略引用了未知事件: " + type);
+    assert.ok(EVENT_META[type], "策略引用了未知事件: " + type);
   }
 });
 
@@ -38,12 +37,11 @@ test("通知策略返回完整意图", () => {
   }
 });
 
-test("旧事件名都能归一化到规范事件", () => {
-  for (const [legacy, canonical] of Object.entries(LEGACY_ALIASES)) {
-    assert.equal(canonicalEventType(legacy), canonical);
-    assert.ok(EVENT_META[canonical], "别名目标必须是规范事件: " + canonical);
+test("M4 起旧 agent.* / needs.* 事件名不再被接受", () => {
+  for (const legacy of ["agent.added", "agent.updated", "agent.removed", "agent.run.completed", "agent.needs.auth", "agent.needs.input", "session.started", "dsh.error"]) {
+    assert.equal(canonicalEventType(legacy), null, legacy);
   }
-  assert.equal(canonicalEventType("agent.unknown"), null);
+  assert.equal(canonicalEventType(EVENT.SESSION_UPSERT), EVENT.SESSION_UPSERT);
 });
 
 test("必填字段检查能发现缺失", () => {

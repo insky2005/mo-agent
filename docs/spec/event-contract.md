@@ -1,12 +1,12 @@
 # 统一事件与映射契约（v1 设计）
 
-状态：**M1/M2/M3 已落地；M4 待实施**　日期：2026-10-18　关联：ADR-0001、ADR-0002、ADR-0003
+状态：**M1–M4 已落地**　日期：2026-10-18　关联：ADR-0001、ADR-0002、ADR-0003
 
 ## 1. 为什么需要这份设计
 
 mo-agent 目前同时存在三套“事件语言”：
 
-1. `core/events.mjs` 定义的 `agent.*`（AG-UI 风格）；
+1. `core/events.mjs` 早期定义的 `agent.*`（AG-UI 风格，M4 已删除）；
 2. DSH 适配器、Hub、SSE、手机端实际使用的 `session.upsert`、`session.removed`、`pending.*` 字面量；
 3. 各 Agent profile 里声明、但没有代码读取的 hooks 映射。
 
@@ -79,15 +79,16 @@ mo-agent 目前同时存在三套“事件语言”：
 | `source.error` | 状态 | 任意 adapter | `source, message` | 是 | 数据源异常 |
 | `notify` | 派生 | Notifier | `severity, kind, title, body` | 否 | 通知出口，**禁止适配器发** |
 
-### 4.2 废弃的别名
+### 4.2 已删除的别名
 
-以下名称保留一个迁移窗口，只在 Hub 入口做归一化，禁止新代码使用：
+M4 起以下旧名**不再接受**，Hub 会按未知事件记警告并原样记录，适配器测试也会拦住：
 
-- `agent.added` / `agent.updated` / `agent.removed` → `session.upsert` / `session.removed`
-- `agent.run.started` / `.completed` / `.failed` / `.canceled` → `run.*`
-- `agent.needs.input` / `.auth` → `pending.added` / `approval.pending`
+- `agent.added` / `agent.updated` / `agent.removed`
+- `agent.run.started` / `.completed` / `.failed` / `.canceled`
+- `agent.needs.input` / `.auth`
+- `session.started` / `dsh.error`
 
-迁移窗口结束后删除别名；未知事件在开发/测试环境直接报错，生产环境记警告并丢弃，**绝不透传给客户端**。
+新代码只能使用 `session.*`、`run.*`、`pending.*`、`approval.*`、`notice`、`source.error`。
 
 ### 4.3 事件信封
 
@@ -299,9 +300,8 @@ es.onmessage = (e) => {
 };
 ```
 
-**迁移期协商**：客户端请求 `/api/events?...&envelope=1` 时服务端发 `event: message`；
-不带 `envelope` 时仍发旧的 named event，保证旧手机页面在升级窗口内可用。
-M4 再删除旧格式。
+**M4 起只发 `event: message`**：不再支持 named event，也不再有 `?envelope=1` 协商。
+旧手机页面必须刷新/升级到这一版客户端。
 
 收益：客户端不再维护事件名清单；新增事件类型不需要改前端订阅。
 
@@ -381,12 +381,12 @@ M4 再删除旧格式。
 
 | 位置 | M1 后 | 后续 |
 |---|---|---|
-| `core/events.mjs` | 改为 re-export `contract.mjs` | M4 删除别名 |
+| `core/events.mjs` | re-export `contract.mjs`；别名已删除 | 无 |
 | `adapters/dsh-monitor.mjs` | `session.upsert` + `run.completed`，completed 粘性 | 无 |
 | `adapters/claude-code.mjs` | `session.upsert` + `runId`，terminal 判定显式化 | M3 `Stop` hook 按 runId 去重 |
 | `core/notify.mjs` | 表驱动 `NOTIFY_POLICY`，契约测试保证完整 | 无 |
 | `core/hub.mjs` | 入口归一化旧事件名，记录 `lastRun` | 未知事件严格拒绝 |
-| `host/http.mjs` | 支持 `?envelope=1` 单信封；旧 named event 保留一个迁移窗口；重放过滤信号 | M4 删除旧格式 |
+| `host/http.mjs` | 只发单 `message` 信封；重放过滤信号 | 无 |
 | `app/web/app.js` / `approvals.js` | `onmessage` 按 type 分发，已删除手写清单 | 无 |
 | `adapters/profiles/*.json` | 已声明 `module`/`export`/`capabilities`；registry 动态加载；hooks 桥读映射 | 增加更多能力门控 |
 
@@ -408,7 +408,7 @@ M4 再删除旧格式。
 - DSH 用适配器内的 `runSeq` 生成 `runId`，不依赖轮次文本；实时通道先报结束、轮询稍后拿到回复时，状态先显示 `completed`，完成信号等轮询补齐。
 - DSH 的 `turnOutline.response` 只有约 120 字预览；完成时适配器调用 `session/page` 取最后一条 assistant 文本补全，先更新 `session.upsert`（详情层），再发 `run.completed`（通知）。超时/失败回退到预览文本。
 - `run.completed` 之前必定先发同 `runId` 的 `session.upsert`；Hub 只把 `run.*` 记为 `lastRun`，不单独改状态。
-- 契约测试当前 212 项全绿（`npm test`）。
+- 契约测试当前 211 项全绿（`npm test`）。
 
 ### M2：SSE 单信封 + 客户端通用分发——已落地
 
@@ -426,18 +426,20 @@ M4 再删除旧格式。
 - [x] 提供 [adapters/profiles/_template.json](../adapters/profiles/_template.json) 与 [adapters/README.md](../adapters/README.md)。
 - [x] 打包脚本把 `adapters/*.mjs` 与 `core/*.mjs` 复制进运行时，动态 import 在 Bun 单文件包里可用。
 
-### M4：清理
+### M4：清理——已落地
 
-- 删除 `agent.*` 别名；
-- 删除重复的通知分支；
-- 文档生成能力表。
+- [x] 删除 `agent.*` / `agent.needs.*` / `session.started` / `dsh.error` 别名。
+- [x] 删除重复通知分支：`notice` 只做 attention，完成/失败统一走 `run.*`。
+- [x] 删除旧 named SSE：只发 `event: message`，客户端不再带 `?envelope=1`。
+- [x] 新增 `scripts/gen-capabilities.mjs`，生成 [docs/capabilities.md](../capabilities.md)；`npm run check` 会校验是否最新。
+- [x] 测试更新：旧事件名不再被接受、SSE 只有 message 帧。
 
 ## 13. 待决问题
 
 1. 终态跨 host 重启是否要持久化？本设计建议：能证明就恢复，不能证明就 `idle`，不伪造。
 2. `session.upsert` 是否承载 `lastRun`（`runId/outcome/finishedAt`）？建议承载，方便 UI 与调试。
 3. `notice` 是否改名为 `attention.requested`？v1 保留 `notice`，降低迁移成本。
-4. SSE 单信封切换是否与手机 App 发版绑定？建议服务端兼容一个版本：同时支持 named event 与 `message` 需要双发，代价高；更稳妥是手机端先升级到通用 dispatch，再切服务端。
+4. ~~SSE 单信封切换是否与手机 App 发版绑定？~~ M4 已完成：只保留单信封，手机端需刷新/升级。
 
 ## 14. 附：一轮完成的时序
 

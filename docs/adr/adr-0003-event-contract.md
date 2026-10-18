@@ -1,6 +1,6 @@
 # ADR-0003：统一事件契约与映射层
 
-状态：**已采纳（M1/M2/M3 已落地；M4 待实施）**　日期：2026-10-18　关联：[事件契约设计](../spec/event-contract.md)
+状态：**已采纳（M1–M4 已落地）**　日期：2026-10-18　关联：[事件契约设计](../spec/event-contract.md)
 
 ## 背景
 
@@ -46,14 +46,22 @@ Claude Code 接入后暴露了三个问题：状态不实时、展示的“你�
 - `approvals/hook-map.mjs` 读取 `profile.hooks.events`；`hook-cli.mjs event <HookEvent> <agent>`，旧命令兼容。
 - 新增 `adapters/profiles/_template.json` 与 `adapters/README.md`。
 - 打包脚本把 `adapters/*.mjs` 与 `core/*.mjs` 复制进运行时；Bun 单文件包的动态 import 已实测。
-- `npm test` 212 项全绿（含来源标识与控制能力门控）。
+- `npm test` 211 项全绿（含来源标识与控制能力门控）。
+
+## M4 落地记录
+
+- 删除 `agent.*` / `agent.needs.*` / `session.started` / `dsh.error` 别名。
+- `notice` 只保留 attention 语义；完成/失败统一 `run.*`，删除重复通知分支。
+- SSE 只发 `event: message`，删除 named event 与 `?envelope=1` 协商。
+- `scripts/gen-capabilities.mjs` 生成 [docs/capabilities.md](../capabilities.md)，`npm run check` 校验时效。
+- `npm test` 211 项全绿。
 
 ## 结果
 
 - 手机端不再依赖“适配器恰好发了某个事件名”；漏订阅这类 bug 在类型/契约层被拦住。
 - DSH 与 Claude 的“已完成/空闲”语义一致；L1 进程型 Agent 可以只到 `idle`，不伪造完成。
 - 通知策略只有一处，新增 Agent 不会重复实现“任务完成”。
-- 代价：M1 需要改 DSH/Claude 适配器、Hub、Notifier 并补契约测试；M2 需要手机端配合升级 SSE 分发。
+- 代价：M1 需要改 DSH/Claude 适配器、Hub、Notifier 并补契约测试；M2 需要手机端配合升级 SSE 分发；M4 后旧客户端必须刷新/升级。
 
 ## 被否决的替代方案
 

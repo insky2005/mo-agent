@@ -14,15 +14,8 @@ function dataOf(frame) {
   return JSON.parse(line.slice(6));
 }
 
-test("旧客户端：named event 保持兼容", () => {
-  const frame = formatSseEvent(event, false);
-  assert.match(frame, /^id: 7\n/);
-  assert.match(frame, /\nevent: session\.upsert\n/);
-  assert.deepEqual(dataOf(frame), event);
-});
-
-test("新客户端：统一 message 信封", () => {
-  const frame = formatSseEvent(event, true);
+test("M4：SSE 只发统一 message 信封", () => {
+  const frame = formatSseEvent(event);
   assert.match(frame, /^id: 7\n/);
   assert.match(frame, /\nevent: message\n/);
   assert.deepEqual(dataOf(frame), event);

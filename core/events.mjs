@@ -4,7 +4,6 @@
  */
 export {
   EVENT,
-  LEGACY_ALIASES,
   EVENT_META,
   SILENT_EVENTS,
   STATE_EVENTS,

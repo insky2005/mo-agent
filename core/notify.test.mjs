@@ -38,13 +38,12 @@ test("pending.added 的提问 -> critical，body 取问题文本", () => {
   assert.equal(intent.body, "选哪个分支？");
 });
 
-test("notice completed -> normal「任务完成」，error -> critical「出错了」", () => {
-  const done = classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成" }));
-  assert.equal(done.severity, SEVERITY.NORMAL);
-  assert.equal(done.title, "任务完成");
-  const bad = classifyEvent(eventOf(EVENT.NOTICE, { kind: "error", title: "Agent 出错" }));
-  assert.equal(bad.severity, SEVERITY.CRITICAL);
-  assert.equal(bad.title, "出错了");
+test("notice 只用于 attention，始终 critical", () => {
+  const attention = classifyEvent(eventOf(EVENT.NOTICE, { kind: "attention", title: "需要你的关注" }));
+  assert.equal(attention.severity, SEVERITY.CRITICAL);
+  assert.equal(attention.title, "需要你的关注");
+  const legacy = classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成" }));
+  assert.equal(legacy.severity, SEVERITY.CRITICAL, "完成不再走 notice");
 });
 
 test("pending.added 带会话标题：正文是「会话 · 问题」", () => {

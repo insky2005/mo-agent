@@ -164,7 +164,7 @@ export class AgentMonitor {
       if (this.lastError !== error.message) {
         this.lastError = error.message;
         this.log.warn("拉取会话列表失败: " + error.message);
-        this.hub.emit(EVENT.DSH_ERROR, { message: error.message });
+        this.hub.emit(EVENT.SOURCE_ERROR, { source: "dsh", message: error.message });
       }
     } finally {
       this.polling = false;
@@ -290,7 +290,7 @@ export class AgentMonitor {
       prev.updatedAt !== session.updatedAt ||
       prev.running !== session.running ||
       (!prev.lastResponse && session.lastResponse);
-    if (changed) this.hub.emit(EVENT.SESSION_UPSERT, session);
+    if (changed) this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
 
     if (runStartedId && this.runEnd !== "none") {
       this.hub.emit(EVENT.RUN_STARTED, {
@@ -327,7 +327,7 @@ export class AgentMonitor {
       const current = this.sessions.get(session.sessionId);
       if (current !== session || full === session.lastResponse) return;
       session.lastResponse = full;
-      this.hub.emit(EVENT.SESSION_UPSERT, session);
+      this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
     } catch (error) {
       /* 补全失败保留预览，不影响状态 */
     }
@@ -372,7 +372,7 @@ export class AgentMonitor {
       const current = this.sessions.get(session.sessionId);
       if (current === session && session.status === TASK.COMPLETED) {
         session.lastResponse = text;
-        this.hub.emit(EVENT.SESSION_UPSERT, session);
+        this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
       }
       emit(text);
     } catch (error) {
@@ -418,6 +418,14 @@ export class AgentMonitor {
     const seq = (this.runSeq.get(sessionId) || 0) + 1;
     this.runSeq.set(sessionId, seq);
     return makeRunId(sessionId, seq);
+  }
+
+  /** 对外状态去掉内部用的 turnOutline/asOfSeq，避免每条 SSE 带整份历史。 */
+  publicSession(session) {
+    const record = Object.assign({}, session);
+    delete record.turnOutline;
+    delete record.asOfSeq;
+    return record;
   }
 
   pendingStatus(sessionId) {
@@ -487,7 +495,7 @@ export class AgentMonitor {
     if (session) {
       session.status = item.kind === "approval" ? STATUS.AUTH : STATUS.WAITING;
       session.pending = this.pendingForSession(session.sessionId).map((p) => ({ eventId: p.eventId, kind: p.kind }));
-      this.hub.emit(EVENT.SESSION_UPSERT, session);
+      this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
     }
   }
 
@@ -520,7 +528,7 @@ export class AgentMonitor {
             this.activeRuns.delete(item.sessionId);
             session.status = TASK.COMPLETED;
             session.runId = runId;
-            this.hub.emit(EVENT.SESSION_UPSERT, session);
+            this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
             if (this.runEnd !== "none") {
               this.finishRun(session, runId, session.lastResponse || "Agent 已结束本轮工作");
             }
@@ -528,7 +536,7 @@ export class AgentMonitor {
           }
           session.status = hasResponseText(session.lastResponse) ? TASK.COMPLETED : STATUS.IDLE;
         }
-        this.hub.emit(EVENT.SESSION_UPSERT, session);
+        this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
       }
     }
     return true;
@@ -559,7 +567,7 @@ export class AgentMonitor {
           if (wasRunning && !pendingStatus) this.awaitingCompletion.add(sessionId);
           session.runId = this.activeRuns.get(sessionId) || session.runId || null;
         }
-        this.hub.emit(EVENT.SESSION_UPSERT, session);
+        this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
         if (runStartedId && this.runEnd !== "none") {
           this.hub.emit(EVENT.RUN_STARTED, {
             runId: runStartedId,
@@ -585,7 +593,7 @@ export class AgentMonitor {
       session.running = false;
       session.status = STATUS.ERROR;
       session.runId = runId;
-      this.hub.emit(EVENT.SESSION_UPSERT, session);
+      this.hub.emit(EVENT.SESSION_UPSERT, this.publicSession(session));
       if (this.runEnd !== "none") {
         this.hub.emit(EVENT.RUN_FAILED, {
           runId,

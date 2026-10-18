@@ -94,7 +94,7 @@
   function connect() {
     var since = Number(localStorage.getItem('mo-agent.seq') || 0) || 0;
     var es = new EventSource(BASE + '/api/events?since=' + encodeURIComponent(since)
-      + '&envelope=1&token=' + encodeURIComponent(token));
+      + '&token=' + encodeURIComponent(token));
     // 统一信封：按 evt.type 分发，不再逐个 addEventListener。
     es.onmessage = function (event) {
       var evt;

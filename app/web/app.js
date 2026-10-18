@@ -542,7 +542,7 @@
   function connect() {
     if (state.es) { try { state.es.close(); } catch (e) { /* 忽略 */ } }
     var url = BASE + "/api/events?since=" + encodeURIComponent(state.seq)
-      + "&envelope=1&token=" + encodeURIComponent(state.token);
+      + "&token=" + encodeURIComponent(state.token);
     var es = new EventSource(url);
     state.es = es;
     es.onopen = function () { sseErrors = 0; stopPolling(); setConn(true); startNativeNotify(); };
@@ -586,7 +586,7 @@
     } else if (evt.type === "notify") {
       // 通知统一由 host 的 core/notify.mjs 路由成 notify 事件，前端只负责展示
       notify(p.title || "Agent 通知", p.body || "", p.kind, evt.seq, p.severity);
-    } else if (evt.type === "dsh.error") {
+    } else if (evt.type === "source.error") {
       setConn(false, "DSH 异常");
     }
   }

@@ -40,15 +40,12 @@ export class Hub {
 
   applyEvent(type, data) {
     switch (type) {
-      case EVENT.SESSION_UPSERT:
-      case EVENT.AGENT_ADDED:
-      case EVENT.AGENT_UPDATED: {
+      case EVENT.SESSION_UPSERT: {
         const agent = this.normalize(data);
         this.agents.set(agent.id, agent);
         return;
       }
-      case EVENT.SESSION_REMOVED:
-      case EVENT.AGENT_REMOVED: {
+      case EVENT.SESSION_REMOVED: {
         const id = data.id || data.sessionId;
         if (id) this.agents.delete(id);
         return;
