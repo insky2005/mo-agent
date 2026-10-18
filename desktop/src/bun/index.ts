@@ -1,5 +1,5 @@
 import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut } from "electrobun/main";
-import { dlopen, FFIType } from "bun:ffi";
+import { dlopen, FFIType, JSCallback, ptr } from "bun:ffi";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -114,6 +114,17 @@ let voiceOverlayShortcutRegistered = false;
 let lastOverlayShortcutAt = 0;
 let accessibilityChecked = false;
 let accessibilityTrusted: boolean | null = null;
+let carbonTarget = 0;
+let carbonEventTypes: Buffer | null = null;
+let carbonEventHandler: JSCallback | null = null;
+let carbonHotKeyRef: Buffer | null = null;
+let carbonHotKeyRegistered = false;
+let carbonLib: { symbols: {
+  GetApplicationEventTarget: () => number;
+  InstallEventHandler: (target: number, handler: number, count: number, types: unknown, userData: unknown, out: unknown) => number;
+  RegisterEventHotKey: (keyCode: number, modifiers: number, id: bigint, target: number, options: number, out: unknown) => number;
+  UnregisterEventHotKey: (ref: number) => number;
+} } | null = null;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -833,28 +844,143 @@ async function toggleVoiceOverlay(): Promise<void> {
   else await syncVoiceOverlay();
 }
 
+const CARBON_KEY_CODES: Record<string, number> = {
+  space: 49, return: 36, enter: 36, tab: 48, escape: 53, esc: 53,
+  a: 0, s: 1, d: 2, f: 3, h: 4, g: 5, z: 6, x: 7, c: 8, v: 9, b: 11, q: 12, w: 13, e: 14, r: 15,
+  y: 16, t: 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26,
+  "-": 27, "8": 28, "0": 29, "]": 30, o: 31, u: 32, "[": 33, i: 34, p: 35, l: 37, j: 38, "'": 39,
+  k: 40, ";": 41, "\\": 42, ",": 43, "/": 44, n: 45, m: 46, ".": 47, "`": 50,
+  f1: 122, f2: 120, f3: 99, f4: 118, f5: 96, f6: 97, f7: 98, f8: 100, f9: 101, f10: 109, f11: 103, f12: 111,
+};
+const CARBON_MODIFIERS: Record<string, number> = {
+  command: 0x0100, cmd: 0x0100, commandorcontrol: 0x0100,
+  control: 0x1000, ctrl: 0x1000,
+  option: 0x0800, alt: 0x0800,
+  shift: 0x0200,
+};
+
+function parseCarbonAccelerator(text: string): { keyCode: number; modifiers: number } | null {
+  const parts = String(text || "").split("+").map(function (part) { return part.trim(); }).filter(Boolean);
+  if (!parts.length) return null;
+  const keyName = String(parts.pop()).toLowerCase();
+  const keyCode = CARBON_KEY_CODES[keyName];
+  if (keyCode === undefined) return null;
+  let modifiers = 0;
+  for (const part of parts) {
+    const value = CARBON_MODIFIERS[part.toLowerCase()];
+    if (value === undefined) return null;
+    modifiers |= value;
+  }
+  return { keyCode: keyCode, modifiers: modifiers };
+}
+
+function triggerOverlayShortcut(): void {
+  const now = Date.now();
+  // Carbon 与 Electrobun 的回调可能重复；300ms 内只处理一次。
+  if (now - lastOverlayShortcutAt < 300) return;
+  lastOverlayShortcutAt = now;
+  logLine("全局快捷键: 切换语音浮层");
+  toggleVoiceOverlay().catch((error) => logLine("切换语音浮层失败: " + error));
+}
+
+/** 用 Carbon RegisterEventHotKey 注册，普通用户权限即可全局生效，不依赖辅助功能。 */
+function ensureCarbonHotkey(): boolean {
+  if (carbonTarget) return true;
+  try {
+    carbonLib = dlopen("/System/Library/Frameworks/Carbon.framework/Carbon", {
+      GetApplicationEventTarget: { args: [], returns: FFIType.ptr },
+      InstallEventHandler: {
+        args: [FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr, FFIType.ptr],
+        returns: FFIType.i32,
+      },
+      RegisterEventHotKey: {
+        args: [FFIType.u32, FFIType.u32, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr],
+        returns: FFIType.i32,
+      },
+      UnregisterEventHotKey: { args: [FFIType.ptr], returns: FFIType.i32 },
+    }) as unknown as typeof carbonLib;
+    if (!carbonLib) return false;
+    carbonEventHandler = new JSCallback(function () {
+      triggerOverlayShortcut();
+      return 0;
+    }, { args: [FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: FFIType.i32, threadsafe: true });
+    carbonTarget = carbonLib.symbols.GetApplicationEventTarget();
+    const eventTypes = Buffer.alloc(8);
+    eventTypes.writeUInt32LE(0x6b657962, 0); // kEventClassKeyboard 'keyb'
+    eventTypes.writeUInt32LE(5, 4); // kEventHotKeyPressed
+    carbonEventTypes = eventTypes;
+    const handlerRef = Buffer.alloc(8);
+    const status = carbonLib.symbols.InstallEventHandler(
+      carbonTarget, carbonEventHandler.ptr, 1, ptr(carbonEventTypes), null, ptr(handlerRef),
+    );
+    if (status !== 0) {
+      logLine("Carbon 快捷键处理器安装失败: " + status);
+      carbonTarget = 0;
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logLine("Carbon 快捷键初始化失败: " + error);
+    carbonTarget = 0;
+    return false;
+  }
+}
+
+function registerCarbonHotkey(): boolean {
+  if (carbonHotKeyRegistered) return true;
+  const parsed = parseCarbonAccelerator(VOICE_OVERLAY_SHORTCUT);
+  if (!parsed) {
+    logLine("Carbon 快捷键无法解析: " + VOICE_OVERLAY_SHORTCUT);
+    return false;
+  }
+  if (!ensureCarbonHotkey() || !carbonLib) return false;
+  const ref = Buffer.alloc(8);
+  const hotKeyID = 0x6d6f6167n | (1n << 32n);
+  const status = carbonLib.symbols.RegisterEventHotKey(
+    parsed.keyCode, parsed.modifiers, hotKeyID, carbonTarget, 0, ptr(ref),
+  );
+  if (status !== 0) {
+    logLine("Carbon 快捷键注册失败: " + status + " " + VOICE_OVERLAY_SHORTCUT);
+    return false;
+  }
+  carbonHotKeyRef = ref;
+  carbonHotKeyRegistered = true;
+  return true;
+}
+
+function unregisterCarbonHotkey(): void {
+  if (!carbonHotKeyRegistered || !carbonLib || !carbonHotKeyRef) return;
+  try {
+    const ref = Number(carbonHotKeyRef.readBigUInt64LE(0));
+    carbonLib.symbols.UnregisterEventHotKey(ref);
+  } catch (error) {
+    logLine("Carbon 快捷键注销失败: " + error);
+  }
+  carbonHotKeyRegistered = false;
+  carbonHotKeyRef = null;
+}
+
 /** 只有启用语音时才占用全局快捷键；关闭语音立即释放。 */
 function syncVoiceOverlayShortcut(): void {
   const enabled = readVoiceEnabled();
   if (enabled && !voiceOverlayShortcutRegistered) {
-    const ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT_KEY, () => {
-      const now = Date.now();
-      // 全局监控 + 本地监控可能对同一次按键各回调一次，去重避免“隐藏又显示”。
-      if (now - lastOverlayShortcutAt < 300) return;
-      lastOverlayShortcutAt = now;
-      logLine("全局快捷键: 切换语音浮层");
-      toggleVoiceOverlay().catch((error) => logLine("切换语音浮层失败: " + error));
-    });
+    // 优先 Carbon 热键：不需要辅助功能权限，失焦时也能全局生效。
+    const carbonOk = registerCarbonHotkey();
+    let ok = carbonOk;
+    if (!carbonOk) {
+      ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT_KEY, triggerOverlayShortcut);
+    }
     voiceOverlayShortcutRegistered = ok;
     if (ok) {
-      logLine("语音浮层快捷键已注册: " + voiceOverlayShortcutLabel());
-      if (checkAccessibilityTrust() === false) {
-        logLine("语音浮层快捷键未获辅助功能权限：只在 mo-agent 处于前台时生效");
+      logLine("语音浮层快捷键已注册(" + (carbonOk ? "Carbon" : "Electrobun") + "): " + voiceOverlayShortcutLabel());
+      if (!carbonOk && checkAccessibilityTrust() === false) {
+        logLine("Electrobun 快捷键未获辅助功能权限：只在 mo-agent 处于前台时生效");
       }
     } else {
       logLine("语音浮层快捷键注册失败（可能被其他 App 占用）: " + VOICE_OVERLAY_SHORTCUT);
     }
   } else if (!enabled && voiceOverlayShortcutRegistered) {
+    unregisterCarbonHotkey();
     GlobalShortcut.unregister(VOICE_OVERLAY_SHORTCUT_KEY);
     voiceOverlayShortcutRegistered = false;
     logLine("语音浮层快捷键已释放");
@@ -1220,6 +1346,7 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
   else if (action === "quit") {
+    unregisterCarbonHotkey();
     GlobalShortcut.unregisterAll();
     hideVoiceOverlay(false);
     hideVoiceOrb();
