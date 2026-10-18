@@ -1,124 +1,29 @@
-import { EVENT } from "./events.mjs";
+import { EVENT, NOTIFY_POLICY, SEVERITY } from "./contract.mjs";
 
-/**
- * 通知分级：决定「怎么吵醒你」。
- *  - critical：需要人做决定（授权/回答/失败），强提醒（震动+语音+通知）
- *  - normal：完成类，静默出一条通知
- *  - info：纯提示
- */
-export const SEVERITY = Object.freeze({
-  CRITICAL: "critical",
-  NORMAL: "normal",
-  INFO: "info",
-});
-
-function describeQuestion(question) {
-  if (!question) return "需要你的输入";
-  const reason = question.reason || question.toolName;
-  if (reason) return String(reason);
-  const list = question.questions || [];
-  const text = list
-    .map((item) => (item && item.question) || "")
-    .filter(Boolean)
-    .join(" / ");
-  return text || "需要你的输入";
-}
-
-/** 正文前缀：优先会话标题，没有就退回 Agent 名。 */
-function withPrefix(prefix, text) {
-  const head = String(prefix || "").trim();
-  const tail = String(text || "").trim();
-  if (head && tail) return head + " · " + tail;
-  return head || tail;
-}
+export { SEVERITY } from "./contract.mjs";
 
 /**
  * 把 hub 上的原始事件翻译成一条通知意图。
+ * 映射表在 core/contract.mjs 的 NOTIFY_POLICY；这里只做查表。
  * 返回 null 表示这条事件不值得打扰用户。
  */
 export function classifyEvent(event) {
-  const p = (event && event.payload) || {};
-  switch (event.type) {
-    case EVENT.APPROVAL_PENDING: {
-      const label = p.agentLabel || p.agent || "Agent";
-      return {
-        severity: SEVERITY.CRITICAL,
-        kind: "approval",
-        title: "授权请求",
-        body: withPrefix(label, p.title || p.toolName || "该操作需要你的授权才能继续"),
-        eventId: p.id || null,
-        sessionId: p.sessionId || null,
-        agent: p.agent || null,
-        toolName: p.toolName || null,
-      };
-    }
-    case "pending.added": {
-      const isApproval = p.kind === "approval";
-      return {
-        severity: SEVERITY.CRITICAL,
-        kind: isApproval ? "approval" : "question",
-        title: isApproval ? "授权请求" : "等待回答",
-        body: withPrefix(p.sessionTitle, describeQuestion(p.question)),
-        eventId: p.eventId || null,
-        sessionId: p.sessionId || null,
-        agent: null,
-        toolName: null,
-      };
-    }
-    case EVENT.NEEDS_AUTH:
-    case EVENT.NEEDS_INPUT: {
-      const isAuth = event.type === EVENT.NEEDS_AUTH;
-      return {
-        severity: SEVERITY.CRITICAL,
-        kind: isAuth ? "approval" : "question",
-        title: isAuth ? "授权请求" : "等待回答",
-        body: withPrefix(p.sessionTitle || p.agentLabel || p.agent, p.title || p.body || p.text || ""),
-        eventId: p.id || p.eventId || null,
-        sessionId: p.sessionId || null,
-        agent: p.agent || null,
-        toolName: p.toolName || null,
-      };
-    }
-    case EVENT.NOTICE: {
-      const kind = p.kind || "notice";
-      const fixedTitle = kind === "completed" ? "任务完成" : kind === "error" ? "出错了" : "";
-      return {
-        severity: kind === "completed" ? SEVERITY.NORMAL : SEVERITY.CRITICAL,
-        kind,
-        title: fixedTitle || p.title || "提醒",
-        body: withPrefix(p.sessionTitle, p.body || ""),
-        eventId: null,
-        sessionId: p.sessionId || null,
-        agent: p.agent || null,
-        toolName: null,
-      };
-    }
-    case EVENT.RUN_FAILED: {
-      return {
-        severity: SEVERITY.CRITICAL,
-        kind: "error",
-        title: "出错了",
-        body: withPrefix(p.sessionTitle || p.agent, p.text || p.body || ""),
-        eventId: null,
-        sessionId: p.id || p.sessionId || null,
-        agent: p.agent || null,
-        toolName: null,
-      };
-    }
-    default:
-      return null;
-  }
+  if (!event || event.type === EVENT.NOTIFY) return null;
+  const policy = NOTIFY_POLICY[event.type];
+  if (!policy) return null;
+  return policy((event && event.payload) || {}, event);
 }
 
-/** 去重键：同一件待办（授权/提问）只提醒一次。 */
+/** 去重键：同一轮完成用 runId，同一件待办用 eventId，其余用 seq。 */
 export function notificationKey(event, intent) {
+  if (intent.runId) return "run:" + intent.runId;
   if (intent.eventId) return event.type + ":" + intent.eventId;
   return event.type + ":" + event.seq;
 }
 
 /**
  * 通知路由：订阅统一事件流，翻译成 notify 事件广播给所有客户端
- * （手机 SSE / 将来的 webhook、Web Push 都挂在 channels 上）。
+ * （手机 SSE / webhook / Web Push 都挂在 channels 上）。
  */
 export class Notifier {
   constructor(options) {

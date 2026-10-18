@@ -1,0 +1,19 @@
+{
+  "_comment": "复制成 <id>.json 后填写。module 相对 adapters/ 目录；export 是模块里的类名。",
+  "id": "example-agent",
+  "label": "Example Agent",
+  "enabled": false,
+  "module": "./example-agent.mjs",
+  "export": "ExampleAgentAdapter",
+  "process": { "match": [] },
+  "session": { "kind": "log" },
+  "capabilities": {
+    "observe": ["process"],
+    "runEnd": "none",
+    "attention": "none",
+    "approval": "none",
+    "control": []
+  },
+  "hooks": { "kind": "none", "events": {} },
+  "approval": { "capability": "none" }
+}

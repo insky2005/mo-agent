@@ -351,7 +351,14 @@ async function runVoiceCommand() {
 // 数据源
 const dshEnabled = profiles.some((p) => p.id === "dsh" && p.enabled !== false);
 const dsh = dshEnabled ? new DshClient({ home: config.dshHome, baseUrl: config.dshBaseUrl || null, log }) : null;
-const created = createAdapters({ hub, log, config, profiles, dsh });
+const created = await createAdapters({
+  hub,
+  log,
+  config,
+  profiles,
+  profilesDir: path.join(root, "adapters", "profiles"),
+  dsh,
+});
 const monitor = created.adapters.find((a) => a.name === "dsh") || null;
 for (const adapter of created.adapters) hub.register(adapter);
 

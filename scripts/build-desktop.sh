@@ -37,8 +37,22 @@ echo "[build] 编译 host 运行时: $BUN"
 "$BUN" build host/index.mjs --target=bun --compile --outfile "$RUNTIME_STAGE/bin/mo-agent-host"
 chmod +x "$RUNTIME_STAGE/bin/mo-agent-host"
 cp -R app/web/. "$RUNTIME_STAGE/app/web/"
-mkdir -p "$RUNTIME_STAGE/adapters/profiles"
+# 动态加载的 adapter 模块需要和 profile、core 一起进运行时；
+# host 主程序虽然是单文件，但 profile.module 是运行时 import 的。
+mkdir -p "$RUNTIME_STAGE/adapters/profiles" "$RUNTIME_STAGE/core"
 cp -R adapters/profiles/. "$RUNTIME_STAGE/adapters/profiles/"
+for f in adapters/*.mjs; do
+  case "$f" in
+    *.test.mjs) ;;
+    *) cp "$f" "$RUNTIME_STAGE/adapters/" ;;
+  esac
+done
+for f in core/*.mjs; do
+  case "$f" in
+    *.test.mjs) ;;
+    *) cp "$f" "$RUNTIME_STAGE/core/" ;;
+  esac
+done
 
 if [ -f host/notify-defaults.json ]; then
   cp host/notify-defaults.json "$RUNTIME_STAGE/notify-defaults.json"

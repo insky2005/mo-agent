@@ -2,8 +2,17 @@
   "id": "dsh",
   "label": "DeepSeek Harness",
   "enabled": true,
+  "module": "./dsh-monitor.mjs",
+  "export": "AgentMonitor",
   "process": { "match": ["oh-my-dsh", "(^|/)dsh($|\\s)"] },
   "session": { "kind": "native-api" },
-  "hooks": { "kind": "native" },
+  "capabilities": {
+    "observe": ["process", "native-api"],
+    "runEnd": "inferred",
+    "attention": "native",
+    "approval": "allow",
+    "control": ["prompt", "cancel"]
+  },
+  "hooks": { "kind": "native", "events": {} },
   "approval": { "capability": "allow", "mechanism": "原生 remote events（已实现）" }
 }

@@ -1,11 +1,13 @@
 import { EventStore } from "./store.mjs";
-import { EVENT } from "./events.mjs";
+import { EVENT, canonicalEventType, isKnownEventType } from "./contract.mjs";
 import { IDLE } from "./status.mjs";
 
 /**
- * 统一状态中枢：所有 adapter 把原始信号翻译成统一事件后交给 Hub，
- * Hub 负责去重、排序、缓存（供断线重放）与对外快照。
- * 上层（host / app / desktop）只认这里的一套。
+ * 统一状态中枢：所有 adapter 把原始信号翻译成规范事件后交给 Hub。
+ * Hub 负责：
+ *  - 把旧事件名归一化成规范名（迁移期）
+ *  - 去重、排序、缓存（供断线重放）
+ *  - 维护会话状态快照
  */
 export class Hub {
   constructor(options) {
@@ -23,39 +25,79 @@ export class Hub {
     return adapter;
   }
 
-  /** 发出一条事件：先入缓冲，再更新内存状态。 */
+  /** 发出一条事件：先归一化类型，再入缓冲，再更新内存状态。 */
   emit(type, payload) {
     const data = payload || {};
-    const event = this.store.push(type, data);
-    this.applyEvent(type, data);
+    const canonical = canonicalEventType(type);
+    if (!canonical && !isKnownEventType(type)) {
+      this.log.warn("未知事件类型，已按原样记录: " + type);
+    }
+    const storedType = canonical || type;
+    const event = this.store.push(storedType, data);
+    this.applyEvent(storedType, data);
     return event;
   }
 
   applyEvent(type, data) {
-    if (type === EVENT.AGENT_UPDATED || type === "session.upsert" || type === EVENT.AGENT_ADDED) {
-      const agent = this.normalize(data);
-      this.agents.set(agent.id, agent);
-      return;
-    }
-    if (type === EVENT.AGENT_REMOVED || type === "session.removed") {
-      const id = data.id || data.sessionId;
-      if (id) this.agents.delete(id);
+    switch (type) {
+      case EVENT.SESSION_UPSERT:
+      case EVENT.AGENT_ADDED:
+      case EVENT.AGENT_UPDATED: {
+        const agent = this.normalize(data);
+        this.agents.set(agent.id, agent);
+        return;
+      }
+      case EVENT.SESSION_REMOVED:
+      case EVENT.AGENT_REMOVED: {
+        const id = data.id || data.sessionId;
+        if (id) this.agents.delete(id);
+        return;
+      }
+      case EVENT.RUN_COMPLETED:
+      case EVENT.RUN_FAILED:
+      case EVENT.RUN_CANCELED:
+      case EVENT.RUN_STARTED: {
+        const id = data.sessionId || data.id;
+        const agent = id ? this.agents.get(id) : null;
+        if (!agent) return;
+        agent.runId = data.runId || agent.runId || null;
+        if (type === EVENT.RUN_STARTED) {
+          agent.lastRun = null;
+        } else {
+          agent.lastRun = {
+            runId: data.runId || null,
+            outcome:
+              type === EVENT.RUN_COMPLETED ? "completed" : type === EVENT.RUN_FAILED ? "failed" : "canceled",
+            text: data.text || "",
+            finishedAt: data.finishedAt || Date.now(),
+          };
+        }
+        this.agents.set(id, agent);
+        return;
+      }
+      default:
+        return;
     }
   }
 
   /** 把各 adapter 的不同字段名归一成一份记录。 */
   normalize(payload) {
     const id = payload.id || payload.sessionId || payload.agentId;
+    const previous = id ? this.agents.get(id) : null;
     return {
       id,
       sessionId: id,
       parentId: payload.parentId || null,
       blank: !!payload.blank,
       agent: payload.agent || payload.source || "unknown",
+      agentLabel: payload.agentLabel || (previous && previous.agentLabel) || payload.agent || payload.source || "unknown",
+      capabilities: payload.capabilities || (previous && previous.capabilities) || null,
       title: payload.title || id,
       cwd: payload.cwd || "",
       status: payload.status || IDLE,
       running: !!payload.running,
+      runId: payload.runId || (previous && previous.runId) || null,
+      lastRun: payload.lastRun || (previous && previous.lastRun) || null,
       updatedAt: payload.updatedAt || Date.now(),
       lastPrompt: payload.lastPrompt || "",
       lastResponse: payload.lastResponse || "",

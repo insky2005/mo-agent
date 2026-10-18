@@ -98,3 +98,26 @@ test("去重键：有 eventId 用 id，否则用 seq", () => {
   assert.equal(notificationKey({ type: "pending.added", seq: 3 }, { eventId: "x" }), "pending.added:x");
   assert.equal(notificationKey({ type: "notice", seq: 3 }, { eventId: null }), "notice:3");
 });
+test("agent.run.completed -> normal「任务完成」，带会话与回答", () => {
+  const intent = classifyEvent(eventOf(EVENT.RUN_COMPLETED, {
+    id: "claude-code:s1",
+    sessionId: "claude-code:s1",
+    agent: "claude-code",
+    title: "authx-mcp read",
+    sessionTitle: "authx-mcp read",
+    text: "只装了一个：authx-mcp",
+  }));
+  assert.equal(intent.severity, SEVERITY.NORMAL);
+  assert.equal(intent.kind, "completed");
+  assert.equal(intent.title, "任务完成");
+  assert.equal(intent.sessionId, "claude-code:s1");
+  assert.match(intent.body, /authx-mcp read/);
+  assert.match(intent.body, /只装了一个/);
+});
+test("同一 runId 的完成事件只通知一次", () => {
+  const { hub, notifies } = makeHub();
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "s1:turn:1", sessionId: "s1", agent: "dsh", title: "t", text: "done" });
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "s1:turn:1", sessionId: "s1", agent: "dsh", title: "t", text: "done" });
+  assert.equal(notifies.length, 1);
+  assert.equal(notifies[0].runId, "s1:turn:1");
+});

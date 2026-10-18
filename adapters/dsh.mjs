@@ -296,6 +296,17 @@ export class DshClient extends EventEmitter {
     return this.rpc("session/cancel", { request: { sessionId } });
   }
 
+  /** 读取会话日志到 throughSeq，用来补全 turnOutline 里被截断的最后回复。 */
+  pageSession(sessionId, throughSeq, maxMessages) {
+    return this.rpc("session/page", {
+      request: {
+        address: { kind: "session", sessionId },
+        throughSeq,
+        maxMessages: maxMessages || 400,
+      },
+    });
+  }
+
   createSession(cwd, agentPreset) {
     const request = {};
     if (cwd) request.cwd = cwd;

@@ -2,9 +2,13 @@
 /**
  * Agent hook 调用的入口。
  *
- * 用法（Claude Code）：
- *   node approvals/hook-cli.mjs permission   # 用于 PermissionRequest，会阻塞等人
- *   node approvals/hook-cli.mjs notify       # 用于 Notification，只上报不阻塞
+ * 新用法（profile 驱动）：
+ *   node approvals/hook-cli.mjs event PermissionRequest claude-code
+ *   node approvals/hook-cli.mjs event Notification claude-code
+ *
+ * 旧用法仍兼容：
+ *   node approvals/hook-cli.mjs permission
+ *   node approvals/hook-cli.mjs notify
  *
  * 关键行为：拿不到决定时「不输出任何内容并 exit 0」，
  * 让 Agent 回到它自己的本地提示，绝不代替用户放行。
@@ -12,8 +16,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { loadProfile, hookTarget } from "./hook-map.mjs";
 
-const MODE = process.argv[2] || "permission";
+const args = process.argv.slice(2);
+const MODE = args[0] || "permission";
+const HOOK_EVENT = MODE === "event" ? args[1] : null;
+const AGENT_ID = (MODE === "event" ? args[2] : args[1]) || process.env.MO_AGENT_AGENT || "claude-code";
+const profile = loadProfile(AGENT_ID);
+const TARGET = hookTarget(MODE, profile, HOOK_EVENT);
 const SESSION_FILE = path.join(os.homedir(), ".mo-agent", "session.json");
 
 function readStdin() {
@@ -60,6 +70,8 @@ function firstString(obj, keys) {
 }
 
 async function main() {
+  if (!TARGET) process.exit(0);
+
   const raw = await readStdin();
   let input = {};
   try {
@@ -71,23 +83,31 @@ async function main() {
   const session = loadSession();
   if (!session) process.exit(0);
 
+  const toolName = firstString(input, ["tool_name", "toolName"]);
+  const noticeText = firstString(input, ["message", "notification_message"]);
   const payload = {
-    agent: "claude-code",
-    agentLabel: process.env.MO_AGENT_AGENT_LABEL || "Claude Code",
+    agent: (profile && profile.id) || AGENT_ID,
+    agentLabel: process.env.MO_AGENT_AGENT_LABEL || (profile && profile.label) || "Claude Code",
     sessionId: firstString(input, ["session_id", "sessionId"]),
-    toolName: firstString(input, ["tool_name", "toolName"]),
+    toolName,
     toolInput: input.tool_input || input.toolInput || null,
-    title: firstString(input, ["tool_name", "toolName"]) || "需要授权",
+    title: toolName || (TARGET === "notice" ? (noticeText || "需要你的关注") : "需要授权"),
     cwd: firstString(input, ["cwd"]),
     permissionMode: firstString(input, ["permission_mode", "permissionMode"]),
   };
 
-  if (MODE === "notify") {
+  if (TARGET === "notice") {
     try {
       await post(session, "/local/notify", payload);
     } catch (error) {
       /* 上报失败不影响 Agent */
     }
+    process.exit(0);
+  }
+
+  if (TARGET !== "approval.pending") {
+    // 其它规范事件（例如 run.completed）暂不由 hook 路径处理：
+    // Claude 的完成以 transcript 为准，避免与适配器重复通知。
     process.exit(0);
   }
 

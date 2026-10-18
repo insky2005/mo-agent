@@ -9,8 +9,11 @@
 | 模块 | 状态 |
 |---|---|
 | core/ 统一事件模型 + A2A 状态词表 + 事件缓冲 | 已完成 |
+| core/contract.mjs 规范事件 + 通知策略表 + 契约测试 | M1/M2/M3 已落地（见 docs/spec/event-contract.md） |
+| 会话来源标识 + 控制能力门控 | 已落地（手机卡片显示 Agent；Claude 只读） |
+| 会话详情 / 历史轮次 | 已落地（点「查看完整」查看前几轮） |
 | adapters/dsh  DSH 数据源（观测 + 控制 + 问答） | 可用 |
-| adapters/claude-code  Claude Code transcript 观测 | 可用 |
+| adapters/claude-code  Claude Code transcript 观测 | 可用（只读；手机不能发指令） |
 | adapters/process-scan  进程发现 | 可用 |
 | approvals/ 远程批准中枢 + hook CLI | 已实现并端到端验证 |
 | host/ 主程序（HTTP + SSE + 配对 + 二维码） | 可用 |
@@ -208,7 +211,7 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
 ## 目录结构
 
     core/          共享：事件模型、状态词表、事件缓冲（纯逻辑，无 IO）
-    adapters/      观测适配层，每 Agent 一份 profile（adapters/profiles/*.json）
+    adapters/      观测适配层；每 Agent 一份 profile，registry 动态加载（接入见 adapters/README.md）
     approvals/     远程批准：broker + hook 命令行入口
     host/          主程序：HTTP / SSE / 配对 / 二维码 / 编排
     host/voice/    两段式语音：文本规则、确认状态机、TTS、whisper、常驻 helper 客户端、p0 诊断 CLI
@@ -229,6 +232,8 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
     L4 tmux    ┘
 
 设计依据：docs/adr/adr-0001-observational-first.md（观察优先，暂不做 ACP 托管）。
+
+事件契约：docs/spec/event-contract.md（统一事件、状态语义与映射；决策见 docs/adr/adr-0003-event-contract.md）。
 
 ## 会话派生关系（分支）
 
@@ -253,12 +258,14 @@ mo-agent 的处理：
     GET  /logs/data            日志尾部若干行 JSON（仅回环地址）
     POST /api/pair             配对：{pin} 或 {qrToken}
     GET  /api/state            全量快照（会话 + 待批准 + 进程）
-    GET  /api/events           SSE 事件流（?since= 断点重放）
+    GET  /api/session-history  会话历史轮次（?sessionId=&limit=，按需读取）
+    GET  /api/events           SSE 事件流（?since= 断点重放；?envelope=1 用统一 message 信封）
     POST /api/approve          手机决定：{id, decision}
+    POST /api/prompt           发送指令（仅 control 含 prompt 的会话；Claude 只读返回 409）
     POST /local/approval       hook 回调（本机令牌）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
 
-    SSE  event: notify         统一通知出口（授权/提问/完成/失败，带 severity）
+    SSE  event: message        {v,seq,at,type,payload}；type=notify 为统一通知出口（带 severity）
 
 ## 菜单栏图标与 Dock 行为
 

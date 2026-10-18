@@ -54,12 +54,45 @@
     idle: { label: "空闲", cls: "idle" }
   };
 
+  var AGENT_LABELS = { dsh: "DeepSeek Harness", "claude-code": "Claude Code" };
+
+  function agentName(session) {
+    if (!session) return "Agent";
+    return session.agentLabel || AGENT_LABELS[session.agent] || session.agent || "Agent";
+  }
+
+  function agentClass(session) {
+    if (!session) return "other";
+    return session.agent === "claude-code" ? "claude" : (session.agent === "dsh" ? "dsh" : "other");
+  }
+
+  function pendingMeta(p) {
+    return [p && p.agentLabel, p && p.sessionTitle].filter(Boolean).join(" · ");
+  }
+
+  function canControl(session, action) {
+    if (!session) return false;
+    var caps = session.capabilities;
+    if (caps && Array.isArray(caps.control)) return caps.control.indexOf(action) >= 0;
+    // 兼容没有 capabilities 的旧快照：Claude Code 仍然是只读。
+    return session.agent !== "claude-code";
+  }
+
   var state = {
     token: localStorage.getItem(LS.token) || "",
     seq: Number(localStorage.getItem(LS.seq) || 0) || 0,
     selected: localStorage.getItem(LS.selected) || "",
     speak: localStorage.getItem(LS.speak) === "1",
     onlyActive: true,
+    detailId: "",
+    detailTurns: null,
+    detailIndex: -1,
+    detailTotal: 0,
+    detailLoading: false,
+    detailTruncated: false,
+    detailAnim: "",
+    detailResetScroll: false,
+    detailError: "",
     sessions: new Map(),
     pending: new Map(),
     es: null,
@@ -68,7 +101,7 @@
   };
 
   var dom = {};
-  var IDS = ["conn", "btnNotify", "btnSpeak", "btnRefresh", "pendingSection", "pendingList", "sessionList", "onlyActive", "target", "input", "btnMic", "btnSend", "pairOverlay", "pinInput", "btnPair", "pairError", "main", "linkBar", "linkText", "btnRepair", "addrInput", "pairHint", "btnGoLive"];
+  var IDS = ["conn", "btnNotify", "btnSpeak", "btnRefresh", "pendingSection", "pendingList", "sessionList", "onlyActive", "target", "input", "btnMic", "btnSend", "pairOverlay", "pinInput", "btnPair", "pairError", "main", "linkBar", "linkText", "btnRepair", "addrInput", "pairHint", "btnGoLive", "detailOverlay", "detailTitle", "detailMeta", "detailHistory", "detailNav", "detailTurnLabel", "btnPrevTurn", "btnNextTurn", "btnDetailClose"];
   IDS.forEach(function (id) { dom[id] = document.getElementById(id); });
 
   function esc(value) {
@@ -161,6 +194,7 @@
     renderSessions();
     renderPending();
     renderTarget();
+    if (state.detailId) renderDetail();
   }
 
   function activeSessionList() {
@@ -185,22 +219,42 @@
       dom.sessionList.innerHTML = '<div class="empty">暂无活跃会话</div>';
       return;
     }
+    var titleCounts = {};
+    list.forEach(function (s) {
+      var key = s.title || s.sessionId;
+      titleCounts[key] = (titleCounts[key] || 0) + 1;
+    });
     var html = list.map(function (s) {
       var info = STATUS[s.status] || STATUS.idle;
+      var displayTitle = s.title || s.sessionId;
+      if (titleCounts[displayTitle] > 1) displayTitle += " · " + String(s.sessionId).slice(-6);
       var selected = state.selected === s.sessionId;
       var attention = s.status === "waiting" || s.status === "error";
       var parts = [];
       parts.push('<div class="card' + (selected ? " selected" : "") + (attention ? " attention" : "") + '" data-id="' + esc(s.sessionId) + '">');
-      parts.push('<div class="cardTop"><div class="cardTitle">' + esc(s.title || s.sessionId) + (s.parentId ? ' <span class="tag">分支</span>' : '') + '</div>');
+      parts.push('<div class="cardTop"><div class="cardTitle">' + esc(displayTitle) + (s.parentId ? ' <span class="tag">分支</span>' : '') + '</div>');
+      // Agent 标签放在状态徽章前面，不抢标题的位置。
+      parts.push('<span class="tag agent ' + agentClass(s) + '">' + esc(agentName(s)) + '</span>');
       parts.push('<span class="badge ' + info.cls + '">' + info.label + '</span></div>');
       var origin = s.parentId ? '分支自其它会话 · ' : '';
-      parts.push('<div class="meta">' + origin + esc(s.cwd || "") + ' · ' + ago(s.updatedAt) + ' · 第 ' + (s.turns || 0) + ' 轮</div>');
-      if (s.lastPrompt) parts.push('<div class="line"><b>你：</b>' + esc(s.lastPrompt) + '</div>');
-      if (s.lastResponse) parts.push('<div class="line clamp"><b>Agent：</b>' + esc(s.lastResponse) + '</div>');
+      // 路径可截断；时间与轮数固定在右侧，始终可见。
+      parts.push('<div class="meta sessionMeta">'
+        + '<span class="metaPath">' + origin + esc(s.cwd || "") + '</span>'
+        + '<span class="metaRight">' + ago(s.updatedAt) + ' · 第 ' + (s.turns || 0) + ' 轮</span>'
+        + '</div>');
+      if (s.lastPrompt) parts.push('<div class="line clamp" data-detail="' + esc(s.sessionId) + '"><b>你：</b>' + esc(s.lastPrompt) + '</div>');
+      if (s.lastResponse) parts.push('<div class="line clamp" data-detail="' + esc(s.sessionId) + '"><b>Agent：</b>' + esc(s.lastResponse) + '</div>');
       parts.push('<div class="cardActions">');
       // 「选中」已去掉：点卡片任意位置即选中，卡片高亮就是反馈
-      parts.push('<button data-act="continue" data-id="' + esc(s.sessionId) + '">发『继续』</button>');
-      if (s.running) parts.push('<button class="no" data-act="stop" data-id="' + esc(s.sessionId) + '">中断</button>');
+      parts.push('<button data-act="detail" data-id="' + esc(s.sessionId) + '">查看完整</button>');
+      if (canControl(s, "prompt")) {
+        parts.push('<button data-act="continue" data-id="' + esc(s.sessionId) + '">发『继续』</button>');
+      } else {
+        parts.push('<span class="readonly">仅观测，不能发送指令</span>');
+      }
+      if (s.running && canControl(s, "cancel")) {
+        parts.push('<button class="no" data-act="stop" data-id="' + esc(s.sessionId) + '">中断</button>');
+      }
       parts.push('</div></div>');
       return parts.join("");
     }).join("");
@@ -227,7 +281,8 @@
     var parts = [];
     parts.push('<div class="card attention" data-event="' + esc(p.eventId) + '">');
     parts.push('<div class="cardTop"><div class="cardTitle">等待授权</div><span class="badge waiting">等待确认</span></div>');
-    if (p.sessionTitle) parts.push('<div class="meta">' + esc(p.sessionTitle) + '</div>');
+    var approvalMeta = pendingMeta(p);
+    if (approvalMeta) parts.push('<div class="meta">' + esc(approvalMeta) + '</div>');
     parts.push('<div class="qText">' + esc(q.reason || q.toolName || "Agent 需要你的授权才能继续") + '</div>');
     parts.push('<div class="cardActions">');
     parts.push('<button class="ok" data-act="approve" data-event="' + esc(p.eventId) + '" data-value="allowed-once">允许一次</button>');
@@ -242,7 +297,8 @@
     var parts = [];
     parts.push('<div class="card attention" data-event="' + esc(p.eventId) + '">');
     parts.push('<div class="cardTop"><div class="cardTitle">Agent 正在询问</div><span class="badge waiting">等待回应</span></div>');
-    if (p.sessionTitle) parts.push('<div class="meta">' + esc(p.sessionTitle) + '</div>');
+    var questionMeta = pendingMeta(p);
+    if (questionMeta) parts.push('<div class="meta">' + esc(questionMeta) + '</div>');
     if (!questions.length) {
       parts.push('<div class="qText">Agent 需要你的输入</div>');
       parts.push('<input class="customInput" data-custom-for="__single" placeholder="输入你的回答" />');
@@ -275,7 +331,167 @@
 
   function renderTarget() {
     var s = state.sessions.get(state.selected);
-    dom.target.innerHTML = "发送给：<b>" + esc(s ? (s.title || s.sessionId) : "未选择会话") + "</b>";
+    if (!s) {
+      dom.target.innerHTML = "发送给：<b>未选择会话</b>";
+      dom.input.disabled = false;
+      dom.btnSend.disabled = false;
+      dom.btnMic.disabled = false;
+      dom.input.placeholder = "输入指令，或说出你的指令…";
+      return;
+    }
+    var can = canControl(s, "prompt");
+    dom.target.innerHTML = (can ? "发送给：" : "仅观测：")
+      + "<b>" + esc(agentName(s)) + " · " + esc(s.title || s.sessionId) + "</b>"
+      + (can ? "" : "（该 Agent 不能接收手机指令）");
+    dom.input.disabled = !can;
+    dom.btnSend.disabled = !can;
+    dom.btnMic.disabled = !can;
+    dom.input.placeholder = can ? "输入指令，或说出你的指令…" : "该会话仅观测，不能发送指令";
+  }
+
+  function openDetail(id) {
+    if (!id) return;
+    state.detailId = id;
+    state.detailTurns = null;
+    state.detailIndex = -1;
+    state.detailTotal = 0;
+    state.detailLoading = true;
+    state.detailTruncated = false;
+    state.detailAnim = "";
+    state.detailResetScroll = false;
+    state.detailError = "";
+    renderDetail();
+    dom.detailOverlay.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    loadHistory(id);
+  }
+
+  function closeDetail() {
+    state.detailId = "";
+    state.detailTurns = null;
+    state.detailIndex = -1;
+    state.detailTotal = 0;
+    state.detailLoading = false;
+    state.detailTruncated = false;
+    state.detailAnim = "";
+    state.detailResetScroll = false;
+    state.detailError = "";
+    dom.detailOverlay.classList.add("hidden");
+    dom.detailNav.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  function showOlder() {
+    if (!state.detailTurns || state.detailIndex <= 0) return;
+    state.detailIndex -= 1;
+    state.detailAnim = "from-left";
+    state.detailResetScroll = true;
+    renderDetail();
+  }
+
+  function showNewer() {
+    if (!state.detailTurns || state.detailIndex >= state.detailTurns.length - 1) return;
+    state.detailIndex += 1;
+    state.detailAnim = "from-right";
+    state.detailResetScroll = true;
+    renderDetail();
+  }
+
+  function loadHistory(id) {
+    api("/api/session-history?sessionId=" + encodeURIComponent(id) + "&limit=50")
+      .then(function (result) {
+        if (state.detailId !== id) return;
+        state.detailLoading = false;
+        if (result && result.ok) {
+          state.detailTurns = result.turns || [];
+          state.detailTotal = result.total || state.detailTurns.length;
+          state.detailIndex = state.detailTurns.length - 1;
+          state.detailTruncated = !!result.truncated;
+          state.detailResetScroll = true;
+          state.detailError = "";
+        } else {
+          state.detailTurns = [];
+          state.detailTotal = 0;
+          state.detailError = (result && result.error) || "历史加载失败";
+        }
+        renderDetail();
+      })
+      .catch(function (error) {
+        if (state.detailId !== id) return;
+        state.detailLoading = false;
+        state.detailTurns = [];
+        state.detailTotal = 0;
+        state.detailError = error.message || "历史加载失败";
+        renderDetail();
+      });
+  }
+
+  function renderDetail() {
+    var s = state.sessions.get(state.detailId);
+    if (!s) {
+      dom.detailTitle.textContent = "会话已离线";
+      dom.detailMeta.textContent = "";
+      dom.detailNav.classList.add("hidden");
+      dom.detailHistory.innerHTML = '<div class="detailText">会话已离线</div>';
+      return;
+    }
+    var info = STATUS[s.status] || STATUS.idle;
+    dom.detailTitle.textContent = agentName(s) + " · " + (s.title || s.sessionId);
+    dom.detailMeta.textContent = info.label
+      + " · " + (s.cwd || "无路径")
+      + " · " + ago(s.updatedAt)
+      + " · 第 " + (s.turns || 0) + " 轮";
+
+    if (state.detailLoading) {
+      dom.detailNav.classList.add("hidden");
+      dom.detailHistory.innerHTML = '<div class="detailLoading">正在加载历史…</div>';
+      return;
+    }
+
+    var turns = state.detailTurns;
+    if (!turns || !turns.length) {
+      dom.detailNav.classList.add("hidden");
+      var hint = state.detailError || "没有历史记录，显示最近一轮";
+      dom.detailHistory.innerHTML = '<div class="detailMore">' + esc(hint) + '</div>'
+        + '<div class="detailLabel">你</div>'
+        + '<div class="detailText">' + esc(s.lastPrompt || "（无）") + '</div>'
+        + '<div class="detailLabel">Agent</div>'
+        + '<div class="detailText">' + esc(s.lastResponse || "（无）") + '</div>';
+      return;
+    }
+
+    if (state.detailIndex < 0) state.detailIndex = turns.length - 1;
+    if (state.detailIndex >= turns.length) state.detailIndex = turns.length - 1;
+    var turn = turns[state.detailIndex];
+    var turnNo = turn.turn || (state.detailIndex + 1);
+    var total = state.detailTotal || turns.length;
+
+    dom.detailNav.classList.remove("hidden");
+    dom.detailTurnLabel.textContent = "第 " + turnNo + " / " + total + " 轮";
+    var newer = turns[state.detailIndex + 1] || null;
+    var older = turns[state.detailIndex - 1] || null;
+    // 左侧按钮 = 更新一轮，右侧按钮 = 更早一轮；直接显示相邻轮次号。
+    dom.btnPrevTurn.textContent = newer ? "← " + newer.turn + " 轮" : "← 已最新";
+    dom.btnNextTurn.textContent = older ? older.turn + " 轮 →" : "已最早 →";
+    dom.btnPrevTurn.disabled = !newer;
+    dom.btnNextTurn.disabled = !older;
+
+    var animClass = state.detailAnim ? (" " + state.detailAnim) : "";
+    state.detailAnim = "";
+    var resetScroll = state.detailResetScroll;
+    var previousScroll = dom.detailHistory.scrollTop;
+    var html = '<div class="turn' + animClass + '">'
+      + '<div class="detailLabel">你</div>'
+      + '<div class="detailText">' + esc(turn.prompt || "（无）") + '</div>'
+      + '<div class="detailLabel">Agent</div>'
+      + '<div class="detailText">' + esc(turn.response || "（无）") + '</div>'
+      + '</div>';
+    if (state.detailTruncated) {
+      html += '<div class="detailMore">仅显示最近 ' + turns.length + ' 轮，共 ' + total + ' 轮</div>';
+    }
+    dom.detailHistory.innerHTML = html;
+    dom.detailHistory.scrollTop = resetScroll ? 0 : previousScroll;
+    state.detailResetScroll = false;
   }
 
   // ---------------------------------------------------------------- 事件处理
@@ -315,10 +531,18 @@
 
   function connect() {
     if (state.es) { try { state.es.close(); } catch (e) { /* 忽略 */ } }
-    var url = BASE + "/api/events?since=" + encodeURIComponent(state.seq) + "&token=" + encodeURIComponent(state.token);
+    var url = BASE + "/api/events?since=" + encodeURIComponent(state.seq)
+      + "&envelope=1&token=" + encodeURIComponent(state.token);
     var es = new EventSource(url);
     state.es = es;
     es.onopen = function () { sseErrors = 0; stopPolling(); setConn(true); startNativeNotify(); };
+    // 统一信封：所有事件走 event: message，客户端按 evt.type 分发。
+    // 不再维护手写事件名清单——漏一个名字就静默丢事件。
+    es.onmessage = function (event) {
+      var parsed;
+      try { parsed = JSON.parse(event.data); } catch (e) { return; }
+      handleEvent(parsed);
+    };
     es.onerror = function () {
       sseErrors += 1;
       setConn(false, "重连中…");
@@ -329,14 +553,6 @@
         startPolling();
       }
     };
-    var types = ["session.upsert", "session.removed", "session.started", "pending.added", "pending.resolved", "notify", "dsh.error"];
-    types.forEach(function (type) {
-      es.addEventListener(type, function (event) {
-        var parsed;
-        try { parsed = JSON.parse(event.data); } catch (e) { return; }
-        handleEvent(parsed);
-      });
-    });
   }
 
   function handleEvent(evt) {
@@ -416,6 +632,11 @@
 
   function stopSession(id) {
     if (!id) { alert("请先选择一个会话"); return; }
+    var session = state.sessions.get(id);
+    if (!canControl(session, "cancel")) {
+      alert(agentName(session) + " 会话仅观测，不能中断");
+      return;
+    }
     api("/api/cancel", { method: "POST", body: { sessionId: id } })
       .then(function (r) { if (!r.ok) alert("中断失败: " + (r.error || "")); })
       .catch(function (e) { alert("中断失败: " + e.message); });
@@ -482,6 +703,11 @@
     state.pending.forEach(function (p) { pendingList.push(p); });
 
     if (intent === "stop") {
+      var stopTarget = state.sessions.get(state.selected);
+      if (!canControl(stopTarget, "cancel")) {
+        alert(agentName(stopTarget) + " 会话仅观测，不能中断");
+        return;
+      }
       dom.input.value = "";
       stopSession(state.selected);
       return;
@@ -497,6 +723,11 @@
     if (intent === "continue") text = "继续";
 
     if (!state.selected) { alert("请先选择一个会话"); return; }
+    var targetSession = state.sessions.get(state.selected);
+    if (!canControl(targetSession, "prompt")) {
+      alert(agentName(targetSession) + " 会话仅观测，不能发送指令");
+      return;
+    }
     var sessionId = state.selected;
     dom.input.value = "";
     api("/api/prompt", { method: "POST", body: { sessionId: sessionId, text: text, mode: "queue" } })
@@ -538,11 +769,17 @@
       var id = button.getAttribute("data-id");
       var eventId = button.getAttribute("data-event");
       if (act === "select") selectSession(id);
+      else if (act === "detail") openDetail(id);
       else if (act === "stop") { if (confirm("确定中断这个会话？")) stopSession(id); }
       else if (act === "continue") { selectSession(id); dom.input.value = "继续"; send(); }
       else if (act === "answer") submitAnswer(eventId);
       else if (act === "cancelPending") cancelPending(eventId);
       else if (act === "approve") answerApproval(eventId, button.getAttribute("data-value"));
+      return;
+    }
+    var detailLine = event.target.closest ? event.target.closest("[data-detail]") : null;
+    if (detailLine) {
+      openDetail(detailLine.getAttribute("data-detail"));
       return;
     }
     var card = event.target.closest ? event.target.closest(".card[data-id]") : null;
@@ -615,6 +852,39 @@
       localStorage.setItem(LS.seq, "0");
       location.reload();
     }).catch(function (error) { dom.pairError.textContent = error.message; });
+  });
+
+  if (dom.btnDetailClose) dom.btnDetailClose.addEventListener("click", closeDetail);
+  if (dom.btnPrevTurn) dom.btnPrevTurn.addEventListener("click", showNewer);
+  if (dom.btnNextTurn) dom.btnNextTurn.addEventListener("click", showOlder);
+  if (dom.detailOverlay) {
+    dom.detailOverlay.addEventListener("click", function (event) {
+      if (event.target === dom.detailOverlay) closeDetail();
+    });
+
+    var swipeStart = null;
+    dom.detailOverlay.addEventListener("touchstart", function (event) {
+      if (!state.detailId || event.touches.length !== 1) return;
+      swipeStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }, { passive: true });
+    dom.detailOverlay.addEventListener("touchend", function (event) {
+      if (!swipeStart || !event.changedTouches || !event.changedTouches.length) return;
+      var touch = event.changedTouches[0];
+      var dx = touch.clientX - swipeStart.x;
+      var dy = touch.clientY - swipeStart.y;
+      swipeStart = null;
+      // 只认横向手势，避免和上下滚动抢。
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      // 右滑 -> 上一轮（轮数变小）；左滑 -> 下一轮（轮数变大）
+      if (dx > 0) showOlder();
+      else showNewer();
+    }, { passive: true });
+  }
+  document.addEventListener("keydown", function (event) {
+    if (!state.detailId) return;
+    if (event.key === "Escape") closeDetail();
+    else if (event.key === "ArrowLeft") showNewer();
+    else if (event.key === "ArrowRight") showOlder();
   });
 
   document.querySelectorAll(".quick").forEach(function (button) {

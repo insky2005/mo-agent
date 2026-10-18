@@ -175,6 +175,22 @@
     </div>
   </footer>
 
+  <div id="detailOverlay" class="overlay hidden">
+    <div class="dialog detailDialog">
+      <div class="detailHead">
+        <h3 id="detailTitle">会话详情</h3>
+        <button id="btnDetailClose" class="ghost" type="button">关闭</button>
+      </div>
+      <div id="detailMeta" class="meta"></div>
+      <div id="detailNav" class="detailNav hidden">
+        <button id="btnPrevTurn" class="ghost" type="button">← 更新</button>
+        <span id="detailTurnLabel" class="detailTurnLabel"></span>
+        <button id="btnNextTurn" class="ghost" type="button">更早 →</button>
+      </div>
+      <div id="detailHistory" class="detailHistory"></div>
+    </div>
+  </div>
+
   <div id="pairOverlay" class="overlay hidden">
     <div class="dialog">
       <h3>与电脑配对</h3>

@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs permission",
+            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs event PermissionRequest claude-code",
             "timeout": 600
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs notify",
+            "command": "node <ABSOLUTE_PATH>/approvals/hook-cli.mjs event Notification claude-code",
             "timeout": 10
           }
         ]

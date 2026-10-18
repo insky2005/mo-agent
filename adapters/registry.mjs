@@ -1,18 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { ClaudeCodeAdapter } from "./claude-code.mjs";
-import { AgentMonitor } from "./dsh-monitor.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-/** 读取声明式 Agent 档案。加一个 Agent = 加一个 json，不改代码。 */
+/** 读取声明式 Agent 档案。加一个 Agent = 加一个 json + 一个 adapter 模块。 */
 export function loadProfiles(dir) {
   const base = dir || path.join(here, "profiles");
   const profiles = [];
   let names = [];
   try {
-    names = fs.readdirSync(base).filter((n) => n.endsWith(".json"));
+    names = fs.readdirSync(base).filter((n) => n.endsWith(".json") && !n.startsWith("_"));
   } catch (error) {
     return profiles;
   }
@@ -26,42 +24,62 @@ export function loadProfiles(dir) {
   return profiles;
 }
 
-/** 按档案实例化已启用的适配器。 */
-export function createAdapters(options) {
+/**
+ * 按 profile 动态加载 adapter：
+ *  - profile.module 相对 adapters/ 目录；
+ *  - profile.export 指定具名导出，缺省用 default；
+ *  - capabilities.observe 含 native-api 但没有 DSH 依赖时跳过。
+ *
+ * 打包运行时会把 adapters/ 与 core/ 复制到 runtime，动态 import 从那里解析。
+ */
+export async function createAdapters(options) {
   const opts = options || {};
   const hub = opts.hub;
-  const log = opts.log;
+  const log = opts.log || (() => {});
   const config = opts.config || {};
-  const profiles = opts.profiles || loadProfiles();
-  const byId = new Map(profiles.map((p) => [p.id, p]));
+  const profilesDir = opts.profilesDir || path.join(here, "profiles");
+  const adaptersRoot = path.dirname(profilesDir);
+  const profiles = opts.profiles || loadProfiles(profilesDir);
   const adapters = [];
 
-  const dshProfile = byId.get("dsh");
-  if (dshProfile && dshProfile.enabled !== false && opts.dsh) {
-    const monitor = new AgentMonitor({
-      hub,
-      dsh: opts.dsh,
-      log,
-      pollMs: config.pollMs,
-      historySize: config.historySize,
-      activeWindowMs: config.activeWindowMs,
-      maxSessions: config.maxSessions,
-    });
-    monitor.name = "dsh";
-    adapters.push(monitor);
-  }
+  for (const profile of profiles) {
+    if (!profile || profile.enabled === false) continue;
+    const caps = profile.capabilities || {};
+    const observe = Array.isArray(caps.observe) ? caps.observe : [];
+    if (observe.includes("native-api") && !opts.dsh) continue;
+    if (!profile.module) {
+      log.warn("Agent " + (profile.id || "?") + " 缺少 module，已跳过");
+      continue;
+    }
 
-  const ccProfile = byId.get("claude-code");
-  if (ccProfile && ccProfile.enabled !== false) {
-    adapters.push(
-      new ClaudeCodeAdapter({
-        hub,
-        log,
-        profile: ccProfile,
-        pollMs: config.transcriptPollMs,
-        activeWindowMs: config.transcriptWindowMs || 72 * 3600 * 1000,
-      })
-    );
+    const target = path.resolve(adaptersRoot, profile.module);
+    let Ctor;
+    try {
+      const mod = await import(pathToFileURL(target).href);
+      Ctor = mod[profile.export || "default"] || mod.default;
+    } catch (error) {
+      log.warn("加载适配器失败 " + profile.id + ": " + (error && error.message ? error.message : error));
+      continue;
+    }
+    if (typeof Ctor !== "function") {
+      log.warn("适配器 " + profile.id + " 没有导出构造函数（export=" + (profile.export || "default") + "）");
+      continue;
+    }
+
+    const isTranscript = !!(profile.session && profile.session.kind === "jsonl-transcript");
+    const instance = new Ctor({
+      hub,
+      log,
+      profile,
+      config,
+      dsh: opts.dsh,
+      pollMs: isTranscript ? config.transcriptPollMs : config.pollMs,
+      activeWindowMs: isTranscript ? (config.transcriptWindowMs || 72 * 3600 * 1000) : config.activeWindowMs,
+      maxSessions: config.maxSessions,
+      historySize: config.historySize,
+    });
+    if (!instance.name) instance.name = profile.id;
+    adapters.push(instance);
   }
 
   return { adapters, profiles };

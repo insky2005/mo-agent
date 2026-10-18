@@ -152,8 +152,16 @@ export function createDictationRunner(options) {
     return sessions().find(function (item) { return item && item.id === id; }) || null;
   }
 
+  function canPrompt(session) {
+    if (!session) return false;
+    const caps = session.capabilities;
+    if (caps && Array.isArray(caps.control)) return caps.control.includes("prompt");
+    // 兼容没有 capabilities 的旧快照：Claude Code 仍然是只读。
+    return session.agent !== "claude-code";
+  }
+
   function activeSessions() {
-    return sessions().filter(function (item) { return item && item.id && byActive(item); });
+    return sessions().filter(function (item) { return item && item.id && byActive(item) && canPrompt(item); });
   }
 
   function titleOf(session) {
@@ -190,6 +198,14 @@ export function createDictationRunner(options) {
 
     if (focusId) {
       const found = findSession(focusId);
+      if (found && !canPrompt(found)) {
+        return {
+          ok: false,
+          action: "target-readonly",
+          reply: "当前关注的会话仅观测，不能发送指令。",
+          candidates: candidates(active),
+        };
+      }
       if (found) {
         return { ok: true, session: found, source: "focus", title: titleOf(found) };
       }

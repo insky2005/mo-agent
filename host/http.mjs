@@ -5,6 +5,7 @@ import os from "node:os";
 import { randomBytes } from "node:crypto";
 import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { handleLogRoutes } from "./logs-http.mjs";
+import { canControl } from "../core/contract.mjs";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -349,6 +350,31 @@ export function createMoAgentServer(options) {
         });
       }
 
+      if (pathname === "/api/session-history" && req.method === "GET") {
+        const sessionId = url.searchParams.get("sessionId");
+        if (!sessionId) return json(res, 400, { ok: false, error: "缺少 sessionId" });
+        const session = hub.get(sessionId);
+        if (!session) return json(res, 404, { ok: false, error: "会话不存在或已离线" });
+        const adapter = hub.adapters.get(session.agent);
+        if (!adapter || typeof adapter.history !== "function") {
+          return json(res, 501, { ok: false, error: (session.agentLabel || session.agent) + " 暂不支持历史记录" });
+        }
+        const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
+        try {
+          const history = await adapter.history(sessionId, { limit });
+          return json(res, 200, {
+            ok: true,
+            agent: session.agent,
+            agentLabel: session.agentLabel,
+            turns: history.turns || [],
+            truncated: !!history.truncated,
+            total: history.total || (history.turns ? history.turns.length : 0),
+          });
+        } catch (error) {
+          return json(res, 502, { ok: false, error: "读取历史失败: " + (error && error.message ? error.message : error) });
+        }
+      }
+
       if (pathname === "/api/events" && req.method === "GET") {
         const remote = (req.socket && req.socket.remoteAddress) || "?";
         const clientTag = String(req.headers["x-mo-agent-client"] || "").trim();
@@ -380,18 +406,28 @@ export function createMoAgentServer(options) {
       }
 
       if (pathname === "/api/prompt" && req.method === "POST") {
-        if (!dsh) return json(res, 503, { ok: false, error: "DSH 数据源不可用" });
         const body = await readBody(req);
         if (!body.sessionId || !String(body.text || "").trim()) return json(res, 400, { ok: false, error: "缺少 sessionId 或 text" });
+        const session = hub.get(body.sessionId);
+        if (!session) return json(res, 404, { ok: false, error: "会话不存在或已离线" });
+        if (!canControl(session, "prompt")) {
+          return json(res, 409, { ok: false, error: (session.agentLabel || session.agent || "该 Agent") + " 会话仅观测，不能发送指令" });
+        }
+        if (!dsh) return json(res, 503, { ok: false, error: "控制通道不可用" });
         const value = await dsh.prompt(body.sessionId, String(body.text), body.mode);
         log.info("已向会话 " + body.sessionId + " 发送指令");
         return json(res, 200, { ok: true, value });
       }
 
       if (pathname === "/api/cancel" && req.method === "POST") {
-        if (!dsh) return json(res, 503, { ok: false, error: "DSH 数据源不可用" });
         const body = await readBody(req);
         if (!body.sessionId) return json(res, 400, { ok: false, error: "缺少 sessionId" });
+        const session = hub.get(body.sessionId);
+        if (!session) return json(res, 404, { ok: false, error: "会话不存在或已离线" });
+        if (!canControl(session, "cancel")) {
+          return json(res, 409, { ok: false, error: (session.agentLabel || session.agent || "该 Agent") + " 会话仅观测，不能中断" });
+        }
+        if (!dsh) return json(res, 503, { ok: false, error: "控制通道不可用" });
         const value = await dsh.cancel(body.sessionId);
         log.info("已请求中断会话 " + body.sessionId);
         return json(res, 200, { ok: true, value });
@@ -440,6 +476,16 @@ export function createMoAgentServer(options) {
   };
 }
 
+/**
+ * SSE 帧格式化。
+ * 旧客户端用 named event（event: session.upsert），新客户端用统一信封（event: message）。
+ * 迁移期通过 ?envelope=1 协商，M4 再删除旧格式。
+ */
+export function formatSseEvent(event, envelope) {
+  const name = envelope ? "message" : event.type;
+  return "id: " + event.seq + "\nevent: " + name + "\ndata: " + JSON.stringify(event) + "\n\n";
+}
+
 function streamEvents(req, res, url, store, log, onOpen) {
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
@@ -455,18 +501,15 @@ function streamEvents(req, res, url, store, log, onOpen) {
   const hdr = Array.isArray(lastEventId) ? lastEventId[0] : lastEventId;
   const since = Number(hdr || url.searchParams.get("since") || 0) || 0;
 
-  const write = (event) => {
-    res.write("id: " + event.seq + "\n");
-    res.write("event: " + event.type + "\n");
-    res.write("data: " + JSON.stringify(event) + "\n\n");
-  };
+  const envelope = url.searchParams.get("envelope") === "1";
+  const write = (event) => res.write(formatSseEvent(event, envelope));
 
   const backlog = store.since(since);
   if (backlog.length) log.debug("SSE 重放 " + backlog.length + " 条事件 (since=" + since + ")");
   for (const event of backlog) {
-    // 通知是瞬时推送，不参与断线重放：否则每次重连/重开 App 都会把旧通知再弹一遍。
-    // 需要重放的是状态类事件（会话、待办）；待办在重放后自然会出现在界面上。
-    if (event.type === "notify") continue;
+    // 只重放状态类事件（会话、待办）。notify / run.* / notice 是一次性信号，
+    // 重放会让通知重复弹、或让旧一轮的完成事件看起来像刚发生。
+    if (event.type === "notify" || event.type === "notice" || event.type.startsWith("run.")) continue;
     write(event);
   }
 

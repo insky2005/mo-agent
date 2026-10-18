@@ -27,7 +27,7 @@ let abort = null;
 const events = [];
 function openSse() {
   abort = new AbortController();
-  fetch(BASE + "/api/events?since=0&token=x", { signal: abort.signal })
+  fetch(BASE + "/api/events?since=0&envelope=1&token=x", { signal: abort.signal })
     .then(async (res) => {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

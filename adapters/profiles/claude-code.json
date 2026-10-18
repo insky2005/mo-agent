@@ -2,16 +2,28 @@
   "id": "claude-code",
   "label": "Claude Code",
   "enabled": true,
+  "module": "./claude-code.mjs",
+  "export": "ClaudeCodeAdapter",
   "process": { "match": ["(^|/)claude($|\\s)"] },
   "session": {
     "kind": "jsonl-transcript",
     "root": "~/.claude/projects",
     "pattern": "*/*.jsonl"
   },
+  "capabilities": {
+    "observe": ["process", "transcript"],
+    "runEnd": "explicit",
+    "attention": "hook",
+    "approval": "allow",
+    "control": []
+  },
   "hooks": {
     "kind": "claude-code",
     "settingsFile": "~/.claude/settings.json",
-    "events": { "PermissionRequest": "approval", "Notification": "attention", "Stop": "completed" }
+    "events": {
+      "PermissionRequest": "approval.pending",
+      "Notification": "notice"
+    }
   },
   "approval": {
     "capability": "allow",

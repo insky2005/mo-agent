@@ -93,22 +93,22 @@
 
   function connect() {
     var since = Number(localStorage.getItem('mo-agent.seq') || 0) || 0;
-    var es = new EventSource(BASE + '/api/events?since=' + encodeURIComponent(since) + '&token=' + encodeURIComponent(token));
-    es.addEventListener('approval.pending', function (event) {
+    var es = new EventSource(BASE + '/api/events?since=' + encodeURIComponent(since)
+      + '&envelope=1&token=' + encodeURIComponent(token));
+    // 统一信封：按 evt.type 分发，不再逐个 addEventListener。
+    es.onmessage = function (event) {
       var evt;
       try { evt = JSON.parse(event.data); } catch (e) { return; }
       var p = evt.payload || {};
-      approvals.set(p.id, p);
-      render();
-      // 通知由 host 的 core/notify.mjs 统一发出（notify 事件），此处不再重复弹
-    });
-    es.addEventListener('approval.resolved', function (event) {
-      var evt;
-      try { evt = JSON.parse(event.data); } catch (e) { return; }
-      var p = evt.payload || {};
-      approvals.delete(p.id);
-      render();
-    });
+      if (evt.type === 'approval.pending') {
+        approvals.set(p.id, p);
+        render();
+        // 通知由 host 的 core/notify.mjs 统一发出（notify 事件），此处不再重复弹
+      } else if (evt.type === 'approval.resolved') {
+        approvals.delete(p.id);
+        render();
+      }
+    };
   }
 
   document.addEventListener('click', function (event) {

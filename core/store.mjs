@@ -9,7 +9,7 @@ export class EventStore {
 
   push(type, payload) {
     this.seq += 1;
-    const event = { seq: this.seq, at: Date.now(), type, payload };
+    const event = { v: 1, seq: this.seq, at: Date.now(), type, payload };
     this.buffer.push(event);
     if (this.buffer.length > this.limit) this.buffer.splice(0, this.buffer.length - this.limit);
     for (const listener of this.listeners) {

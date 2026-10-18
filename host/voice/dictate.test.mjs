@@ -289,3 +289,25 @@ test("口述：录音参数透传到 listen", async () => {
   assert.equal(h.listenInputs[0].maxSeconds, 30);
   assert.equal(h.listenInputs[0].timeoutMs, 45000);
 });
+test("resolveTarget：Claude 只读会话不能作为口述目标", () => {
+  const readOnly = session("cc", {
+    title: "Claude 会话",
+    agent: "claude-code",
+    capabilities: { observe: ["transcript"], control: [] },
+  });
+  const h = harness({ sessions: [readOnly], focus: "cc" });
+  const target = h.runner.resolveTarget();
+  assert.equal(target.ok, false);
+  assert.equal(target.action, "target-readonly");
+  assert.match(target.reply, /仅观测/);
+});
+
+test("resolveTarget：Claude 只读会话不参与自动选择", () => {
+  const dsh = session("a", { title: "DSH 会话", agent: "dsh", capabilities: { control: ["prompt", "cancel"] } });
+  const cc = session("cc", { title: "Claude 会话", agent: "claude-code", capabilities: { control: [] } });
+  const h = harness({ sessions: [dsh, cc], focus: null });
+  const target = h.runner.resolveTarget();
+  assert.equal(target.ok, true);
+  assert.equal(target.session.id, "a");
+  assert.equal(target.source, "single-active");
+});
