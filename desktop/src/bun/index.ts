@@ -94,6 +94,9 @@ let voiceOrb: BrowserWindow | null = null;
 let voiceOrbPending = false;
 let voiceOrbDragged = false;
 let voiceOrbDragStartFrame: { x: number; y: number; width: number; height: number } | null = null;
+let voiceOrbDragStartCursor: { x: number; y: number } | null = null;
+let voiceOrbDragTimer: ReturnType<typeof setInterval> | null = null;
+let voiceOrbDragSafety: ReturnType<typeof setTimeout> | null = null;
 const VOICE_ORB_SIZE = 136;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -396,6 +399,7 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   }
   if (voiceOrb) {
     const current = voiceOrb;
+    stopVoiceOrbDrag();
     voiceOrb = null;
     try { current.close(); } catch (error) { /* 已经销毁 */ }
   }
@@ -541,7 +545,54 @@ function voiceOrbFrame() {
   };
 }
 
+function stopVoiceOrbDrag(): void {
+  if (voiceOrbDragTimer) {
+    clearInterval(voiceOrbDragTimer);
+    voiceOrbDragTimer = null;
+  }
+  if (voiceOrbDragSafety) {
+    clearTimeout(voiceOrbDragSafety);
+    voiceOrbDragSafety = null;
+  }
+  voiceOrbDragStartFrame = null;
+  voiceOrbDragStartCursor = null;
+}
+
+function moveVoiceOrbWithCursor(): void {
+  const win = voiceOrb;
+  const start = voiceOrbDragStartFrame;
+  const cursorStart = voiceOrbDragStartCursor;
+  if (!win || !start || !cursorStart) {
+    stopVoiceOrbDrag();
+    return;
+  }
+  const cursor = Screen.getCursorScreenPoint();
+  const next = {
+    x: start.x + (cursor.x - cursorStart.x),
+    y: start.y + (cursor.y - cursorStart.y),
+    width: start.width,
+    height: start.height,
+  };
+  const display = displayForFrame(next);
+  const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+  const x = Math.min(Math.max(next.x, area.x), area.x + area.width - start.width);
+  const y = Math.min(Math.max(next.y, area.y), area.y + area.height - start.height);
+  try { win.setPosition(Math.round(x), Math.round(y)); } catch (error) { stopVoiceOrbDrag(); }
+}
+
+function startVoiceOrbDrag(): void {
+  if (!voiceOrb) return;
+  stopVoiceOrbDrag();
+  voiceOrbDragStartFrame = voiceOrb.getFrame();
+  voiceOrbDragStartCursor = Screen.getCursorScreenPoint();
+  voiceOrbDragged = true;
+  // 用系统光标位置驱动，避免 webview 的 screenX 在窗口移动后产生反馈跳动。
+  voiceOrbDragTimer = setInterval(moveVoiceOrbWithCursor, 16);
+  voiceOrbDragSafety = setTimeout(stopVoiceOrbDrag, 30000);
+}
+
 function hideVoiceOrb(): void {
+  stopVoiceOrbDrag();
   if (!voiceOrb) return;
   try { voiceOrb.hide(); } catch (error) { /* 已关闭 */ }
 }
@@ -620,32 +671,16 @@ async function showVoiceOrb(): Promise<void> {
             return;
           }
           if (message.type === "orb-drag-start") {
-            voiceOrbDragStartFrame = win.getFrame();
-            voiceOrbDragged = true;
-            return;
-          }
-          if (message.type === "orb-drag-move" && voiceOrbDragStartFrame) {
-            const start = voiceOrbDragStartFrame;
-            const dx = Number(message.dx) || 0;
-            const dy = Number(message.dy) || 0;
-            const display = displayForFrame({
-              x: start.x + dx,
-              y: start.y + dy,
-              width: start.width,
-              height: start.height,
-            });
-            const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
-            const x = Math.min(Math.max(start.x + dx, area.x), area.x + area.width - start.width);
-            const y = Math.min(Math.max(start.y + dy, area.y), area.y + area.height - start.height);
-            try { win.setPosition(Math.round(x), Math.round(y)); } catch (error) { /* 忽略 */ }
+            startVoiceOrbDrag();
             return;
           }
           if (message.type === "orb-drag-end") {
-            voiceOrbDragStartFrame = null;
+            stopVoiceOrbDrag();
           }
         });
       }
       win.on("close", () => {
+        stopVoiceOrbDrag();
         if (voiceOrb === win) voiceOrb = null;
       });
       // 透明窗口先预热一帧，避免首次出现时闪一下不透明底色。

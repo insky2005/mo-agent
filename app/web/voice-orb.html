@@ -93,23 +93,21 @@
     if (event.button !== 0) return;
     dragging = true;
     moved = false;
-    startX = event.screenX;
-    startY = event.screenY;
+    startX = event.clientX;
+    startY = event.clientY;
     pointerId = event.pointerId;
     try { document.body.setPointerCapture(event.pointerId); } catch (error) { /* 忽略 */ }
     event.preventDefault();
   });
 
   document.body.addEventListener("pointermove", function (event) {
-    if (!dragging) return;
-    const dx = event.screenX - startX;
-    const dy = event.screenY - startY;
-    if (!moved) {
-      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
-      moved = true;
-      post({ type: "orb-drag-start" });
-    }
-    post({ type: "orb-drag-move", dx: dx, dy: dy });
+    if (!dragging || moved) return;
+    // 只负责判断“这是拖动还是点击”；真正的位移由桌面端按系统光标位置完成。
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+    moved = true;
+    post({ type: "orb-drag-start" });
     event.preventDefault();
   });
 
