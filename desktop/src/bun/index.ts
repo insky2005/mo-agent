@@ -1,4 +1,5 @@
 import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut } from "electrobun/main";
+import { dlopen, FFIType } from "bun:ffi";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -111,6 +112,9 @@ const VOICE_OVERLAY_SHORTCUT = process.env.MO_AGENT_VOICE_OVERLAY_SHORTCUT || "C
 // Electrobun 的原生回调会把 accelerator 转成小写，注册表的 key 必须同样小写，否则回调找不到 handler。
 const VOICE_OVERLAY_SHORTCUT_KEY = VOICE_OVERLAY_SHORTCUT.toLowerCase();
 let voiceOverlayShortcutRegistered = false;
+let lastOverlayShortcutAt = 0;
+let accessibilityChecked = false;
+let accessibilityTrusted: boolean | null = null;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -159,6 +163,22 @@ function rotateLog(file: string): void {
 }
 
 /** 桌面壳自己的日志：与 host.log 分开写，5MB 轮转，最多保留 3 份。 */
+/** macOS 的全局按键监听需要辅助功能权限；没有权限时只在前台生效。 */
+function checkAccessibilityTrust(): boolean | null {
+  if (accessibilityChecked) return accessibilityTrusted;
+  accessibilityChecked = true;
+  try {
+    const lib = dlopen("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices", {
+      AXIsProcessTrusted: { args: [], returns: FFIType.bool },
+    });
+    accessibilityTrusted = Boolean(lib.symbols.AXIsProcessTrusted());
+  } catch (error) {
+    logLine("检查辅助功能权限失败: " + error);
+    accessibilityTrusted = null;
+  }
+  return accessibilityTrusted;
+}
+
 function logLine(text: string): void {
   try {
     mkdirSync(LOG_DIR, { recursive: true });
@@ -432,6 +452,7 @@ function trayMenu(): any[] {
   const voiceMenu: any[] = [
     { type: "normal", label: "启用语音", action: "voice", checked: voice },
     { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
+    { type: "normal", label: "辅助功能权限设置…", action: "accessibility-settings" },
     { type: "divider" },
     { type: "normal", label: "语音命令", action: "voice-command" },
     { type: "normal", label: "语音口述任务", action: "dictate" },
@@ -478,6 +499,14 @@ function openMicSettings(): void {
     Utils.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
   } catch (error) {
     logLine("打开麦克风设置失败: " + error);
+  }
+}
+
+function openAccessibilitySettings(): void {
+  try {
+    Utils.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  } catch (error) {
+    logLine("打开辅助功能设置失败: " + error);
   }
 }
 
@@ -810,12 +839,22 @@ function syncVoiceOverlayShortcut(): void {
   const enabled = readVoiceEnabled();
   if (enabled && !voiceOverlayShortcutRegistered) {
     const ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT_KEY, () => {
+      const now = Date.now();
+      // 全局监控 + 本地监控可能对同一次按键各回调一次，去重避免“隐藏又显示”。
+      if (now - lastOverlayShortcutAt < 300) return;
+      lastOverlayShortcutAt = now;
       logLine("全局快捷键: 切换语音浮层");
       toggleVoiceOverlay().catch((error) => logLine("切换语音浮层失败: " + error));
     });
     voiceOverlayShortcutRegistered = ok;
-    if (ok) logLine("语音浮层快捷键已注册: " + voiceOverlayShortcutLabel());
-    else logLine("语音浮层快捷键注册失败（可能被其他 App 占用）: " + VOICE_OVERLAY_SHORTCUT);
+    if (ok) {
+      logLine("语音浮层快捷键已注册: " + voiceOverlayShortcutLabel());
+      if (checkAccessibilityTrust() === false) {
+        logLine("语音浮层快捷键未获辅助功能权限：只在 mo-agent 处于前台时生效");
+      }
+    } else {
+      logLine("语音浮层快捷键注册失败（可能被其他 App 占用）: " + VOICE_OVERLAY_SHORTCUT);
+    }
   } else if (!enabled && voiceOverlayShortcutRegistered) {
     GlobalShortcut.unregister(VOICE_OVERLAY_SHORTCUT_KEY);
     voiceOverlayShortcutRegistered = false;
@@ -1178,6 +1217,7 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "voice-test") await runVoiceTest();
   else if (action === "toggle-overlay") await toggleVoiceOverlay();
   else if (action === "mic-settings") openMicSettings();
+  else if (action === "accessibility-settings") openAccessibilitySettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
   else if (action === "quit") {

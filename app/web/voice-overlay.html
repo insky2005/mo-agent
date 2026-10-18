@@ -33,7 +33,10 @@
     overflow: hidden;
     -webkit-user-select: none;
     user-select: none;
+    opacity: 1;
+    transition: opacity 180ms ease;
   }
+  body.unfocused .panel { opacity: 0.52; }
   /* 整条顶栏（含左右边缘与上方内边距）都可拖动，不再只有文字中间一小块。 */
   .head {
     box-sizing: border-box;
@@ -171,6 +174,14 @@
   // 拖动浮层时不要顺带选中文字或拖出图片/链接。
   document.addEventListener("selectstart", function (event) { event.preventDefault(); });
   document.addEventListener("dragstart", function (event) { event.preventDefault(); });
+
+  // 与 Logo 一致：失去窗口焦点时降低透明度，重新获得焦点后恢复。
+  window.addEventListener("focus", function () {
+    document.body.classList.remove("unfocused");
+  });
+  window.addEventListener("blur", function () {
+    document.body.classList.add("unfocused");
+  });
 
   // 鼠标移入时请求桌面端激活窗口，键盘焦点不会留在后面的应用里。
   let lastFocusRequest = 0;
