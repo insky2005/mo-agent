@@ -23,17 +23,27 @@
     if (liveToken) localStorage.setItem(LS.token, liveToken);
     var liveShell = liveParams.get("shell");
     if (liveShell) { try { sessionStorage.setItem("mo-agent.shell", liveShell); } catch (error) { /* 忽略 */ } }
-    // 实时界面不使用 Service Worker；但早期版本可能在这里注册过，
-    // 残留的 SW 会拦截请求、可能返回旧内容或抛错 —— 进实时界面就清掉。
-    try {
-      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-        navigator.serviceWorker.getRegistrations().then(function (list) {
-          list.forEach(function (reg) { reg.unregister().catch(function () { /* 忽略 */ }); });
-        }).catch(function () { /* 忽略 */ });
-      }
-    } catch (error) { /* 忽略 */ }
   }
   try { SHELL_ORIGIN = sessionStorage.getItem("mo-agent.shell") || ""; } catch (error) { SHELL_ORIGIN = ""; }
+
+  // 本机壳层资源随 APK 更新，不需要 Service Worker；早期版本注册过的 SW
+  // 会缓存旧 app.js，必须注销并清掉缓存，否则界面会一直停在旧版。
+  function cleanupServiceWorker() {
+    try {
+      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) return;
+      navigator.serviceWorker.getRegistrations().then(function (list) {
+        if (!list.length) return;
+        Promise.all(list.map(function (reg) {
+          return reg.unregister().catch(function () { /* 忽略 */ });
+        })).then(function () {
+          if (!window.caches || !caches.keys) return;
+          caches.keys().then(function (keys) {
+            keys.forEach(function (key) { caches.delete(key).catch(function () { /* 忽略 */ }); });
+          }).catch(function () { /* 忽略 */ });
+        });
+      }).catch(function () { /* 忽略 */ });
+    } catch (error) { /* 忽略 */ }
+  }
 
   var BASE = localStorage.getItem("mo-agent.base") || "";
   // Capacitor 外壳里页面来自 https://localhost；浏览器打开时页面就是电脑本身
@@ -1022,10 +1032,7 @@
   dom.btnSpeak.textContent = "朗读:" + (state.speak ? "开" : "关");
   dom.onlyActive.checked = state.onlyActive;
 
-  // 实时界面不注册 SW：避免 SW 缓存挡住从电脑拉下来的最新资源
-  if (!LIVE && "serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(function () { /* 忽略 */ });
-  }
+  cleanupServiceWorker();
 
   // 连接状态栏要在「连接失败」时也能看见——不能只挂在 render() 里
   renderLink();

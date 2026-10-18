@@ -26,6 +26,12 @@ printf '{"versionCode":%d,"versionName":%s,"builtAt":"%s"}\n' "$NEXT" "$NAME" "$
 echo "[build] versionCode $CUR -> $NEXT  versionName $NAME"
 
 ( cd app && npx cap sync android )
+# 每次 versionCode 变化都改 SW 缓存名，旧 APK 的 SW 才会安装新版本并重新缓存资源。
+SW="app/android/app/src/main/assets/public/sw.js"
+if [ -f "$SW" ]; then
+  sed -i "" -E "s/mo-agent-v[0-9]+/mo-agent-v$NEXT/" "$SW"
+  echo "[build] SW cache -> mo-agent-v$NEXT"
+fi
 ( cd app/android && ./gradlew assembleDebug --no-daemon )
 
 APK="app/android/app/build/outputs/apk/debug/app-debug.apk"
