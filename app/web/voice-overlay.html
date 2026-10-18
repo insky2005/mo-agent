@@ -172,6 +172,20 @@
   document.addEventListener("selectstart", function (event) { event.preventDefault(); });
   document.addEventListener("dragstart", function (event) { event.preventDefault(); });
 
+  // 鼠标移入时请求桌面端激活窗口，键盘焦点不会留在后面的应用里。
+  let lastFocusRequest = 0;
+  function requestOverlayFocus() {
+    const now = Date.now();
+    if (now - lastFocusRequest < 400) return;
+    lastFocusRequest = now;
+    const sendToHost = window.__electrobunSendToHost;
+    if (typeof sendToHost === "function") {
+      try { sendToHost({ type: "overlay-focus" }); } catch (error) { /* 忽略 */ }
+    }
+  }
+  document.addEventListener("mouseenter", requestOverlayFocus);
+  window.addEventListener("mouseenter", requestOverlayFocus);
+
   const params = new URLSearchParams(location.search);
   const token = params.get("token") || "";
   const els = {

@@ -97,6 +97,8 @@ let voiceOverlaySnapAnimating = false;
 const VOICE_OVERLAY_SNAP_MARGIN = 18;
 const VOICE_OVERLAY_SNAP_DELAY_MS = 140;
 const VOICE_OVERLAY_SHORTCUT = process.env.MO_AGENT_VOICE_OVERLAY_SHORTCUT || "CommandOrControl+Shift+Space";
+// Electrobun 的原生回调会把 accelerator 转成小写，注册表的 key 必须同样小写，否则回调找不到 handler。
+const VOICE_OVERLAY_SHORTCUT_KEY = VOICE_OVERLAY_SHORTCUT.toLowerCase();
 let voiceOverlayShortcutRegistered = false;
 
 /**
@@ -532,14 +534,15 @@ async function toggleVoiceOverlay(): Promise<void> {
 function syncVoiceOverlayShortcut(): void {
   const enabled = readVoiceEnabled();
   if (enabled && !voiceOverlayShortcutRegistered) {
-    const ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT, () => {
+    const ok = GlobalShortcut.register(VOICE_OVERLAY_SHORTCUT_KEY, () => {
+      logLine("全局快捷键: 切换语音浮层");
       toggleVoiceOverlay().catch((error) => logLine("切换语音浮层失败: " + error));
     });
     voiceOverlayShortcutRegistered = ok;
     if (ok) logLine("语音浮层快捷键已注册: " + voiceOverlayShortcutLabel());
     else logLine("语音浮层快捷键注册失败（可能被其他 App 占用）: " + VOICE_OVERLAY_SHORTCUT);
   } else if (!enabled && voiceOverlayShortcutRegistered) {
-    GlobalShortcut.unregister(VOICE_OVERLAY_SHORTCUT);
+    GlobalShortcut.unregister(VOICE_OVERLAY_SHORTCUT_KEY);
     voiceOverlayShortcutRegistered = false;
     logLine("语音浮层快捷键已释放");
   }
@@ -691,7 +694,8 @@ async function ensureVoiceOverlay(): Promise<boolean> {
         FullScreen: false,
         FullSizeContentView: true,
         UtilityWindow: true,
-        NonactivatingPanel: true,
+        // 不使用 NonactivatingPanel：显示/鼠标移入时需要能真正获取焦点。
+        NonactivatingPanel: false,
       },
     });
     voiceOverlay = win;
@@ -709,8 +713,12 @@ async function ensureVoiceOverlay(): Promise<boolean> {
     if (webview && typeof webview.on === "function") {
       webview.on("host-message", (event: unknown) => {
         const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
-        if (detail && typeof detail === "object" && (detail as { type?: string }).type === "overlay-hide") {
-          hideVoiceOverlay();
+        if (!detail || typeof detail !== "object") return;
+        const type = (detail as { type?: string }).type;
+        if (type === "overlay-hide") hideVoiceOverlay();
+        else if (type === "overlay-focus") {
+          // 鼠标移入浮层时主动拿焦点，键盘/快捷键操作不再落到后面的窗口。
+          try { win.activate(); } catch (error) { logLine("语音浮层获取焦点失败: " + error); }
         }
       });
     }
@@ -738,7 +746,8 @@ async function ensureVoiceOverlay(): Promise<boolean> {
   }
 
   try {
-    voiceOverlay.showInactive();
+    // show() 会激活窗口并获取焦点；showInactive() 只显示、不抢焦点。
+    voiceOverlay.show();
   } catch (error) {
     logLine("显示语音浮层失败: " + error);
     voiceOverlay = null;
