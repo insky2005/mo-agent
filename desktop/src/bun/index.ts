@@ -118,11 +118,15 @@ let accessibilityTrusted: boolean | null = null;
 let carbonTarget = 0;
 let carbonEventTypes: Buffer | null = null;
 let carbonEventHandler: JSCallback | null = null;
+let carbonKeyEventTypes: Buffer | null = null;
+let carbonKeyHandler: JSCallback | null = null;
 let carbonHotKeyRef: Buffer | null = null;
 let carbonHotKeyRegistered = false;
+let panelEscPending = false;
 let carbonLib: { symbols: {
   GetApplicationEventTarget: () => number;
   InstallEventHandler: (target: number, handler: number, count: number, types: unknown, userData: unknown, out: unknown) => number;
+  GetEventParameter: (event: unknown, name: number, type: number, outType: unknown, size: number, outSize: unknown, outData: unknown) => number;
   RegisterEventHotKey: (keyCode: number, modifiers: number, id: bigint, target: number, options: number, out: unknown) => number;
   UnregisterEventHotKey: (ref: number) => number;
 } } | null = null;
@@ -911,6 +915,10 @@ function ensureCarbonHotkey(): boolean {
         args: [FFIType.ptr, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr, FFIType.ptr],
         returns: FFIType.i32,
       },
+      GetEventParameter: {
+        args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr],
+        returns: FFIType.i32,
+      },
       RegisterEventHotKey: {
         args: [FFIType.u32, FFIType.u32, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr],
         returns: FFIType.i32,
@@ -938,6 +946,30 @@ function ensureCarbonHotkey(): boolean {
       carbonTarget = 0;
       return false;
     }
+
+    // 额外的窗口级 Esc 兜底：Carbon 原始按键事件不依赖 WebView 是否第一响应者。
+    carbonKeyHandler = new JSCallback(function (_callRef, eventRef) {
+      try {
+        const keyCode = Buffer.alloc(4);
+        const result = carbonLib?.symbols.GetEventParameter(
+          eventRef, 0x6b636f64, 0x6c6f6e67, null, 4, null, ptr(keyCode),
+        );
+        if (result === 0 && keyCode.readUInt32LE(0) === 53) panelEscPending = true;
+      } catch (error) {
+        /* 解析失败不影响其他按键 */
+      }
+      return 0;
+    }, { args: [FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: FFIType.i32, threadsafe: true });
+    const keyEventTypes = Buffer.alloc(8);
+    keyEventTypes.writeUInt32LE(0x6b657962, 0); // kEventClassKeyboard
+    keyEventTypes.writeUInt32LE(1, 4); // kEventRawKeyDown
+    carbonKeyEventTypes = keyEventTypes;
+    const keyHandlerRef = Buffer.alloc(8);
+    const keyStatus = carbonLib.symbols.InstallEventHandler(
+      carbonTarget, carbonKeyHandler.ptr, 1, ptr(carbonKeyEventTypes), null, ptr(keyHandlerRef),
+    );
+    if (keyStatus !== 0) logLine("Carbon Esc 按键处理器安装失败: " + keyStatus);
+
     return true;
   } catch (error) {
     logLine("Carbon 快捷键初始化失败: " + error);
@@ -1348,12 +1380,19 @@ async function runVoiceTest(): Promise<void> {
 const tray = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
 
 tray.setMenu(trayMenu());
+ensureCarbonHotkey();
 syncVoiceOverlayShortcut();
 // 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
 const focusPoll = setInterval(focusVisibleOverlayOnCursorEnter, 40);
 if (typeof focusPoll.unref === "function") focusPoll.unref();
 // Carbon 回调只置标记；在 JS 线程里统一处理，避免跨线程直接调窗口 API。
 const shortcutPoll = setInterval(function () {
+  if (panelEscPending) {
+    panelEscPending = false;
+    if (panel) {
+      try { panel.close(); } catch (error) { /* 已经关闭 */ }
+    }
+  }
   if (!overlayShortcutPending) return;
   overlayShortcutPending = false;
   triggerOverlayShortcut();
