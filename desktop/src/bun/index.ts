@@ -782,7 +782,8 @@ function placeVoiceOverlayAtOrb(): void {
     voiceOverlayFrame = { x: Math.round(x), y: Math.round(y), width: VOICE_OVERLAY_WIDTH, height: VOICE_OVERLAY_HEIGHT };
     saveVoiceOverlayFrame(voiceOverlayFrame);
     if (voiceOverlay) {
-      try { voiceOverlay.setFrame(voiceOverlayFrame.x, voiceOverlayFrame.y, VOICE_OVERLAY_WIDTH, VOICE_OVERLAY_HEIGHT); } catch (error) { /* 忽略 */ }
+      // 用 setPosition 移动已存在的窗口；setFrame 在隐藏的浮动面板上不一定生效。
+      try { voiceOverlay.setPosition(voiceOverlayFrame.x, voiceOverlayFrame.y); } catch (error) { /* 忽略 */ }
     }
   } catch (error) {
     logLine("按 Logo 定位浮层失败: " + error);
@@ -1252,6 +1253,11 @@ async function ensureVoiceOverlay(): Promise<boolean> {
     voiceOverlay = null;
   }
 
+  if (voiceOverlay && voiceOverlayFrame) {
+    // Logo 拖动后展开：确保复用旧窗口时也移动到最新位置。
+    try { voiceOverlay.setPosition(voiceOverlayFrame.x, voiceOverlayFrame.y); } catch (error) { /* 忽略 */ }
+  }
+
   if (!voiceOverlay) {
     // 第一次打开不传 x/y，交给系统居中；之后用上次保存的位置。
     const frame: { x?: number; y?: number; width: number; height: number } = voiceOverlayFrame
@@ -1302,8 +1308,11 @@ async function ensureVoiceOverlay(): Promise<boolean> {
         }
       });
     }
-    // 拖动期间事件很密：停下 160ms 再吸附，避免和系统拖动互相打架。
-    win.on("move", () => { scheduleVoiceOverlaySnap(); });
+    // 拖动期间事件很密：停下 140ms 再吸附；同时记录当前位置，供下次显示/Logo 定位使用。
+    win.on("move", () => {
+      try { voiceOverlayFrame = win.getFrame(); } catch (error) { /* 忽略 */ }
+      scheduleVoiceOverlaySnap();
+    });
     win.on("close", () => {
       cancelVoiceOverlaySnap();
       try {
