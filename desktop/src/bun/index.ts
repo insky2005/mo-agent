@@ -93,11 +93,11 @@ let voiceOverlayVisible = false;
 let voiceOrb: BrowserWindow | null = null;
 let voiceOrbPending = false;
 let voiceOrbDragged = false;
-let voiceOrbDragStartFrame: { x: number; y: number; width: number; height: number } | null = null;
-let voiceOrbDragStartCursor: { x: number; y: number } | null = null;
+let voiceOrbDragPos: { x: number; y: number } | null = null;
+let voiceOrbDragLastCursor: { x: number; y: number } | null = null;
 let voiceOrbDragTimer: ReturnType<typeof setInterval> | null = null;
 let voiceOrbDragSafety: ReturnType<typeof setTimeout> | null = null;
-const VOICE_ORB_SIZE = 136;
+const VOICE_ORB_SIZE = 100;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimating = false;
@@ -554,39 +554,51 @@ function stopVoiceOrbDrag(): void {
     clearTimeout(voiceOrbDragSafety);
     voiceOrbDragSafety = null;
   }
-  voiceOrbDragStartFrame = null;
-  voiceOrbDragStartCursor = null;
+  voiceOrbDragPos = null;
+  voiceOrbDragLastCursor = null;
 }
 
 function moveVoiceOrbWithCursor(): void {
   const win = voiceOrb;
-  const start = voiceOrbDragStartFrame;
-  const cursorStart = voiceOrbDragStartCursor;
-  if (!win || !start || !cursorStart) {
+  if (!win || !voiceOrbDragPos) {
     stopVoiceOrbDrag();
     return;
   }
   const cursor = Screen.getCursorScreenPoint();
-  const next = {
-    x: start.x + (cursor.x - cursorStart.x),
-    y: start.y + (cursor.y - cursorStart.y),
-    width: start.width,
-    height: start.height,
-  };
+  // 第一帧只记录基准，不移动：避免初始光标读数偏差被当成一次大位移。
+  if (!voiceOrbDragLastCursor) {
+    voiceOrbDragLastCursor = { x: cursor.x, y: cursor.y };
+    return;
+  }
+  const dx = cursor.x - voiceOrbDragLastCursor.x;
+  const dy = cursor.y - voiceOrbDragLastCursor.y;
+  voiceOrbDragLastCursor = { x: cursor.x, y: cursor.y };
+  if (!dx && !dy) return;
+
+  const width = VOICE_ORB_SIZE;
+  const height = VOICE_ORB_SIZE;
+  const next = { x: voiceOrbDragPos.x + dx, y: voiceOrbDragPos.y + dy, width, height };
   const display = displayForFrame(next);
   const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
-  const x = Math.min(Math.max(next.x, area.x), area.x + area.width - start.width);
-  const y = Math.min(Math.max(next.y, area.y), area.y + area.height - start.height);
-  try { win.setPosition(Math.round(x), Math.round(y)); } catch (error) { stopVoiceOrbDrag(); }
+  voiceOrbDragPos = {
+    x: Math.min(Math.max(next.x, area.x), area.x + area.width - width),
+    y: Math.min(Math.max(next.y, area.y), area.y + area.height - height),
+  };
+  try {
+    win.setPosition(Math.round(voiceOrbDragPos.x), Math.round(voiceOrbDragPos.y));
+  } catch (error) {
+    stopVoiceOrbDrag();
+  }
 }
 
 function startVoiceOrbDrag(): void {
   if (!voiceOrb) return;
   stopVoiceOrbDrag();
-  voiceOrbDragStartFrame = voiceOrb.getFrame();
-  voiceOrbDragStartCursor = Screen.getCursorScreenPoint();
+  const frame = voiceOrb.getFrame();
+  voiceOrbDragPos = { x: frame.x, y: frame.y };
+  voiceOrbDragLastCursor = null;
   voiceOrbDragged = true;
-  // 用系统光标位置驱动，避免 webview 的 screenX 在窗口移动后产生反馈跳动。
+  // 用系统光标位置的增量驱动，避免绝对坐标或窗口反馈造成跳变。
   voiceOrbDragTimer = setInterval(moveVoiceOrbWithCursor, 16);
   voiceOrbDragSafety = setTimeout(stopVoiceOrbDrag, 30000);
 }
