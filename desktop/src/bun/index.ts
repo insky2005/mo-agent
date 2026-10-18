@@ -92,8 +92,7 @@ let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
 let voiceOrb: BrowserWindow | null = null;
 let voiceOrbPending = false;
-const VOICE_ORB_SIZE = 112;
-const VOICE_ORB_MARGIN = 20;
+const VOICE_ORB_SIZE = 136;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimating = false;
@@ -518,12 +517,23 @@ function hideVoiceOverlay(showOrb: boolean = true): void {
   if (showOrb) void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
 }
 
+/** Logo 与浮层窗口的右上角对齐，而不是固定在屏幕右下角。 */
 function voiceOrbFrame() {
-  const display = Screen.getPrimaryDisplay();
+  const base = voiceOverlayFrame || readVoiceOverlayFrame() || {
+    x: 0, y: 0, width: 392, height: 400,
+  };
+  const display = displayForFrame({
+    x: base.x,
+    y: base.y,
+    width: VOICE_ORB_SIZE,
+    height: VOICE_ORB_SIZE,
+  });
   const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+  const maxX = area.x + area.width - VOICE_ORB_SIZE;
+  const maxY = area.y + area.height - VOICE_ORB_SIZE;
   return {
-    x: Math.round(area.x + area.width - VOICE_ORB_SIZE - VOICE_ORB_MARGIN),
-    y: Math.round(area.y + area.height - VOICE_ORB_SIZE - VOICE_ORB_MARGIN),
+    x: Math.round(Math.min(Math.max(base.x + base.width - VOICE_ORB_SIZE, area.x), maxX)),
+    y: Math.round(Math.min(Math.max(base.y, area.y), maxY)),
     width: VOICE_ORB_SIZE,
     height: VOICE_ORB_SIZE,
   };

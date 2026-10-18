@@ -14,10 +14,11 @@
   body {
     display: flex; align-items: center; justify-content: center;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    cursor: pointer;
   }
   .orb {
     box-sizing: border-box;
-    width: 72px; height: 72px; border-radius: 50%;
+    width: 82px; height: 82px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     background: radial-gradient(circle at 32% 24%, rgba(79, 140, 255, 0.34), rgba(11, 16, 32, 0.97) 62%);
     border: 1px solid rgba(79, 140, 255, 0.62);
@@ -29,7 +30,7 @@
   .orb:hover { border-color: rgba(53, 209, 154, 0.8); transform: scale(1.045); }
   .orb:active { transform: scale(0.96); }
   .orb img {
-    width: 46px; height: 46px; border-radius: 50%;
+    width: 52px; height: 52px; border-radius: 50%;
     pointer-events: none; display: block;
   }
   @keyframes orb-breathe {
@@ -59,26 +60,17 @@
   const orb = document.getElementById("orb");
 
   function openOverlay() {
-    if (orb) {
-      orb.style.pointerEvents = "none";
-      orb.style.opacity = "0.6";
-    }
     const sendToHost = window.__electrobunSendToHost;
-    if (typeof sendToHost === "function") {
-      try {
-        sendToHost({ type: "overlay-show" });
-        return;
-      } catch (error) {
-        /* 回退到重新加载，保持可点击 */
-      }
-    }
-    if (orb) {
-      orb.style.pointerEvents = "";
-      orb.style.opacity = "";
+    if (typeof sendToHost !== "function") return;
+    try {
+      sendToHost({ type: "overlay-show" });
+    } catch (error) {
+      /* 桌面端没起来时保持可点击，下一次再试 */
     }
   }
 
-  orb.addEventListener("click", openOverlay);
+  // 整个透明窗口都是点击区，不必精确点中圆形本身。
+  document.body.addEventListener("click", openOverlay);
   orb.addEventListener("keydown", function (event) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
