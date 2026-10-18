@@ -12,7 +12,8 @@
     -webkit-user-select: none; user-select: none;
   }
   body {
-    display: flex; align-items: center; justify-content: center;
+    /* 圆形贴住窗口右上角：窗口右上角就是浮层右上角，视觉上不再留内边距。 */
+    display: flex; align-items: flex-start; justify-content: flex-end;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
     cursor: pointer;
   }
@@ -27,8 +28,8 @@
     animation: orb-breathe 2.8s ease-in-out infinite;
     transition: transform 120ms ease, border-color 120ms ease;
   }
-  .orb:hover { border-color: rgba(53, 209, 154, 0.8); transform: scale(1.045); }
-  .orb:active { transform: scale(0.96); }
+  .orb:hover { border-color: rgba(53, 209, 154, 0.8); }
+  .orb:active { transform: scale(0.95); }
   .orb img {
     width: 52px; height: 52px; border-radius: 50%;
     pointer-events: none; display: block;
@@ -36,17 +37,13 @@
   @keyframes orb-breathe {
     0%, 100% {
       box-shadow:
-        0 0 0 1px rgba(79, 140, 255, 0.35),
-        0 0 14px rgba(79, 140, 255, 0.30),
-        0 0 22px rgba(53, 209, 154, 0.08);
-      transform: scale(1);
+        inset 0 0 0 1px rgba(79, 140, 255, 0.38),
+        inset 0 0 14px rgba(79, 140, 255, 0.20);
     }
     50% {
       box-shadow:
-        0 0 0 3px rgba(79, 140, 255, 0.52),
-        0 0 20px rgba(79, 140, 255, 0.46),
-        0 0 28px rgba(53, 209, 154, 0.20);
-      transform: scale(1.035);
+        inset 0 0 0 3px rgba(79, 140, 255, 0.58),
+        inset 0 0 22px rgba(53, 209, 154, 0.24);
     }
   }
 </style>
