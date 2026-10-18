@@ -92,6 +92,8 @@ let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
 let voiceOrb: BrowserWindow | null = null;
 let voiceOrbPending = false;
+let voiceOrbDragged = false;
+let voiceOrbDragStartFrame: { x: number; y: number; width: number; height: number } | null = null;
 const VOICE_ORB_SIZE = 136;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -544,6 +546,31 @@ function hideVoiceOrb(): void {
   try { voiceOrb.hide(); } catch (error) { /* 已关闭 */ }
 }
 
+/** 从 Logo 展开时，让浮层右上角对齐 Logo 的右上角；拖过 Logo 也会带到浮层。 */
+function placeVoiceOverlayAtOrb(): void {
+  if (!voiceOrb) return;
+  try {
+    const orbFrame = voiceOrb.getFrame();
+    const display = displayForFrame(orbFrame);
+    const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+    const x = Math.min(
+      Math.max(orbFrame.x + orbFrame.width - VOICE_OVERLAY_WIDTH, area.x),
+      area.x + area.width - VOICE_OVERLAY_WIDTH,
+    );
+    const y = Math.min(
+      Math.max(orbFrame.y, area.y),
+      area.y + area.height - VOICE_OVERLAY_HEIGHT,
+    );
+    voiceOverlayFrame = { x: Math.round(x), y: Math.round(y), width: VOICE_OVERLAY_WIDTH, height: VOICE_OVERLAY_HEIGHT };
+    saveVoiceOverlayFrame(voiceOverlayFrame);
+    if (voiceOverlay) {
+      try { voiceOverlay.setFrame(voiceOverlayFrame.x, voiceOverlayFrame.y, VOICE_OVERLAY_WIDTH, VOICE_OVERLAY_HEIGHT); } catch (error) { /* 忽略 */ }
+    }
+  } catch (error) {
+    logLine("按 Logo 定位浮层失败: " + error);
+  }
+}
+
 /** 浮层收起后留下一个可点击的圆形 Logo；再点它恢复浮层。 */
 async function showVoiceOrb(): Promise<void> {
   if (voiceOrbPending) return;
@@ -569,7 +596,7 @@ async function showVoiceOrb(): Promise<void> {
           FullScreen: false,
           FullSizeContentView: true,
           UtilityWindow: true,
-          NonactivatingPanel: true,
+          NonactivatingPanel: false,
         },
       });
       voiceOrb = win;
@@ -585,8 +612,36 @@ async function showVoiceOrb(): Promise<void> {
       if (webview && typeof webview.on === "function") {
         webview.on("host-message", (event: unknown) => {
           const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
-          if (detail && typeof detail === "object" && (detail as { type?: string }).type === "overlay-show") {
+          if (!detail || typeof detail !== "object") return;
+          const message = detail as { type?: string; dx?: number; dy?: number };
+          if (message.type === "overlay-show") {
+            placeVoiceOverlayAtOrb();
             syncVoiceOverlay().catch((error) => logLine("显示语音浮层失败: " + error));
+            return;
+          }
+          if (message.type === "orb-drag-start") {
+            voiceOrbDragStartFrame = win.getFrame();
+            voiceOrbDragged = true;
+            return;
+          }
+          if (message.type === "orb-drag-move" && voiceOrbDragStartFrame) {
+            const start = voiceOrbDragStartFrame;
+            const dx = Number(message.dx) || 0;
+            const dy = Number(message.dy) || 0;
+            const display = displayForFrame({
+              x: start.x + dx,
+              y: start.y + dy,
+              width: start.width,
+              height: start.height,
+            });
+            const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+            const x = Math.min(Math.max(start.x + dx, area.x), area.x + area.width - start.width);
+            const y = Math.min(Math.max(start.y + dy, area.y), area.y + area.height - start.height);
+            try { win.setPosition(Math.round(x), Math.round(y)); } catch (error) { /* 忽略 */ }
+            return;
+          }
+          if (message.type === "orb-drag-end") {
+            voiceOrbDragStartFrame = null;
           }
         });
       }
@@ -595,12 +650,17 @@ async function showVoiceOrb(): Promise<void> {
       });
       // 透明窗口先预热一帧，避免首次出现时闪一下不透明底色。
       await new Promise(function (resolve) { setTimeout(resolve, 240); });
-    } else {
+    } else if (!voiceOrbDragged) {
       try { voiceOrb.setFrame(frame.x, frame.y, frame.width, frame.height); } catch (error) { /* 忽略 */ }
     }
 
     if (!readVoiceEnabled() || panel || voiceOverlayVisible || !voiceOrb) return;
-    voiceOrb.showInactive();
+    try {
+      voiceOrb.show();
+      voiceOrb.activate();
+    } catch (error) {
+      logLine("显示语音浮层球失败: " + error);
+    }
   } finally {
     voiceOrbPending = false;
   }

@@ -59,18 +59,67 @@
 (function () {
   const orb = document.getElementById("orb");
 
-  function openOverlay() {
-    const sendToHost = window.__electrobunSendToHost;
-    if (typeof sendToHost !== "function") return;
+  const sendToHost = window.__electrobunSendToHost;
+
+  function post(message) {
+    if (typeof sendToHost !== "function") return false;
     try {
-      sendToHost({ type: "overlay-show" });
+      sendToHost(message);
+      return true;
     } catch (error) {
-      /* 桌面端没起来时保持可点击，下一次再试 */
+      return false;
     }
   }
 
-  // 整个透明窗口都是点击区，不必精确点中圆形本身。
-  document.body.addEventListener("click", openOverlay);
+  function openOverlay() {
+    post({ type: "overlay-show" });
+  }
+
+  // 整个透明窗口都能按；拖动超过 3px 才移动窗口，否则算一次点击。
+  let dragging = false;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  let pointerId = null;
+
+  document.body.addEventListener("pointerdown", function (event) {
+    if (event.button !== 0) return;
+    dragging = true;
+    moved = false;
+    startX = event.screenX;
+    startY = event.screenY;
+    pointerId = event.pointerId;
+    try { document.body.setPointerCapture(event.pointerId); } catch (error) { /* 忽略 */ }
+    event.preventDefault();
+  });
+
+  document.body.addEventListener("pointermove", function (event) {
+    if (!dragging) return;
+    const dx = event.screenX - startX;
+    const dy = event.screenY - startY;
+    if (!moved) {
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      moved = true;
+      post({ type: "orb-drag-start" });
+    }
+    post({ type: "orb-drag-move", dx: dx, dy: dy });
+    event.preventDefault();
+  });
+
+  function finishDrag(event) {
+    if (!dragging) return;
+    dragging = false;
+    try {
+      if (pointerId !== null) document.body.releasePointerCapture(pointerId);
+    } catch (error) { /* 忽略 */ }
+    pointerId = null;
+    if (moved) post({ type: "orb-drag-end" });
+    else openOverlay();
+    event.preventDefault();
+  }
+
+  document.body.addEventListener("pointerup", finishDrag);
+  document.body.addEventListener("pointercancel", finishDrag);
   orb.addEventListener("keydown", function (event) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
