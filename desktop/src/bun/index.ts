@@ -91,9 +91,11 @@ let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
+let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
+let voiceOverlaySnapAnimating = false;
 // 拖动停下后吸附到屏幕可视区域边缘；留一点距离，避免吸得太“黏”。
 const VOICE_OVERLAY_SNAP_MARGIN = 18;
-const VOICE_OVERLAY_SNAP_DELAY_MS = 160;
+const VOICE_OVERLAY_SNAP_DELAY_MS = 140;
 const VOICE_OVERLAY_SHORTCUT = process.env.MO_AGENT_VOICE_OVERLAY_SHORTCUT || "CommandOrControl+Shift+Space";
 let voiceOverlayShortcutRegistered = false;
 
@@ -488,6 +490,7 @@ async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
 }
 
 function hideVoiceOverlay(): void {
+  cancelVoiceOverlaySnap();
   if (!voiceOverlay) return;
   try {
     voiceOverlayFrame = voiceOverlay.getFrame();
@@ -583,15 +586,71 @@ function snapVoiceOverlayToScreen(): void {
     const nextX = Math.round(x);
     const nextY = Math.round(y);
     if (nextX === frame.x && nextY === frame.y) return;
-    win.setPosition(nextX, nextY);
-    voiceOverlayFrame = { x: nextX, y: nextY, width: frame.width, height: frame.height };
-    saveVoiceOverlayFrame(voiceOverlayFrame);
+    // 越界很多时不要瞬移回来：用 ease-out 补一段短动画，视觉上像被边缘“吸”回去。
+    animateVoiceOverlayTo(win, nextX, nextY, frame);
   } catch (error) {
     logLine("语音浮层吸附失败: " + error);
   }
 }
 
+function cancelVoiceOverlaySnapAnimation(): void {
+  if (voiceOverlaySnapAnimationTimer) {
+    clearTimeout(voiceOverlaySnapAnimationTimer);
+    voiceOverlaySnapAnimationTimer = null;
+  }
+  voiceOverlaySnapAnimating = false;
+}
+
+function cancelVoiceOverlaySnap(): void {
+  if (voiceOverlaySnapTimer) {
+    clearTimeout(voiceOverlaySnapTimer);
+    voiceOverlaySnapTimer = null;
+  }
+  cancelVoiceOverlaySnapAnimation();
+}
+
+function animateVoiceOverlayTo(
+  win: BrowserWindow,
+  targetX: number,
+  targetY: number,
+  from: { x: number; y: number; width: number; height: number },
+): void {
+  cancelVoiceOverlaySnapAnimation();
+  const distance = Math.hypot(targetX - from.x, targetY - from.y);
+  const duration = Math.min(220, Math.max(70, Math.round(distance * 1.1)));
+  const startedAt = Date.now();
+  voiceOverlaySnapAnimating = true;
+
+  const step = function () {
+    voiceOverlaySnapAnimationTimer = null;
+    if (voiceOverlay !== win || !voiceOverlayVisible) {
+      voiceOverlaySnapAnimating = false;
+      return;
+    }
+    const progress = Math.min(1, (Date.now() - startedAt) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const x = Math.round(from.x + (targetX - from.x) * eased);
+    const y = Math.round(from.y + (targetY - from.y) * eased);
+    try {
+      win.setPosition(x, y);
+    } catch (error) {
+      logLine("语音浮层吸附动画失败: " + error);
+      voiceOverlaySnapAnimating = false;
+      return;
+    }
+    voiceOverlayFrame = { x, y, width: from.width, height: from.height };
+    if (progress < 1) {
+      voiceOverlaySnapAnimationTimer = setTimeout(step, 16);
+    } else {
+      voiceOverlaySnapAnimating = false;
+      saveVoiceOverlayFrame(voiceOverlayFrame);
+    }
+  };
+  step();
+}
+
 function scheduleVoiceOverlaySnap(): void {
+  if (voiceOverlaySnapAnimating) return;
   if (voiceOverlaySnapTimer) clearTimeout(voiceOverlaySnapTimer);
   voiceOverlaySnapTimer = setTimeout(function () {
     voiceOverlaySnapTimer = null;
@@ -658,10 +717,7 @@ async function ensureVoiceOverlay(): Promise<boolean> {
     // 拖动期间事件很密：停下 160ms 再吸附，避免和系统拖动互相打架。
     win.on("move", () => { scheduleVoiceOverlaySnap(); });
     win.on("close", () => {
-      if (voiceOverlaySnapTimer) {
-        clearTimeout(voiceOverlaySnapTimer);
-        voiceOverlaySnapTimer = null;
-      }
+      cancelVoiceOverlaySnap();
       try {
         voiceOverlayFrame = win.getFrame();
         saveVoiceOverlayFrame(voiceOverlayFrame);
