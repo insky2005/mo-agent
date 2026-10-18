@@ -11,13 +11,14 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
     color: #f5f5f7;
     -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none;
     user-select: none;
   }
   .panel {
     box-sizing: border-box;
     width: 100%;
     height: 100%;
-    padding: 13px 16px 15px;
+    padding: 0;
     border-radius: 18px;
     /* 固定同一档透明度：正常/错误/确认都只改文字颜色，不改面板底色。
        0.96 基本挡住下层文字，又保留一点半透明质感。 */
@@ -26,6 +27,26 @@
     box-shadow: 0 16px 46px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     /* 不用 backdrop-filter：透明 WKWebView 下它的合成会在首帧/音频路由变化后跳变，
        表现为“错误出现 1 秒后透明度又变了”。固定 alpha 从第一帧起就稳定。 */
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* 整条顶栏（含左右边缘与上方内边距）都可拖动，不再只有文字中间一小块。 */
+  .head {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    min-height: 48px;
+    padding: 12px 16px;
+    border-radius: 18px 18px 0 0;
+  }
+  .body {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 10px 16px 14px;
     display: flex;
     flex-direction: column;
     gap: 9px;
@@ -100,6 +121,7 @@
   .actions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); color: #fff; }
   .actions button:active:not(:disabled) { transform: scale(0.98); }
   .actions button:disabled { opacity: 0.4; cursor: default; }
+  .panel, .panel * { -webkit-user-select: none; user-select: none; }
   .bars { display: none; align-items: flex-end; gap: 2px; height: 18px; }
   .bars.on { display: flex; }
   .bars span { display: block; width: 3px; border-radius: 2px; background: #a7f3d0; animation: wave 1s ease-in-out infinite; }
@@ -119,6 +141,7 @@
     <div class="bars" id="bars"><span></span><span></span><span></span><span></span><span></span></div>
     <button class="close electrobun-webkit-app-region-no-drag" id="close" title="隐藏浮层（可从托盘重新打开）">×</button>
   </div>
+  <div class="body">
   <div class="status" id="status">等待命令…</div>
   <div>
     <div class="heard-label">听到</div>
@@ -141,9 +164,14 @@
     <button type="button" id="btn-dictate">语音口述</button>
     <button type="button" id="btn-test">语音测试</button>
   </div>
+  </div>
 </div>
 <script>
 (function () {
+  // 拖动浮层时不要顺带选中文字或拖出图片/链接。
+  document.addEventListener("selectstart", function (event) { event.preventDefault(); });
+  document.addEventListener("dragstart", function (event) { event.preventDefault(); });
+
   const params = new URLSearchParams(location.search);
   const token = params.get("token") || "";
   const els = {

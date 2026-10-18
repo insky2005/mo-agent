@@ -1,4 +1,4 @@
-import { Tray, BrowserWindow, Utils } from "electrobun/main";
+import { Tray, BrowserWindow, Utils, Screen } from "electrobun/main";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -90,6 +90,10 @@ let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
+let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
+// 拖动停下后吸附到屏幕可视区域边缘；留一点距离，避免吸得太“黏”。
+const VOICE_OVERLAY_SNAP_MARGIN = 18;
+const VOICE_OVERLAY_SNAP_DELAY_MS = 160;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -500,6 +504,63 @@ async function syncVoiceOverlay(): Promise<void> {
   }
 }
 
+function displayForFrame(frame: { x: number; y: number; width: number; height: number }) {
+  const displays = Screen.getAllDisplays();
+  const centerX = frame.x + frame.width / 2;
+  const centerY = frame.y + frame.height / 2;
+  const containsCenter = displays.find(function (display) {
+    const area = display.bounds;
+    return centerX >= area.x && centerX <= area.x + area.width
+      && centerY >= area.y && centerY <= area.y + area.height;
+  });
+  if (containsCenter) return containsCenter;
+  const overlaps = displays.find(function (display) {
+    const area = display.bounds;
+    return frame.x < area.x + area.width && frame.x + frame.width > area.x
+      && frame.y < area.y + area.height && frame.y + frame.height > area.y;
+  });
+  return overlaps || Screen.getPrimaryDisplay();
+}
+
+/** 左右/下/上都不允许拖出屏幕：停下后贴边，越界则拉回最近的可视边缘。 */
+function snapVoiceOverlayToScreen(): void {
+  const win = voiceOverlay;
+  if (!win || !voiceOverlayVisible) return;
+  try {
+    const frame = win.getFrame();
+    const display = displayForFrame(frame);
+    const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+    if (!area || area.width <= 0 || area.height <= 0) return;
+
+    let x = frame.x;
+    let y = frame.y;
+    if (frame.width >= area.width) x = area.x;
+    else if (x <= area.x + VOICE_OVERLAY_SNAP_MARGIN) x = area.x;
+    else if (x + frame.width >= area.x + area.width - VOICE_OVERLAY_SNAP_MARGIN) x = area.x + area.width - frame.width;
+
+    if (frame.height >= area.height) y = area.y;
+    else if (y <= area.y + VOICE_OVERLAY_SNAP_MARGIN) y = area.y;
+    else if (y + frame.height >= area.y + area.height - VOICE_OVERLAY_SNAP_MARGIN) y = area.y + area.height - frame.height;
+
+    const nextX = Math.round(x);
+    const nextY = Math.round(y);
+    if (nextX === frame.x && nextY === frame.y) return;
+    win.setPosition(nextX, nextY);
+    voiceOverlayFrame = { x: nextX, y: nextY, width: frame.width, height: frame.height };
+    saveVoiceOverlayFrame(voiceOverlayFrame);
+  } catch (error) {
+    logLine("语音浮层吸附失败: " + error);
+  }
+}
+
+function scheduleVoiceOverlaySnap(): void {
+  if (voiceOverlaySnapTimer) clearTimeout(voiceOverlaySnapTimer);
+  voiceOverlaySnapTimer = setTimeout(function () {
+    voiceOverlaySnapTimer = null;
+    snapVoiceOverlayToScreen();
+  }, VOICE_OVERLAY_SNAP_DELAY_MS);
+}
+
 /** 磨砂半透明浮层：置顶、不抢焦点、可拖动。 */
 async function ensureVoiceOverlay(): Promise<boolean> {
   const token = readLocalToken();
@@ -544,7 +605,13 @@ async function ensureVoiceOverlay(): Promise<boolean> {
     } catch (error) {
       logLine("语音浮层置顶失败: " + error);
     }
+    // 拖动期间事件很密：停下 160ms 再吸附，避免和系统拖动互相打架。
+    win.on("move", () => { scheduleVoiceOverlaySnap(); });
     win.on("close", () => {
+      if (voiceOverlaySnapTimer) {
+        clearTimeout(voiceOverlaySnapTimer);
+        voiceOverlaySnapTimer = null;
+      }
       try {
         voiceOverlayFrame = win.getFrame();
         saveVoiceOverlayFrame(voiceOverlayFrame);
@@ -574,6 +641,8 @@ async function ensureVoiceOverlay(): Promise<boolean> {
   }
   voiceOverlayVisible = true;
   refreshTrayMenu();
+  // 旧位置可能来自已拔掉的显示器；显示后同样校正到当前屏幕可视区域。
+  scheduleVoiceOverlaySnap();
   return true;
 }
 
