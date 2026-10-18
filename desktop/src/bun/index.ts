@@ -90,6 +90,10 @@ let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
+let voiceOrb: BrowserWindow | null = null;
+let voiceOrbPending = false;
+const VOICE_ORB_SIZE = 112;
+const VOICE_ORB_MARGIN = 20;
 let voiceOverlaySnapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceOverlaySnapAnimating = false;
@@ -323,8 +327,9 @@ async function openPanel(): Promise<void> {
     Utils.openExternal("file://" + LOG_DIR);
     return;
   }
-  // 先收起浮层，把设置窗口放在前面；设置窗口关闭后由 close 事件恢复浮层。
-  hideVoiceOverlay();
+  // 先收起浮层与浮层球，把设置窗口放在前面；设置窗口关闭后由 close 事件恢复浮层。
+  hideVoiceOverlay(false);
+  hideVoiceOrb();
   if (panel) {
     try {
       panel.show();
@@ -388,6 +393,11 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
     voiceOverlayToken = "";
     try { current.close(); } catch (error) { /* 已经销毁 */ }
   }
+  if (voiceOrb) {
+    const current = voiceOrb;
+    voiceOrb = null;
+    try { current.close(); } catch (error) { /* 已经销毁 */ }
+  }
   if (logs) {
     const current = logs;
     logs = null;
@@ -402,6 +412,7 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   if (openPanelAfter) await openPanel();
   // 语音开启时浮层常驻：服务重启后自动恢复，不再等下一次命令才出现。
   await syncVoiceOverlay();
+  syncVoiceOrb();
 }
 
 async function restartHost(): Promise<void> {
@@ -491,9 +502,12 @@ async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
   }
 }
 
-function hideVoiceOverlay(): void {
+function hideVoiceOverlay(showOrb: boolean = true): void {
   cancelVoiceOverlaySnap();
-  if (!voiceOverlay) return;
+  if (!voiceOverlay) {
+    if (showOrb) void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
+    return;
+  }
   try {
     voiceOverlayFrame = voiceOverlay.getFrame();
     saveVoiceOverlayFrame(voiceOverlayFrame);
@@ -501,6 +515,93 @@ function hideVoiceOverlay(): void {
   try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
   voiceOverlayVisible = false;
   refreshTrayMenu();
+  if (showOrb) void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
+}
+
+function voiceOrbFrame() {
+  const display = Screen.getPrimaryDisplay();
+  const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+  return {
+    x: Math.round(area.x + area.width - VOICE_ORB_SIZE - VOICE_ORB_MARGIN),
+    y: Math.round(area.y + area.height - VOICE_ORB_SIZE - VOICE_ORB_MARGIN),
+    width: VOICE_ORB_SIZE,
+    height: VOICE_ORB_SIZE,
+  };
+}
+
+function hideVoiceOrb(): void {
+  if (!voiceOrb) return;
+  try { voiceOrb.hide(); } catch (error) { /* 已关闭 */ }
+}
+
+/** 浮层收起后留下一个可点击的圆形 Logo；再点它恢复浮层。 */
+async function showVoiceOrb(): Promise<void> {
+  if (voiceOrbPending) return;
+  if (!readVoiceEnabled() || panel || voiceOverlayVisible) return;
+  voiceOrbPending = true;
+  try {
+    const frame = voiceOrbFrame();
+    if (!voiceOrb) {
+      const win = new BrowserWindow({
+        title: "mo-agent 语音",
+        url: BASE + "/voice-orb.html",
+        frame,
+        titleBarStyle: "hidden",
+        transparent: true,
+        hidden: true,
+        activate: false,
+        styleMask: {
+          Borderless: true,
+          Titled: false,
+          Closable: false,
+          Miniaturizable: false,
+          Resizable: false,
+          FullScreen: false,
+          FullSizeContentView: true,
+          UtilityWindow: true,
+          NonactivatingPanel: true,
+        },
+      });
+      voiceOrb = win;
+      try {
+        win.setAlwaysOnTop(true);
+        win.setVisibleOnAllWorkspaces(true);
+      } catch (error) {
+        logLine("语音浮层球置顶失败: " + error);
+      }
+      const webview = win.webview as unknown as {
+        on?: (name: string, handler: (event: unknown) => void) => void;
+      } | undefined;
+      if (webview && typeof webview.on === "function") {
+        webview.on("host-message", (event: unknown) => {
+          const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
+          if (detail && typeof detail === "object" && (detail as { type?: string }).type === "overlay-show") {
+            syncVoiceOverlay().catch((error) => logLine("显示语音浮层失败: " + error));
+          }
+        });
+      }
+      win.on("close", () => {
+        if (voiceOrb === win) voiceOrb = null;
+      });
+      // 透明窗口先预热一帧，避免首次出现时闪一下不透明底色。
+      await new Promise(function (resolve) { setTimeout(resolve, 240); });
+    } else {
+      try { voiceOrb.setFrame(frame.x, frame.y, frame.width, frame.height); } catch (error) { /* 忽略 */ }
+    }
+
+    if (!readVoiceEnabled() || panel || voiceOverlayVisible || !voiceOrb) return;
+    voiceOrb.showInactive();
+  } finally {
+    voiceOrbPending = false;
+  }
+}
+
+function syncVoiceOrb(): void {
+  if (!readVoiceEnabled() || panel || voiceOverlayVisible) {
+    hideVoiceOrb();
+    return;
+  }
+  void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
 }
 
 /** 语音开启时浮层常驻；关闭语音、设置窗口打开或手动隐藏时保持收起。 */
@@ -718,7 +819,7 @@ async function ensureVoiceOverlay(): Promise<boolean> {
         if (type === "overlay-hide") hideVoiceOverlay();
         else if (type === "overlay-focus") {
           // 鼠标移入浮层时主动拿焦点，键盘/快捷键操作不再落到后面的窗口。
-          try { win.activate(); } catch (error) { logLine("语音浮层获取焦点失败: " + error); }
+          try { win.show(); win.activate(); } catch (error) { logLine("语音浮层获取焦点失败: " + error); }
         }
       });
     }
@@ -756,6 +857,7 @@ async function ensureVoiceOverlay(): Promise<boolean> {
   }
   voiceOverlayVisible = true;
   refreshTrayMenu();
+  hideVoiceOrb();
   // 旧位置可能来自已拔掉的显示器；显示后同样校正到当前屏幕可视区域。
   scheduleVoiceOverlaySnap();
   return true;
@@ -903,7 +1005,8 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "logs") await openLogs();
   else if (action === "quit") {
     GlobalShortcut.unregisterAll();
-    hideVoiceOverlay();
+    hideVoiceOverlay(false);
+    hideVoiceOrb();
     if (host) host.kill();
     tray.remove();
     process.exit(0);
