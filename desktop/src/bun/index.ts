@@ -358,6 +358,12 @@ function createPanel(): void {
     });
   }
   try {
+    // 焦点在网页里时由页面监听 Esc；焦点在窗口本身（例如标题栏）时由这里兜底。
+    win.on("keyDown", (event: unknown) => {
+      const data = (event as { data?: { keyCode?: number } } | null)?.data;
+      if (!data || data.keyCode !== 53) return;
+      try { win.close(); } catch (error) { /* 已经关闭 */ }
+    });
     win.on("close", () => {
       if (panel !== win) return;
       panel = null;
