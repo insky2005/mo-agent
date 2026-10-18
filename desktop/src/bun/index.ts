@@ -1,4 +1,4 @@
-import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut } from "electrobun/main";
+import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut, ApplicationMenu } from "electrobun/main";
 import { dlopen, FFIType, JSCallback, ptr } from "bun:ffi";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
@@ -477,6 +477,53 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
 
 async function restartHost(): Promise<void> {
   return restartService(true);
+}
+
+/** 应用内菜单的 Escape accelerator：比窗口 keyDown 更可靠，焦点在标题栏也能触发。 */
+function setupApplicationMenu(): void {
+  try {
+    ApplicationMenu.setApplicationMenu([
+      {
+        label: "mo-agent",
+        submenu: [
+          { role: "about" },
+          { type: "divider" },
+          { role: "hide" },
+          { role: "hideOthers" },
+          { role: "showAll" },
+          { type: "divider" },
+          { role: "quit" },
+        ],
+      },
+      {
+        label: "编辑",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "divider" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      {
+        label: "窗口",
+        submenu: [
+          { role: "minimize" },
+          { type: "divider" },
+          { label: "关闭设置", action: "close-settings-panel", accelerator: "Escape" },
+        ],
+      },
+    ]);
+    ApplicationMenu.on("application-menu-clicked", (event: unknown) => {
+      const data = (event as { data?: { action?: string } } | null)?.data;
+      if (data?.action !== "close-settings-panel" || !panel) return;
+      try { panel.close(); } catch (error) { /* 已经关闭 */ }
+    });
+  } catch (error) {
+    logLine("设置应用菜单失败: " + error);
+  }
 }
 
 function trayMenu(): any[] {
@@ -1380,6 +1427,7 @@ async function runVoiceTest(): Promise<void> {
 const tray = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
 
 tray.setMenu(trayMenu());
+setupApplicationMenu();
 ensureCarbonHotkey();
 syncVoiceOverlayShortcut();
 // 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
