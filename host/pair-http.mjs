@@ -122,6 +122,15 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "})();</script>"
   ].join("");
 
+  const escScript = [
+    "<script>(function(){",
+    "document.addEventListener('keydown',function(e){",
+    "  if(e.key!=='Escape')return;",
+    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});return;}catch(err){}}",
+    "  try{window.close();}catch(err){}",
+    "});",
+    "})();</script>",
+  ].join("");
   const page = [
     "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
     "<meta name='viewport' content='width=device-width, initial-scale=1' />",
@@ -145,6 +154,7 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "<div class='ips'>" + buttons + "</div></div>",
     "<div class='warn'>手机连不上时，多半是二维码里选错了网卡——点上面的地址，切换成和手机同一网段的那个。</div>",
     pollScript,
+    escScript,
   ].join("");
 
   html(res, 200, page);

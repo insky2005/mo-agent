@@ -346,6 +346,17 @@ function createPanel(): void {
     frame: { width: 760, height: 760 },
   });
   panel = win;
+  const webview = win.webview as unknown as {
+    on?: (name: string, handler: (event: unknown) => void) => void;
+  } | undefined;
+  if (webview && typeof webview.on === "function") {
+    webview.on("host-message", (event: unknown) => {
+      const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
+      if (detail && typeof detail === "object" && (detail as { type?: string }).type === "panel-close") {
+        try { win.close(); } catch (error) { /* 已经关闭 */ }
+      }
+    });
+  }
   try {
     win.on("close", () => {
       if (panel !== win) return;
