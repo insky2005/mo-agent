@@ -90,7 +90,10 @@ let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
 let voiceOverlayVisible = false;
+let voiceOverlayCursorInside = false;
 let voiceOrb: BrowserWindow | null = null;
+let voiceOrbVisible = false;
+let voiceOrbCursorInside = false;
 let voiceOrbPending = false;
 let voiceOrbDragged = false;
 let voiceOrbDragPos: { x: number; y: number } | null = null;
@@ -519,6 +522,7 @@ function hideVoiceOverlay(showOrb: boolean = true): void {
   } catch (error) { /* 忽略 */ }
   try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
   voiceOverlayVisible = false;
+  voiceOverlayCursorInside = false;
   refreshTrayMenu();
   if (showOrb) void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
 }
@@ -605,6 +609,8 @@ function startVoiceOrbDrag(): void {
 
 function hideVoiceOrb(): void {
   stopVoiceOrbDrag();
+  voiceOrbVisible = false;
+  voiceOrbCursorInside = false;
   if (!voiceOrb) return;
   try { voiceOrb.hide(); } catch (error) { /* 已关闭 */ }
 }
@@ -693,6 +699,8 @@ async function showVoiceOrb(): Promise<void> {
       }
       win.on("close", () => {
         stopVoiceOrbDrag();
+        voiceOrbVisible = false;
+        voiceOrbCursorInside = false;
         if (voiceOrb === win) voiceOrb = null;
       });
       // 透明窗口先预热一帧，避免首次出现时闪一下不透明底色。
@@ -705,11 +713,60 @@ async function showVoiceOrb(): Promise<void> {
     try {
       voiceOrb.show();
       voiceOrb.activate();
+      voiceOrbVisible = true;
     } catch (error) {
       logLine("显示语音浮层球失败: " + error);
     }
   } finally {
     voiceOrbPending = false;
+  }
+}
+
+function pointInsideFrame(point: { x: number; y: number }, frame: { x: number; y: number; width: number; height: number }) {
+  return point.x >= frame.x && point.x <= frame.x + frame.width
+    && point.y >= frame.y && point.y <= frame.y + frame.height;
+}
+
+/**
+ * macOS 对未激活窗口的第一次点击通常只用来激活窗口，不会送进 webview。
+ * 这里在光标“刚移入”窗口时先激活，避免用户需要点第二次。
+ */
+function focusVisibleOverlayOnCursorEnter(): void {
+  let point: { x: number; y: number };
+  try {
+    point = Screen.getCursorScreenPoint();
+  } catch (error) {
+    return;
+  }
+
+  if (voiceOverlayVisible && voiceOverlay) {
+    try {
+      const inside = pointInsideFrame(point, voiceOverlay.getFrame());
+      if (inside && !voiceOverlayCursorInside) {
+        voiceOverlay.show();
+        voiceOverlay.activate();
+      }
+      voiceOverlayCursorInside = inside;
+    } catch (error) {
+      voiceOverlayCursorInside = false;
+    }
+  } else {
+    voiceOverlayCursorInside = false;
+  }
+
+  if (voiceOrbVisible && voiceOrb) {
+    try {
+      const inside = pointInsideFrame(point, voiceOrb.getFrame());
+      if (inside && !voiceOrbCursorInside) {
+        voiceOrb.show();
+        voiceOrb.activate();
+      }
+      voiceOrbCursorInside = inside;
+    } catch (error) {
+      voiceOrbCursorInside = false;
+    }
+  } else {
+    voiceOrbCursorInside = false;
   }
 }
 
@@ -1108,6 +1165,9 @@ const tray = new Tray({ image: "views://mainview/tray.png", template: true, widt
 
 tray.setMenu(trayMenu());
 syncVoiceOverlayShortcut();
+// 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
+const focusPoll = setInterval(focusVisibleOverlayOnCursorEnter, 40);
+if (typeof focusPoll.unref === "function") focusPoll.unref();
 
 tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
