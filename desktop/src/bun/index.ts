@@ -89,6 +89,7 @@ function saveVoiceOverlayFrame(frame: { x: number; y: number; width: number; hei
 let voiceOverlay: BrowserWindow | null = null;
 let voiceOverlayToken = "";
 let voiceOverlayFrame = readVoiceOverlayFrame();
+let voiceOverlayVisible = false;
 
 /**
  * 自己找 node，不能靠 PATH：双击启动时 macOS 只给
@@ -294,7 +295,12 @@ function createPanel(): void {
   });
   panel = win;
   try {
-    win.on("close", () => { if (panel === win) panel = null; });
+    win.on("close", () => {
+      if (panel !== win) return;
+      panel = null;
+      // 设置窗口关闭后才显示常驻浮层，避免两个窗口同时挡住桌面。
+      syncVoiceOverlay();
+    });
   } catch (error) {
     logLine("注册窗口关闭事件失败: " + error);
   }
@@ -307,6 +313,8 @@ async function openPanel(): Promise<void> {
     Utils.openExternal("file://" + LOG_DIR);
     return;
   }
+  // 先收起浮层，把设置窗口放在前面；设置窗口关闭后由 close 事件恢复浮层。
+  hideVoiceOverlay();
   if (panel) {
     try {
       panel.show();
@@ -400,12 +408,15 @@ function trayMenu(): any[] {
     { type: "normal", label: "语音口述任务", action: "dictate" },
     { type: "normal", label: "语音测试", action: "voice-test" },
   ];
-  if (voice) {
-    voiceMenu.push({ type: "divider" });
-    voiceMenu.push({ type: "normal", label: "显示语音浮层", action: "show-overlay" });
-  }
   return [
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
+    {
+      type: "normal",
+      label: voiceOverlayVisible ? "隐藏语音浮层" : "显示语音浮层",
+      action: "toggle-overlay",
+      // 设置窗口打开时浮层固定收起，等设置窗口关闭后再显示。
+      enabled: voice && !panel,
+    },
     { type: "normal", label: "语音", submenu: voiceMenu },
     { type: "divider" },
     { type: "normal", label: "重启服务", action: "restart" },
@@ -415,10 +426,18 @@ function trayMenu(): any[] {
   ];
 }
 
+function refreshTrayMenu(): void {
+  try {
+    tray.setMenu(trayMenu());
+  } catch (error) {
+    logLine("更新托盘菜单失败: " + error);
+  }
+}
+
 async function toggleVoice(): Promise<void> {
   const enabled = !readVoiceEnabled();
   writeVoiceEnabled(enabled);
-  tray.setMenu(trayMenu());
+  refreshTrayMenu();
   logLine("启用语音: " + (enabled ? "开启" : "关闭"));
   await restartService(false);
 }
@@ -467,11 +486,13 @@ function hideVoiceOverlay(): void {
     saveVoiceOverlayFrame(voiceOverlayFrame);
   } catch (error) { /* 忽略 */ }
   try { voiceOverlay.hide(); } catch (error) { /* 已关闭 */ }
+  voiceOverlayVisible = false;
+  refreshTrayMenu();
 }
 
-/** 语音开启时浮层常驻；关闭语音或手动隐藏后，只在明确的打开动作里恢复。 */
+/** 语音开启时浮层常驻；关闭语音、设置窗口打开或手动隐藏时保持收起。 */
 async function syncVoiceOverlay(): Promise<void> {
-  if (!readVoiceEnabled()) return;
+  if (!readVoiceEnabled() || panel) return;
   try {
     await ensureVoiceOverlay();
   } catch (error) {
@@ -528,7 +549,11 @@ async function ensureVoiceOverlay(): Promise<boolean> {
         voiceOverlayFrame = win.getFrame();
         saveVoiceOverlayFrame(voiceOverlayFrame);
       } catch (error) { /* 忽略 */ }
-      if (voiceOverlay === win) voiceOverlay = null;
+      if (voiceOverlay === win) {
+        voiceOverlay = null;
+        voiceOverlayVisible = false;
+        refreshTrayMenu();
+      }
     });
     // 首次居中后把实际位置记下来；之后拖动/隐藏会更新。
     try {
@@ -544,8 +569,11 @@ async function ensureVoiceOverlay(): Promise<boolean> {
   } catch (error) {
     logLine("显示语音浮层失败: " + error);
     voiceOverlay = null;
+    voiceOverlayVisible = false;
     return false;
   }
+  voiceOverlayVisible = true;
+  refreshTrayMenu();
   return true;
 }
 
@@ -684,7 +712,11 @@ tray.on("tray-clicked", async (event: any) => {
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "dictate") await runDictate();
   else if (action === "voice-test") await runVoiceTest();
-  else if (action === "show-overlay") await syncVoiceOverlay();
+  else if (action === "toggle-overlay") {
+    if (!readVoiceEnabled()) return;
+    if (voiceOverlayVisible) hideVoiceOverlay();
+    else await syncVoiceOverlay();
+  }
   else if (action === "mic-settings") openMicSettings();
   else if (action === "restart") await restartHost();
   else if (action === "logs") await openLogs();
@@ -701,7 +733,7 @@ ensureHost().then(async (ready) => {
   // 启动后默认打开「设置（安装与配对）」面板
   if (ready) {
     await openPanel();
-    // 启用语音后浮层常驻：启动即显示，不再等第一次命令。
+    // 启动时设置窗口在前；浮层等设置窗口关闭后由 close 事件显示。
     await syncVoiceOverlay();
   }
 }).catch((error) => logLine("启动流程异常: " + error));
