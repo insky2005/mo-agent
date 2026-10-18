@@ -123,6 +123,10 @@ let carbonKeyHandler: JSCallback | null = null;
 let carbonHotKeyRef: Buffer | null = null;
 let carbonHotKeyRegistered = false;
 let panelEscPending = false;
+let objcLib: { symbols: {
+  sel_registerName: (name: string) => number;
+  objc_msgSend: (target: unknown, selector: unknown, arg1: unknown, arg2: unknown, wait: boolean) => void;
+} } | null = null;
 let carbonLib: { symbols: {
   GetApplicationEventTarget: () => number;
   InstallEventHandler: (target: number, handler: number, count: number, types: unknown, userData: unknown, out: unknown) => number;
@@ -360,6 +364,7 @@ function createPanel(): void {
         try { win.close(); } catch (error) { /* 已经关闭 */ }
       }
     });
+    webview.on("dom-ready", () => focusPanelWebview(win));
   }
   try {
     // 焦点在网页里时由页面监听 Esc；焦点在窗口本身（例如标题栏）时由这里兜底。
@@ -393,12 +398,17 @@ async function openPanel(): Promise<void> {
     try {
       panel.show();
       panel.activate();
+      focusPanelWebview(panel);
       return;
     } catch (error) {
       panel = null;
     }
   }
   createPanel();
+  if (panel) {
+    const win = panel;
+    setTimeout(() => { if (panel === win) focusPanelWebview(win); }, 80);
+  }
 }
 
 function createLogsWindow(): void {
@@ -477,6 +487,38 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
 
 async function restartHost(): Promise<void> {
   return restartService(true);
+}
+
+/** 让设置窗口一打开就把第一响应者给 WebView，否则 Esc 不会进网页。 */
+function focusPanelWebview(win: BrowserWindow): void {
+  try {
+    const winPtr = win.ptr;
+    const webview = win.webview as unknown as {
+      ptr?: unknown;
+      executeJavascript?: (js: string) => void;
+    } | undefined;
+    const viewPtr = webview && webview.ptr;
+    if (!winPtr || !viewPtr) return;
+    if (!objcLib) {
+      objcLib = dlopen("/usr/lib/libobjc.A.dylib", {
+        sel_registerName: { args: [FFIType.cstring], returns: FFIType.ptr },
+        objc_msgSend: {
+          args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.bool],
+          returns: FFIType.void,
+        },
+      }) as unknown as typeof objcLib;
+    }
+    if (!objcLib) return;
+    // 通过 performSelectorOnMainThread 调度，避免从 Bun 线程直接碰 AppKit。
+    const perform = objcLib.symbols.sel_registerName("performSelectorOnMainThread:withObject:waitUntilDone:");
+    const makeFirst = objcLib.symbols.sel_registerName("makeFirstResponder:");
+    objcLib.symbols.objc_msgSend(winPtr, perform, makeFirst, viewPtr, false);
+    if (webview && typeof webview.executeJavascript === "function") {
+      webview.executeJavascript("try{window.focus();}catch(e){}");
+    }
+  } catch (error) {
+    logLine("聚焦设置页失败: " + error);
+  }
 }
 
 /** 应用内菜单的 Escape accelerator：比窗口 keyDown 更可靠，焦点在标题栏也能触发。 */
