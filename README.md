@@ -91,7 +91,9 @@ Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同�
 
 限制：
 
-- 桌面端没有 prompt/cancel 公开接口，手机上**只能看和批准/拒绝**，不能发指令或中断；
+- 桌面端没有 prompt/cancel 公开接口，手机上**只能看、批准/拒绝、回答问题**，不能主动发指令或中断；
+- `AskUserQuestion` 会先走 `PermissionRequest`：手机上会显示问题与选项，选中后通过
+  `updatedInput.answers` 直接回填，不需要再回电脑点一遍；
 - 默认「自动审批」模式下很多操作不会弹授权，切到「询问审批」才会稳定出卡；
 - 权限模式在手机卡片上会显示（`auto` / `default`），远程批准前可以先看一眼。
 

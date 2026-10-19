@@ -451,8 +451,13 @@ export function createMoAgentServer(options) {
       if (pathname === "/api/approve" && req.method === "POST") {
         const body = await readBody(req);
         if (!body.id || !body.decision) return json(res, 400, { ok: false, error: "缺少 id 或 decision" });
-        const done = broker.decide(body.id, body.decision);
-        log.info("手机已应答 " + body.id + " -> " + body.decision + (done ? "" : " (已失效)"));
+        const extra = body.answers && typeof body.answers === "object" && Object.keys(body.answers).length
+          ? { answers: body.answers }
+          : {};
+        const done = broker.decide(body.id, body.decision, extra);
+        log.info("手机已应答 " + body.id + " -> " + body.decision
+          + (extra.answers ? "（含 " + Object.keys(extra.answers).length + " 个答案）" : "")
+          + (done ? "" : " (已失效)"));
         return json(res, 200, { ok: done, error: done ? undefined : "该请求已结束" });
       }
 

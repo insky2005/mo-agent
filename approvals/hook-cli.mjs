@@ -85,6 +85,11 @@ async function main() {
   if (!session) process.exit(0);
 
   const toolName = firstString(input, ["tool_name", "toolName"]);
+  const toolInput = input.tool_input || input.toolInput || null;
+  // Qoder / Claude 的 AskUserQuestion 会先走 PermissionRequest：
+  // 它本质是提问，tool_input.questions 里带着选项；可以在 updatedInput.answers 里直接作答。
+  const questions = toolInput && Array.isArray(toolInput.questions) ? toolInput.questions : null;
+  const isQuestion = TARGET === "approval.pending" && toolName === "AskUserQuestion" && !!questions && questions.length > 0;
   const noticeText = firstString(input, ["message", "notification_message"]);
   const notificationType = firstString(input, ["notification_type", "notificationType"]);
   // 把厂商通知类型翻成 mo-agent 的统一语义（授权请求 / 等待回答 / 任务完成…）；
@@ -96,7 +101,9 @@ async function main() {
     agentLabel: process.env.MO_AGENT_AGENT_LABEL || (profile && profile.label) || "Claude Code",
     sessionId: firstString(input, ["session_id", "sessionId"]),
     toolName,
-    toolInput: input.tool_input || input.toolInput || null,
+    toolInput,
+    kind: isNotice ? "notice" : (isQuestion ? "question" : "approval"),
+    questions: isQuestion ? questions : null,
     title: isNotice ? notice.title : (toolName || "需要授权"),
     body: isNotice ? notice.body : "",
     kind: isNotice ? notice.kind : "approval",
@@ -132,12 +139,14 @@ async function main() {
   if (decision === "defer") process.exit(0);
 
   const behavior = decision.indexOf("allow") === 0 ? "allow" : "deny";
-  const out = {
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: behavior === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "用户在手机上拒绝了该操作" },
-    },
-  };
+  const detail = behavior === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "用户在手机上拒绝了该操作" };
+  // 只在手机真的选了答案时才回填，避免把空 answers 交给工具。
+  const answers = result && result.answers && typeof result.answers === "object" ? result.answers : null;
+  if (behavior === "allow" && isQuestion && answers && Object.keys(answers).length) {
+    detail.behavior = "allow";
+    detail.updatedInput = Object.assign({}, toolInput || {}, { answers });
+  }
+  const out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: detail } };
   process.stdout.write(JSON.stringify(out));
   process.exit(0);
 }

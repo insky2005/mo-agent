@@ -73,7 +73,7 @@ mo-agent 目前同时存在三套“事件语言”：
 | `run.canceled` | 信号 | 任意 adapter | `runId, sessionId, agent, finishedAt` | 否 | 一轮被中断 |
 | `pending.added` | 状态 | DSH / 任意 | `eventId, sessionId, kind, question` | 是 | 等待回答/授权 |
 | `pending.resolved` | 状态 | DSH / 任意 | `eventId, reason` | 是 | 待办结束 |
-| `approval.pending` | 状态 | approvals | `id, sessionId, agentLabel, toolName, title` | 是 | 远程批准卡片 |
+| `approval.pending` | 状态 | approvals | `id, sessionId, agentLabel, toolName, title, kind, questions` | 是 | 远程批准 / 回答卡片（`kind=question` 时带选项） |
 | `approval.resolved` | 状态 | approvals | `id, decision` | 是 | 批准结果 |
 | `notice` | 信号 | 仅 hook 桥 | `kind, title, body, sessionId` | 否 | 人类可读的提醒（如 Claude Notification） |
 | `source.error` | 状态 | 任意 adapter | `source, message` | 是 | 数据源异常 |
@@ -262,7 +262,8 @@ Hub 的 `applyEvent` 改为表驱动：
 | `run.canceled` | normal | canceled | `已中断 [Agent]` | `会话标题` |
 | `pending.added`（approval） | critical | approval | `授权请求 [Agent]` | `会话标题 · 工具/动作` |
 | `pending.added`（question） | critical | question | `等待回答 [Agent]` | `会话标题 · 问题` |
-| `approval.pending` | critical | approval | `授权请求 [Agent]` | `会话标题 · 工具/动作` |
+| `approval.pending`（approval） | critical | approval | `授权请求 [Agent]` | `会话标题 · 工具/动作` |
+| `approval.pending`（question） | critical | question | `等待回答 [Agent]` | `会话标题 · 问题` |
 | `notice` | 默认 critical，可被 `severity` 覆盖 | 默认 attention | `<类型标题> [Agent]` | `会话标题 · 内容` |
 | 其它 | — | — | — | 显式静默 |
 

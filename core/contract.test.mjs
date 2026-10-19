@@ -87,3 +87,14 @@ test("标题已经带相同 Agent 后缀时不重复追加", () => {
   const intent = policy({ title: "提醒 [Claude Code]", agentLabel: "Claude Code" });
   assert.equal(intent.title, "提醒 [Claude Code]");
 });
+
+test("AskUserQuestion 走「等待回答」，不是「授权请求」", () => {
+  const intent = NOTIFY_POLICY[EVENT.APPROVAL_PENDING]({
+    kind: "question",
+    agentLabel: "Qoder CN",
+    questions: [{ question: "选哪个分支？" }],
+  });
+  assert.equal(intent.kind, "question");
+  assert.match(intent.title, /等待回答/);
+  assert.match(intent.body, /选哪个分支/);
+});

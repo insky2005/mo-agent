@@ -50,6 +50,7 @@
     }
     section.classList.remove('hidden');
     list.innerHTML = items.map(function (a) {
+      if (a.questions && a.questions.length) return renderQuestion(a);
       var parts = [];
       parts.push('<div class="card attention">');
       parts.push('<div class="cardTop"><div class="cardTitle">等待授权 · ' + esc(a.agentLabel || a.agent || 'Agent') + '</div><span class="badge waiting">需要你决定</span></div>');
@@ -65,6 +66,51 @@
     }).join('');
   }
 
+  /** AskUserQuestion：渲染问题与选项，提交时把答案回填到 updatedInput.answers。 */
+  function renderQuestion(a) {
+    var parts = [];
+    parts.push('<div class="card attention" data-approval-card="' + esc(a.id) + '">');
+    parts.push('<div class="cardTop"><div class="cardTitle">等待回答 · ' + esc(a.agentLabel || a.agent || 'Agent') + '</div><span class="badge waiting">需要你回答</span></div>');
+    parts.push('<div class="meta">' + esc(a.sessionTitle || a.toolName || '') + ' · ' + ago(a.createdAt) + '</div>');
+    a.questions.forEach(function (q, index) {
+      parts.push('<div class="q" data-question="' + esc(q.question) + '">');
+      if (q.header) parts.push('<div class="qHeader">' + esc(q.header) + '</div>');
+      parts.push('<div class="qText">' + esc(q.question) + '</div>');
+      var type = q.multiSelect ? 'checkbox' : 'radio';
+      var name = 'qa_' + a.id + '_' + index;
+      parts.push('<div class="options">');
+      (q.options || []).forEach(function (opt) {
+        parts.push('<label class="option"><input type="' + type + '" name="' + esc(name) + '" data-answer-option="1" value="' + esc(opt.label) + '" />');
+        parts.push('<span>' + esc(opt.label) + (opt.description ? ' · <span class="meta">' + esc(opt.description) + '</span>' : '') + '</span></label>');
+      });
+      parts.push('</div>');
+      parts.push('<input class="customInput" data-answer-custom="1" placeholder="或输入自定义回答" />');
+      parts.push('</div>');
+    });
+    parts.push('<div class="cardActions">');
+    parts.push('<button class="ok" data-approval-submit="' + esc(a.id) + '">提交回答</button>');
+    parts.push('<button class="no" data-approval-id="' + esc(a.id) + '" data-approval-decision="reject_once">拒绝</button>');
+    parts.push('</div></div>');
+    return parts.join('');
+  }
+
+  /** 从卡片里收集 { 问题原文: 答案 }；多选取值用逗号拼接（与 CLI 的 answers 约定一致）。 */
+  function collectAnswers(card) {
+    var answers = {};
+    var blocks = card ? card.querySelectorAll('[data-question]') : [];
+    for (var i = 0; i < blocks.length; i += 1) {
+      var block = blocks[i];
+      var question = block.getAttribute('data-question') || '';
+      var custom = block.querySelector('input[data-answer-custom]');
+      var checked = block.querySelectorAll('input[data-answer-option]:checked');
+      var values = [];
+      for (var j = 0; j < checked.length; j += 1) values.push(checked[j].value);
+      var value = custom && custom.value.trim() ? custom.value.trim() : values.join(', ');
+      if (question && value) answers[question] = value;
+    }
+    return answers;
+  }
+
   function load() {
     fetch(BASE + '/api/state', { headers: { 'x-mo-agent-token': token } })
       .then(function (res) { return res.json(); })
@@ -77,11 +123,13 @@
       .catch(function () { /* 忽略 */ });
   }
 
-  function decide(id, decision) {
+  function decide(id, decision, answers) {
+    var body = { id: id, decision: decision };
+    if (answers && Object.keys(answers).length) body.answers = answers;
     fetch(BASE + '/api/approve', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-mo-agent-token': token },
-      body: JSON.stringify({ id: id, decision: decision })
+      body: JSON.stringify(body)
     })
       .then(function (res) { return res.json(); })
       .then(function (result) {
@@ -112,7 +160,19 @@
   }
 
   document.addEventListener('click', function (event) {
-    var button = event.target.closest ? event.target.closest('button[data-approval-decision]') : null;
+    if (!event.target.closest) return;
+    var submit = event.target.closest('button[data-approval-submit]');
+    if (submit) {
+      var card = submit.closest('.card');
+      var answers = collectAnswers(card);
+      if (!Object.keys(answers).length) {
+        alert('请先选择或输入答案');
+        return;
+      }
+      decide(submit.getAttribute('data-approval-submit'), 'allow_once', answers);
+      return;
+    }
+    var button = event.target.closest('button[data-approval-decision]');
     if (!button) return;
     decide(button.getAttribute('data-approval-id'), button.getAttribute('data-approval-decision'));
   });

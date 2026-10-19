@@ -55,3 +55,34 @@ test("超时仍然 defer", async () => {
   assert.equal(result.reason, "timeout");
   assert.equal(broker.decide(seen.id, DECISION.ALLOW_ONCE), false);
 });
+
+test("提问类：questions 透传，answers 随决定返回给 hook", async () => {
+  let seen = null;
+  const broker = new ApprovalBroker({
+    hub: new Hub({ log: silent }),
+    log: silent,
+    isClientConnected: () => true,
+    timeoutMs: 1000,
+    onPending: function (item) { seen = item; },
+  });
+  const questions = [{ question: "选哪个分支？", header: "分支", options: [{ label: "main" }, { label: "dev" }] }];
+  const pending = broker.request({
+    agent: "qoder-cn",
+    agentLabel: "Qoder CN",
+    toolName: "AskUserQuestion",
+    toolInput: { questions },
+    kind: "question",
+    questions,
+  });
+  await new Promise(function (resolve) { setImmediate(resolve); });
+  assert.ok(seen && seen.id);
+
+  const listed = broker.list()[0];
+  assert.equal(listed.kind, "question");
+  assert.deepEqual(listed.questions, questions);
+
+  assert.equal(broker.decide(seen.id, DECISION.ALLOW_ONCE, { answers: { "选哪个分支？": "main" } }), true);
+  const result = await pending;
+  assert.equal(result.decision, DECISION.ALLOW_ONCE);
+  assert.deepEqual(result.answers, { "选哪个分支？": "main" });
+});

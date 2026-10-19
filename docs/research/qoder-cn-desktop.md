@@ -147,6 +147,11 @@ deny 形态是 `{"behavior":"deny","message":"…","interrupt":false}`；
 **这与 `approvals/hook-cli.mjs` 现在吐出的 JSON 完全一致**（第 124–131 行），
 也就是说 hook 脚本一行不用改，只需要给 profile 声明事件映射。
 
+**AskUserQuestion 也走 PermissionRequest**：日志实测会收到
+`Tool AskUserQuestion requires confirmation`，`tool_input.questions` 里带着完整问题与选项。
+返回 `allow` 时再把 `updatedInput.answers`（问题原文 → 选项 label）一起带回去，
+工具就直接拿到答案、不再弹桌面对话框——手机端的提问卡片就是按这个做的。
+
 CLI 里两条消费路径也分别对上了：
 
 - `getDecision()` 读 `hookSpecificOutput.decision` 对象（`behavior: allow / deny`）→ 这是 **PermissionRequest** 走的路径，正是我们现有的输出；

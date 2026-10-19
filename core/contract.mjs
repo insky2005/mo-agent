@@ -145,18 +145,27 @@ export const SEVERITY = Object.freeze({
  * 返回 null 表示这条事件不通知。
  */
 export const NOTIFY_POLICY = Object.freeze({
-  [EVENT.APPROVAL_PENDING]: (p) => ({
-    severity: SEVERITY.CRITICAL,
-    kind: "approval",
-    title: titleWithAgent("授权请求", p.agentLabel),
-    body: withPrefix(p.sessionTitle, p.title || p.toolName || "该操作需要你的授权才能继续"),
-    eventId: p.id || null,
-    sessionId: p.sessionId || null,
-    agent: p.agent || null,
-    agentLabel: p.agentLabel || null,
-    sessionTitle: p.sessionTitle || null,
-    toolName: p.toolName || null,
-  }),
+  [EVENT.APPROVAL_PENDING]: (p) => {
+    // AskUserQuestion 也会走 PermissionRequest：它本质是「提问」，不是「授权」。
+    const isQuestion = p.kind === "question";
+    return {
+      severity: SEVERITY.CRITICAL,
+      kind: isQuestion ? "question" : "approval",
+      title: titleWithAgent(isQuestion ? "等待回答" : "授权请求", p.agentLabel),
+      body: withPrefix(
+        p.sessionTitle,
+        isQuestion
+          ? describeQuestion({ questions: p.questions })
+          : (p.title || p.toolName || "该操作需要你的授权才能继续")
+      ),
+      eventId: p.id || null,
+      sessionId: p.sessionId || null,
+      agent: p.agent || null,
+      agentLabel: p.agentLabel || null,
+      sessionTitle: p.sessionTitle || null,
+      toolName: p.toolName || null,
+    };
+  },
 
   [EVENT.PENDING_ADDED]: (p) => {
     const isApproval = p.kind === "approval";

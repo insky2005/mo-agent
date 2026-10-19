@@ -62,12 +62,12 @@ export class ApprovalBroker {
         key,
         payload,
         createdAt: Date.now(),
-        finish: (decision, reason) => {
+        finish: (decision, reason, extra) => {
           clearTimeout(timer);
           this.pending.delete(id);
           if (decision === DECISION.ALLOW_ALWAYS || decision === DECISION.REJECT_ALWAYS) this.rules.set(key, decision);
           this.hub.emit(EVENT.APPROVAL_RESOLVED, { id, decision, reason: reason || "user" });
-          resolve({ decision, reason: reason || "user", id });
+          resolve(Object.assign({ decision, reason: reason || "user", id }, extra || {}));
         },
       };
       this.pending.set(id, item);
@@ -80,6 +80,8 @@ export class ApprovalBroker {
         sessionTitle: payload.sessionTitle || null,
         toolName: payload.toolName || "",
         toolInput: payload.toolInput || null,
+        kind: payload.kind === "question" ? "question" : "approval",
+        questions: Array.isArray(payload.questions) ? payload.questions : null,
         title: payload.title || payload.toolName || "需要授权",
         createdAt: Date.now(),
         timeoutMs: this.timeoutMs,
@@ -95,11 +97,11 @@ export class ApprovalBroker {
     });
   }
 
-  /** 手机做决定。 */
-  decide(id, decision) {
+  /** 手机做决定；提问类可以带 answers。 */
+  decide(id, decision, extra) {
     const item = this.pending.get(id);
     if (!item) return false;
-    item.finish(decision, "user");
+    item.finish(decision, "user", extra);
     return true;
   }
 
@@ -107,10 +109,16 @@ export class ApprovalBroker {
     return [...this.pending.values()].map((p) => ({
       id: p.id,
       agent: p.payload.agent || "unknown",
+      agentLabel: p.payload.agentLabel || null,
       toolName: p.payload.toolName || "",
+      toolInput: p.payload.toolInput || null,
+      kind: p.payload.kind === "question" ? "question" : "approval",
+      questions: Array.isArray(p.payload.questions) ? p.payload.questions : null,
       title: p.payload.title || p.payload.toolName || "需要授权",
       createdAt: p.createdAt,
       sessionId: p.payload.sessionId || null,
+      sessionTitle: p.payload.sessionTitle || null,
+      timeoutMs: this.timeoutMs,
     }));
   }
 

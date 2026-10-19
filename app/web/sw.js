@@ -1,4 +1,4 @@
-const CACHE = "mo-agent-v27";
+const CACHE = "mo-agent-v28";
 const SHELL = ["/", "/index.html", "/app.js", "/scan.js", "/approvals.js", "/vendor/jsQR.js", "/style.css", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
