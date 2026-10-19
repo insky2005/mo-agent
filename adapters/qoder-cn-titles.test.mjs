@@ -46,6 +46,7 @@ test("createTitleSource：读库、节流、失败降级", () => {
   const source = createTitleSource({
     dbPath: db,
     sqlitePath: "/fake/sqlite3",
+    nodeSqlite: null,
     log: quiet,
     now: () => clock,
     run: () => {
@@ -79,13 +80,14 @@ test("createTitleSource：sqlite 缺失 / 读失败都不抛", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-agent-qoder-titles-"));
   const db = path.join(dir, "main.sqlite");
   fs.writeFileSync(db, "");
-  const missing = createTitleSource({ dbPath: db, sqlitePath: "", log: quiet });
+  const missing = createTitleSource({ dbPath: db, sqlitePath: "", nodeSqlite: null, log: quiet });
   missing.refresh(true);
   assert.equal(missing.title("s1"), "");
 
   const broken = createTitleSource({
     dbPath: db,
     sqlitePath: "/fake/sqlite3",
+    nodeSqlite: null,
     log: quiet,
     run: () => { throw new Error("boom"); },
   });
@@ -101,4 +103,57 @@ test("defaultDbPath / findSqlite3", () => {
   );
   assert.equal(findSqlite3({ MO_AGENT_SQLITE3: "/custom/sqlite3" }, (p) => p === "/custom/sqlite3"), "/custom/sqlite3");
   assert.equal(findSqlite3({}, () => false), "");
+});
+
+test("createTitleSource：优先用内置 node:sqlite，不 spawn CLI", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-agent-qoder-titles-"));
+  const db = path.join(dir, "main.sqlite");
+  fs.writeFileSync(db, "");
+  let opened = 0;
+  const fake = {
+    DatabaseSync: class {
+      constructor(file, options) {
+        opened += 1;
+        assert.equal(file, db);
+        assert.equal(options.readOnly, true);
+      }
+      prepare(sql) {
+        assert.match(sql, /chat_sessions/);
+        return { all: () => [{ session_id: "s1", title: "内置 sqlite 标题" }] };
+      }
+      close() {}
+    },
+  };
+  const source = createTitleSource({
+    dbPath: db,
+    nodeSqlite: fake,
+    sqlitePath: "/fake/sqlite3",
+    log: quiet,
+    run: () => { throw new Error("不应该 spawn CLI"); },
+  });
+  source.refresh(true);
+  assert.equal(opened, 1);
+  assert.equal(source.title("s1"), "内置 sqlite 标题");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("createTitleSource：node:sqlite 失败时回退 CLI", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-agent-qoder-titles-"));
+  const db = path.join(dir, "main.sqlite");
+  fs.writeFileSync(db, "");
+  const fake = {
+    DatabaseSync: class {
+      constructor() { throw new Error("node sqlite boom"); }
+    },
+  };
+  const source = createTitleSource({
+    dbPath: db,
+    nodeSqlite: fake,
+    sqlitePath: "/fake/sqlite3",
+    log: quiet,
+    run: () => JSON.stringify([{ session_id: "s1", title: "CLI 标题" }]),
+  });
+  source.refresh(true);
+  assert.equal(source.title("s1"), "CLI 标题");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
