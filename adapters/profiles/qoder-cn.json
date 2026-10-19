@@ -1,0 +1,48 @@
+{
+  "id": "qoder-cn",
+  "label": "Qoder CN",
+  "enabled": true,
+  "module": "./qoder-cn.mjs",
+  "export": "QoderCnAdapter",
+  "process": {
+    "match": [
+      "(^|/)Qoder CN($|\\s)",
+      "(^|/)qoderclicn?($|\\s)"
+    ]
+  },
+  "session": {
+    "kind": "jsonl-transcript",
+    "root": "~/.qoder-cn/projects",
+    "pattern": "*/*.jsonl"
+  },
+  "capabilities": {
+    "observe": [
+      "process",
+      "transcript"
+    ],
+    "runEnd": "explicit",
+    "attention": "hook",
+    "approval": "allow",
+    "control": []
+  },
+  "hooks": {
+    "kind": "qoder-cn",
+    "settingsFile": "~/.qoder-cn/settings.json",
+    "settingsFiles": [
+      "~/.qoder/settings.json"
+    ],
+    "events": {
+      "PermissionRequest": "approval.pending",
+      "Notification": "notice"
+    },
+    "labels": {
+      "PermissionRequest": "授权请求：手机可批准 / 拒绝",
+      "Notification": "通知：Agent 需要关注时推送提醒"
+    }
+  },
+  "approval": {
+    "capability": "allow",
+    "mechanism": "PermissionRequest hook（decision.behavior，与 Claude Code 同格式）",
+    "note": "桌面端会先弹自己的框；hook 不返回决定即 defer"
+  }
+}

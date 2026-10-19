@@ -11,6 +11,7 @@ import {
   isManagedHook,
   planInstall,
   planUninstall,
+  settingsPathsFor,
 } from "./agent-hooks.mjs";
 
 const quiet = { info() {}, warn() {} };
@@ -252,4 +253,118 @@ test("纯函数 planInstall / planUninstall 不修改入参", () => {
   const removed = planUninstall(installed.settings, { profile });
   assert.equal(removed.changed, true);
   assert.deepEqual(removed.settings, original);
+});
+
+function qoderProfile(overrides) {
+  return Object.assign({
+    id: "qoder-cn",
+    label: "Qoder CN",
+    enabled: true,
+    hooks: {
+      kind: "qoder-cn",
+      settingsFile: "~/.qoder-cn/settings.json",
+      settingsFiles: ["~/.qoder/settings.json"],
+      events: { PermissionRequest: "approval.pending", Notification: "notice" },
+    },
+  }, overrides || {});
+}
+
+test("Qoder CN：一键配置同时写运行时目录和文档目录，卸载时两边都还原", () => {
+  const ws = makeWorkspace();
+  const primary = path.join(ws.home, ".qoder-cn", "settings.json");
+  const secondary = path.join(ws.home, ".qoder", "settings.json");
+  fs.mkdirSync(path.dirname(primary), { recursive: true });
+  fs.writeFileSync(primary, JSON.stringify({ model: "qmodel" }, null, 2) + "\n");
+
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+  const [installed] = manager.apply({ agentId: "qoder-cn" });
+  assert.equal(installed.ok, true);
+  assert.equal(installed.changed, true);
+  assert.deepEqual(installed.settingsPaths, [primary, secondary]);
+  assert.equal(installed.backupPaths.length, 1, "只有已存在的文件需要备份");
+  assert.ok(fs.existsSync(installed.backupPaths[0]));
+
+  for (const file of [primary, secondary]) {
+    const settings = read(file);
+    const permission = settings.hooks.PermissionRequest[0].hooks[0];
+    assert.match(permission.command, /event PermissionRequest qoder-cn$/);
+    assert.equal(permission.timeout, 600);
+    assert.equal(settings.hooks.Notification[0].hooks[0].timeout, 10);
+  }
+  assert.equal(read(primary).model, "qmodel", "其它配置原样保留");
+
+  const status = manager.status()[0];
+  assert.equal(status.supported, true);
+  assert.equal(status.installed, true);
+  assert.equal(status.settingsPath, primary);
+  assert.deepEqual(status.settingsPaths, [primary, secondary]);
+  assert.equal(status.events.every((event) => event.installed), true);
+
+  const [removed] = manager.apply({ agentId: "qoder-cn", action: "uninstall" });
+  assert.equal(removed.ok, true);
+  assert.deepEqual(read(primary), { model: "qmodel" });
+  assert.deepEqual(read(secondary), {});
+  assert.equal(manager.status()[0].installed, false);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("Qoder CN：任何一个 settings 坏 JSON 都整体中止，另一份不会被写", () => {
+  const ws = makeWorkspace();
+  const primary = path.join(ws.home, ".qoder-cn", "settings.json");
+  const secondary = path.join(ws.home, ".qoder", "settings.json");
+  fs.mkdirSync(path.dirname(primary), { recursive: true });
+  fs.mkdirSync(path.dirname(secondary), { recursive: true });
+  fs.writeFileSync(primary, JSON.stringify({ ok: true }, null, 2));
+  fs.writeFileSync(secondary, "{ broken ");
+
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+  const [result] = manager.apply({ agentId: "qoder-cn" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /不是合法 JSON/);
+  assert.deepEqual(read(primary), { ok: true }, "好文件也不能先写");
+  assert.equal(fs.readFileSync(secondary, "utf8"), "{ broken ");
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("Qoder CN：只装了一份时状态算未完成，再跑一次补齐", () => {
+  const ws = makeWorkspace();
+  const primary = path.join(ws.home, ".qoder-cn", "settings.json");
+  const secondary = path.join(ws.home, ".qoder", "settings.json");
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+
+  const [first] = manager.apply({ agentId: "qoder-cn" });
+  assert.equal(first.ok, true);
+  fs.rmSync(secondary);
+  assert.equal(manager.status()[0].installed, false);
+  assert.equal(manager.status()[0].events.find((event) => event.event === "PermissionRequest").installed, false);
+
+  const [second] = manager.apply({ agentId: "qoder-cn" });
+  assert.equal(second.changed, true);
+  assert.equal(manager.status()[0].installed, true);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("settingsPathsFor：去重并保持主文件在前", () => {
+  assert.deepEqual(
+    settingsPathsFor(qoderProfile({ hooks: { kind: "qoder-cn", settingsFile: "~/.qoder-cn/settings.json", settingsFiles: ["~/.qoder-cn/settings.json", "~/.qoder/settings.json"] } }), "/tmp/h"),
+    ["/tmp/h/.qoder-cn/settings.json", "/tmp/h/.qoder/settings.json"]
+  );
+});
+
+test("写入失败：返回错误而不是抛异常（例如目录不可写）", () => {
+  const ws = makeWorkspace();
+  const primary = path.join(ws.home, ".qoder-cn", "settings.json");
+  fs.mkdirSync(path.dirname(primary), { recursive: true });
+  fs.writeFileSync(primary, JSON.stringify({ model: "qmodel" }, null, 2));
+  fs.chmodSync(path.dirname(primary), 0o500);
+  try {
+    const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+    const [result] = manager.apply({ agentId: "qoder-cn" });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /写入失败/);
+    assert.deepEqual(read(primary), { model: "qmodel" }, "文件保持原样");
+  } finally {
+    fs.chmodSync(path.dirname(primary), 0o700);
+    fs.rmSync(ws.dir, { recursive: true, force: true });
+  }
 });

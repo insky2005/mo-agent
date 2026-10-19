@@ -5,6 +5,7 @@
  *   node scripts/configure-hooks.mjs                 查看状态
  *   node scripts/configure-hooks.mjs --all           一键配置所有支持的 Agent
  *   node scripts/configure-hooks.mjs --agent claude-code
+ *   node scripts/configure-hooks.mjs --agent qoder-cn
  *   node scripts/configure-hooks.mjs --all --uninstall
  *   node scripts/configure-hooks.mjs --all --dry-run 只预览，不写盘
  *
@@ -92,7 +93,10 @@ if (action === "status") {
     const parts = [];
     parts.push(item.label + " (" + item.id + ")");
     parts.push("  " + stateOf(item));
-    if (item.settingsPath) parts.push("  配置: " + item.settingsPath + (item.exists ? "" : "（将创建）"));
+    const settingsPaths = Array.isArray(item.settingsPaths) && item.settingsPaths.length
+      ? item.settingsPaths
+      : (item.settingsPath ? [item.settingsPath] : []);
+    if (settingsPaths.length) parts.push("  配置: " + settingsPaths.join("、") + (item.exists ? "" : "（将创建）"));
     if (item.events.length) {
       parts.push("  事件: " + item.events.map((event) => event.event
         + (event.installed ? (event.outdated ? "（路径待更新）" : "（已配置）") : "（未配置）")).join(", "));

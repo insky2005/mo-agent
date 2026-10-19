@@ -10,13 +10,14 @@
 |---|---|
 | core/ 统一事件模型 + A2A 状态词表 + 事件缓冲 | 已完成 |
 | core/contract.mjs 规范事件 + 通知策略表 + 契约测试 | M1–M4 已落地（见 docs/spec/event-contract.md） |
-| 会话来源标识 + 控制能力门控 | 已落地（手机卡片显示 Agent；Claude 只读） |
+| 会话来源标识 + 控制能力门控 | 已落地（手机卡片显示 Agent；Claude / Qoder CN 只读） |
 | 会话详情 / 历史轮次 | 已落地（点「查看完整」查看前几轮） |
 | adapters/dsh  DSH 数据源（观测 + 控制 + 问答） | 可用 |
 | adapters/claude-code  Claude Code transcript 观测 | 可用（只读；手机不能发指令） |
+| adapters/qoder-cn  Qoder CN 桌面端（智能工作台）观测 | 可用（transcript + hook；手机不能发指令） |
 | adapters/process-scan  进程发现 | 可用 |
 | approvals/ 远程批准中枢 + hook CLI | 已实现并端到端验证 |
-| host/agent-hooks.mjs Agent hooks 配置管理（一键配置 / 备份 / 卸载） | 已实现（Claude Code；托盘「一键配置 Agent…」/ /agents / npm run hooks） |
+| host/agent-hooks.mjs Agent hooks 配置管理（一键配置 / 备份 / 卸载） | 已实现（Claude Code、Qoder CN；托盘「一键配置 Agent…」/ /agents / npm run hooks） |
 | host/ 主程序（HTTP + SSE + 配对 + 二维码） | 可用 |
 | app/web/ 手机端 PWA（扫码配对 / 授权卡片 / 语音） | 可用 |
 | app/android/ Capacitor 原生外壳 + HMS Push | 已打包出 APK |
@@ -46,7 +47,9 @@
 
 扫到的地址会以绝对基址存进 localStorage，因此 App 从 capacitor:// 加载时也能连回电脑。
 
-## 启用远程批准（Claude Code）
+## 启用远程批准
+
+### Claude Code
 
 1. 启动 mo-agent。
 2. 配置 hooks（任选一种）：
@@ -60,12 +63,35 @@
    - 手机在线：手机弹出授权卡片，点「允许一次」后 Agent 继续；
    - 手机不在线 / 超时：hook 不输出任何内容并退出 0，你在终端里照常看到原来的授权提示。
 
+这条「失败交回本地终端」是刻意设计，见 [docs/adr/adr-0001-observational-first.md](docs/adr/adr-0001-observational-first.md)。
+
 查看当前接入状态：`npm run hooks`。手动配置的旧方式仍保留在
 [hooks/claude-code/settings.snippet.json](hooks/claude-code/settings.snippet.json)，仅作兜底。
 配置管理的设计与边界见 [docs/agent-hooks.md](docs/agent-hooks.md)。
 Claude Code 的 Notification 类型、标题与正文模板见 [docs/claude-code-notifications.md](docs/claude-code-notifications.md)。
 
-这条「失败交回本地终端」是刻意设计，见 docs/adr/adr-0001-observational-first.md。
+### Qoder CN（桌面端「智能工作台」）
+
+Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同构，所以观测可以直接用；
+授权卡走同一套 hook 格式（`hookSpecificOutput.decision.behavior`），**hook 脚本不用改**。
+
+一键配置：
+
+    npm run hooks:qoder-cn      # 只配 Qoder CN
+    npm run hooks:install       # 配所有支持的 Agent
+    npm run hooks              # 查看状态
+
+会同时写入 `~/.qoder-cn/settings.json`（运行时实际读取）和 `~/.qoder/settings.json`（文档路径兜底），
+每个文件改动前都备份；只装好其中一份时状态页会显示「未配置」，再点一次即可补齐。
+撤销用 `npm run hooks:uninstall`，或在 /agents 页点「移除」。
+
+限制：
+
+- 桌面端没有 prompt/cancel 公开接口，手机上**只能看和批准/拒绝**，不能发指令或中断；
+- 默认「自动审批」模式下很多操作不会弹授权，切到「询问审批」才会稳定出卡；
+- 权限模式在手机卡片上会显示（`auto` / `default`），远程批准前可以先看一眼。
+
+手动兜底模板见 [hooks/qoder-cn/settings.snippet.json](hooks/qoder-cn/settings.snippet.json)。
 
 ## 打包 Android App
 

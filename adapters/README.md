@@ -50,7 +50,12 @@ export class FooAdapter {
 可参考：
 
 - [adapters/dsh-monitor.mjs](dsh-monitor.mjs)：`runEnd: inferred`，轮次推进 + 实时 status；
-- [adapters/claude-code.mjs](claude-code.mjs)：`runEnd: explicit`，transcript `end_turn`。
+- [adapters/claude-code.mjs](claude-code.mjs)：`runEnd: explicit`，transcript `end_turn`；
+- [adapters/qoder-cn.mjs](qoder-cn.mjs)：同一个 transcript 基类，换目录与命名。
+
+如果新 Agent 的 transcript 也是 Claude Code 同构（`user` / `assistant` / `stop_reason`），
+不要复制一份解析逻辑，直接继承 [adapters/transcript-adapter.mjs](transcript-adapter.mjs)，
+只声明 `name`、`rootEnv`、`defaultRoot`、`defaultLabel` 即可。
 
 ## 3. 加 fixtures 和测试
 

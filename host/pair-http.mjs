@@ -333,7 +333,11 @@ function renderAgentRow(item, canWrite) {
     : "";
   let detail = "";
   if (supported) {
-    const pathLine = "<div class='agent-path'>配置文件：<code>" + escapeHtml(item.settingsPath || "") + "</code>"
+    const paths = Array.isArray(item.settingsPaths) && item.settingsPaths.length
+      ? item.settingsPaths
+      : [item.settingsPath || ""];
+    const pathLine = "<div class='agent-path'>配置文件：<code>"
+      + paths.map((file) => escapeHtml(file)).join("</code>、<code>") + "</code>"
       + (item.exists ? "" : "（将创建）") + "</div>";
     const config = item.events && item.events.length
       ? "<div class='config-title'>将写入的配置（只动 hooks 字段，其它设置原样保留）</div>"
