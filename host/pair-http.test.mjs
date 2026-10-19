@@ -147,6 +147,17 @@ test("/setup 只保留安装与配对，不再嵌入一键配置入口", async (
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
+test("/setup 配对成功后自动关闭窗口", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const { res } = await get("/setup", ctx);
+  assert.match(res.out.body, /配对成功，正在关闭窗口/);
+  // 桌面端窗口由 host-message 关闭，网页里退化成 window.close()
+  assert.match(res.out.body, /__electrobunSendToHost\(\{type:'panel-close'\}\)/);
+  assert.match(res.out.body, /s\.redeemedCount>base/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
 test("单个列表：原生 Agent 只显示状态，不给按钮和配置说明", async () => {
   const ws = workspace();
   const manager = managerFor(ws, [profile(), nativeProfile(), disabledProfile()]);

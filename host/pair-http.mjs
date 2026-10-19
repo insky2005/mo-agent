@@ -229,18 +229,29 @@ export async function handlePairRoutes(req, res, url, ctx) {
     .join("");
   const ttlMinutes = Math.round((ctx.pairing.ttlMs || 300000) / 60000);
 
-  // 配对成功 / 快过期时页面自己换新码，不依赖用户手动刷新
+  // 配对成功 / 快过期时页面自己换新码，不依赖用户手动刷新；
+  // 配对成功后直接把这个设置窗口关掉（桌面端），浏览器里则退化成刷新出新码。
   const pollScript = [
     "<script>(function(){",
     "var base=" + ctx.pairing.status().redeemedCount + ";",
     "var banner=document.getElementById('pairedBanner');",
     "var ttlEl=document.getElementById('ttl');",
     "var stopped=false;",
+    "function closePanel(){",
+    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});}catch(err){}}",
+    "  try{window.close();}catch(err){}",
+    "}",
     "function tick(){",
     "  if(stopped)return;",
     "  fetch('/setup/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){",
     "    if(!s||!s.ok)return;",
-    "    if(s.redeemedCount>base){stopped=true;if(banner)banner.style.display='block';setTimeout(function(){location.reload();},1200);return;}",
+    "    if(s.redeemedCount>base){",
+    "      stopped=true;",
+    "      if(banner){banner.textContent='✓ 配对成功，正在关闭窗口…';banner.style.display='block';}",
+    "      closePanel();",
+    "      setTimeout(function(){location.reload();},1500);",
+    "      return;",
+    "    }",
     "    if(s.remainingMs<=0){location.reload();return;}",
     "    var sec=Math.round(s.remainingMs/1000);var m=Math.floor(sec/60);var r2=sec%60;",
     "    if(ttlEl)ttlEl.textContent=m+':'+(r2<10?'0':'')+r2;",
@@ -273,7 +284,7 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "<div class='card'><div class='step b'>第 2 步</div><h2>配对</h2>",
     "<p>用手机相机直接扫这个码（已装 App 会跳进来自动配对）；也可以在 App 里点「扫码配对」。</p>",
     "<div class='qr'><img src='/setup/qr/pair.svg?ip=" + encodeURIComponent(address) + "' alt='pair qr' width='240' height='240' /></div>",
-    "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功，正在换新的配对码…</p>",
+    "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功，正在关闭窗口…</p>",
     "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='/setup/renew'>换一个配对码</a></p>",
     "</div>",
     "</div>",
