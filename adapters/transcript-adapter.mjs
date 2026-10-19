@@ -11,7 +11,7 @@ function expandHome(p) {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
-function preview(text, max) {
+export function preview(text, max) {
   const value = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
   const limit = max || 200;
   return value.length > limit ? value.slice(0, limit - 1) + "…" : value;
@@ -153,7 +153,15 @@ export class TranscriptAdapter {
     }
   }
 
+  /** 子类预热钩子：例如刷新会话标题缓存。 */
+  prepare() {}
+
   poll() {
+    try {
+      this.prepare();
+    } catch (error) {
+      this.log.debug(this.name + " prepare 失败: " + error.message);
+    }
     const files = this.listFiles();
     const seen = new Set();
     for (const file of files) {
@@ -430,16 +438,20 @@ export class TranscriptAdapter {
     st.turnStarted = false;
     st.turnEnded = false;
     st.status = status;
-    if (prev === status && st.publishedMtime === st.mtimeMs) return;
+    // 标题可能晚于 transcript 到达（例如 Qoder CN 的 AI 标题写进 SQLite），
+    // 所以标题变化也要重新发布一次。
+    const title = this.titleFor(st);
+    if (prev === status && st.publishedMtime === st.mtimeMs && st.publishedTitle === title) return;
     st.publishedMtime = st.mtimeMs;
+    st.publishedTitle = title;
     const record = {
       id: this.idFor(st.sessionId),
       sessionId: this.idFor(st.sessionId),
       agent: this.name,
       agentLabel: this.agentLabel,
       capabilities: this.profile.capabilities || null,
-      // 会话名保持稳定：优先 Claude 生成的标题，其次第一问；最新一问只放在 lastPrompt。
-      title: this.titleFor(st),
+      // 会话名保持稳定：优先厂商标题，其次第一问；最新一问只放在 lastPrompt。
+      title,
       cwd: st.cwd,
       status,
       running: status === TASK.WORKING,

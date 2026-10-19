@@ -85,7 +85,7 @@ content block：`thinking` / `text` / `tool_use`。
 
 | 表 | 内容 | 用途 |
 |---|---|---|
-| `chat_sessions` | `session_id, title, cwd, product_mode, permission_mode, archived, updated_at, workspace_id` | 稳定标题、归档过滤、permission 模式 |
+| `chat_sessions` | `session_id, title, cwd, product_mode, permission_mode, archived, updated_at, workspace_id` | **已用于会话标题**（`adapters/qoder-cn-titles.mjs`）、归档过滤、permission 模式 |
 | `chat_session_messages` | `payload_json`（role/text/tools/timestamp）、`status` | 历史轮次（实测 1425 completed / 10 failed / 10 interrupted） |
 | `chat_session_turn_states` | `status ∈ starting/running/waiting-user/completed/failed/canceled/interrupted` | 状态词表几乎就是 `core/status.mjs`，但**本机为空**，别当 P0 依赖 |
 | `chat-session-turn-payload-buffer.sqlite` | 流式缓冲 | 不建议碰 |
@@ -298,6 +298,7 @@ profile 的 `approval` 改 `none` 即可，不影响 P0。
 | 抽出 transcript 基类，Claude / Qoder 共用 | `adapters/transcript-adapter.mjs`、`adapters/claude-code.mjs` |
 | 新增 Qoder CN 适配器 | `adapters/qoder-cn.mjs`、`adapters/qoder-cn.test.mjs` |
 | 新增 profile（观测 + hook 映射） | `adapters/profiles/qoder-cn.json` |
+| 会话标题读 Qoder 的 SQLite，读不到退回首问截断 | `adapters/qoder-cn-titles.mjs` |
 | 一键配置支持多文件 + `qoder-cn` kind | `host/agent-hooks.mjs`、`host/agent-hooks.test.mjs` |
 | /agents 页展示多个配置文件 | `host/pair-http.mjs` |
 | 终端快捷入口 | `npm run hooks:qoder-cn`（`package.json`） |

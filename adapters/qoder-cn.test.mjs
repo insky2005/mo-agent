@@ -10,6 +10,11 @@ import { loadProfile, hookTarget } from "../approvals/hook-map.mjs";
 import { hookCommandFor } from "../host/agent-hooks.mjs";
 
 const quiet = { info() {}, warn() {}, error() {}, debug() {} };
+
+/** 观测测试不读真实 SQLite：默认没有标题，必要时单独注入。 */
+function noTitles() {
+  return { title: () => "", refresh() {} };
+}
 const sessionId = "9caae06c-acd9-49c8-a8ac-d146cf507b9d";
 
 function line(entry) {
@@ -62,7 +67,7 @@ test("Qoder CN：会话观测、标题、完成事件", () => {
   const hub = new Hub({ log: quiet });
   const events = [];
   hub.store.subscribe((event) => events.push(event));
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { id: "qoder-cn", label: "Qoder CN", session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { id: "qoder-cn", label: "Qoder CN", session: { root } } });
 
   collect(adapter, events);
   const first = events.filter((event) => event.type === EVENT.SESSION_UPSERT).pop().payload;
@@ -113,7 +118,7 @@ test("Qoder CN：tool_result 不算新的一轮，tool_use 期间是 working", (
   const hub = new Hub({ log: quiet });
   const events = [];
   hub.store.subscribe((event) => events.push(event));
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
   adapter.tick();
 
   events.length = 0;
@@ -146,7 +151,7 @@ test("Qoder CN：没有 ai-title 时标题用第一问，last-prompt 不覆盖�
       line({ type: "user", sessionId, message: { content: [{ type: "text", text: "第二问" }] } })
   );
   const hub = new Hub({ log: quiet });
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
   adapter.tick();
   const record = hub.get("qoder-cn:" + sessionId);
   assert.equal(record.title, "第一问");
@@ -164,7 +169,7 @@ test("Qoder CN：history 按轮次返回", async () => {
       line({ type: "assistant", sessionId, message: { stop_reason: "end_turn", content: [{ type: "text", text: "第二答" }] } })
   );
   const hub = new Hub({ log: quiet });
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
   adapter.tick();
   const history = await adapter.history("qoder-cn:" + sessionId, { limit: 20 });
   assert.deepEqual(history.turns, [
@@ -194,7 +199,7 @@ test("Qoder CN：大 transcript 只读尾部时，轮次与「查看完整」一
   assert.ok(fs.statSync(file).size > 512 * 1024);
 
   const hub = new Hub({ log: quiet });
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
   adapter.tick();
   const record = hub.get("qoder-cn:" + sessionId);
   assert.equal(record.turns, 3, "前缀里的 3 轮也要算上");
@@ -214,8 +219,61 @@ test("Qoder CN：isMeta 注入不算用户轮次", () => {
       line({ type: "assistant", sessionId, message: { stop_reason: "end_turn", content: [{ type: "text", text: "回答" }] } })
   );
   const hub = new Hub({ log: quiet });
-  const adapter = new QoderCnAdapter({ hub, log: quiet, profile: { session: { root } } });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
   adapter.tick();
   assert.equal(hub.get("qoder-cn:" + sessionId).turns, 1);
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
+
+test("Qoder CN：优先使用 SQLite 里的会话标题", () => {
+  const { root, file, project } = makeRoot();
+  fs.writeFileSync(file, transcript({ prompt: "关于 manager 里客户端权限的授权，交互方式需要优化下，要更直观、更简易", answer: "好" }).map(line).join(""));
+  const hub = new Hub({ log: quiet });
+  const adapter = new QoderCnAdapter({
+    hub,
+    log: quiet,
+    profile: { session: { root } },
+    titleSource: { title: (id) => (id === sessionId ? "优化客户端权限交互" : ""), refresh() {} },
+  });
+  adapter.tick();
+  assert.equal(hub.get("qoder-cn:" + sessionId).title, "优化客户端权限交互");
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
+
+test("Qoder CN：没有标题时截断第一问，卡片不会被长 prompt 撑满", () => {
+  const { root, file, project } = makeRoot();
+  const prompt = "这是一段很长很长的用户提问".repeat(12);
+  fs.writeFileSync(file, transcript({ prompt, answer: "好" }).map(line).join(""));
+  const hub = new Hub({ log: quiet });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
+  adapter.tick();
+  const title = hub.get("qoder-cn:" + sessionId).title;
+  assert.ok(title.length <= 60, "标题不超过 60 字");
+  assert.ok(title.endsWith("…"), "截断要有省略号");
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
+
+test("Qoder CN：标题晚到时会重新发布会话", () => {
+  const { root, file, project } = makeRoot();
+  fs.writeFileSync(file, transcript({ prompt: "先给个临时标题", answer: "好" }).map(line).join(""));
+  const hub = new Hub({ log: quiet });
+  const events = [];
+  hub.store.subscribe((event) => events.push(event));
+  let exact = "";
+  const adapter = new QoderCnAdapter({
+    hub,
+    log: quiet,
+    titleSource: { title: () => exact, refresh() {} },
+    profile: { session: { root } },
+  });
+  adapter.tick();
+  assert.equal(hub.get("qoder-cn:" + sessionId).title, "先给个临时标题");
+
+  events.length = 0;
+  exact = "真正的会话标题";
+  adapter.tick();
+  const latest = events.filter((event) => event.type === EVENT.SESSION_UPSERT).pop();
+  assert.ok(latest, "标题变化要重新 upsert");
+  assert.equal(latest.payload.title, "真正的会话标题");
   fs.rmSync(path.dirname(project), { recursive: true, force: true });
 });
