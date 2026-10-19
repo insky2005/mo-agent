@@ -90,15 +90,14 @@
 | Agent | 状态 | 说明 |
 |---|---|---|
 | Claude Code | ✅ 一键配置 | `PermissionRequest` + `Notification` |
-| Qoder CN（桌面端） | ✅ 一键配置 | 与 Claude Code 同格式；同时写 `~/.qoder-cn/settings.json` 与 `~/.qoder/settings.json` |
+| Qoder CN（桌面端） | ✅ 一键配置 | 与 Claude Code 同格式；只写 CN 版的 `~/.qoder-cn/settings.json` |
 | DeepSeek Harness | — 无需配置 | 原生接入，不走 hooks |
 | Codex CLI / Gemini CLI | ⏳ 暂不支持 | profile 已声明 `hooks.kind`，但厂商格式未验证，不猜 |
 
 ### Qoder CN 的两个注意点
 
-1. **为什么要写两份 settings**：CN 版的运行时用户目录是 `~/.qoder-cn`（transcript、插件、settings 都在这里），
-   但官方文档写的是 `~/.qoder/settings.json`。两处都写一份，避免版本/文档漂移导致 hook 静默不生效。
-   状态页把两个路径都列出来；只装好其中一份时，状态显示「未配置」，再点一次会补齐。
+1. **只写 CN 版配置**：CN 版的运行时用户目录是 `~/.qoder-cn`（transcript、插件、settings 都在这里）。
+   `~/.qoder` 是 Qoder 国际版 / IDE 的配置，不去碰；官方文档里写的 `~/.qoder/settings.json` 是文档漂移。
 2. **没有手机控制面**：Qoder CN 桌面端没有 prompt/cancel 的公开接口，
    所以手机上只做「看 + 批准/拒绝」，不显示发送/中断按钮（profile 里 `control: []`）。
    桌面端默认 `auto` 权限模式时很多操作由 AI 分类器自动放行，只有切到「询问审批」才会稳定出授权卡。

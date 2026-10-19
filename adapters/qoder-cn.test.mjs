@@ -179,7 +179,7 @@ test("Qoder CN：profile 的 hook 映射与一键配置命令", () => {
   assert.ok(profile, "profile 必须存在");
   assert.equal(profile.hooks.kind, "qoder-cn");
   assert.equal(profile.hooks.settingsFile, "~/.qoder-cn/settings.json");
-  assert.deepEqual(profile.hooks.settingsFiles, ["~/.qoder/settings.json"]);
+  assert.equal(profile.hooks.settingsFiles, undefined, "不要写 Qoder 国际版的 ~/.qoder/settings.json");
   assert.equal(hookTarget("event", profile, "PermissionRequest"), "approval.pending");
   assert.equal(hookTarget("event", profile, "Notification"), "notice");
   assert.match(hookCommandFor({ root: "/repo", agentId: "qoder-cn", event: "PermissionRequest" }), /event PermissionRequest qoder-cn$/);

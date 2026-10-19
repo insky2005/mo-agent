@@ -28,9 +28,6 @@
   "hooks": {
     "kind": "qoder-cn",
     "settingsFile": "~/.qoder-cn/settings.json",
-    "settingsFiles": [
-      "~/.qoder/settings.json"
-    ],
     "events": {
       "PermissionRequest": "approval.pending",
       "Notification": "notice"

@@ -1,5 +1,5 @@
 {
-  "_comment": "推荐用 /agents 或 npm run hooks:qoder-cn 自动配置。这个文件只作手动兜底：合并进 ~/.qoder-cn/settings.json（运行时实际读取）和 ~/.qoder/settings.json（文档路径兜底），不要整体覆盖，并把 <ABSOLUTE_PATH> 换成绝对路径。",
+  "_comment": "推荐用 /agents 或 npm run hooks:qoder-cn 自动配置。这个文件只作手动兜底：合并进 ~/.qoder-cn/settings.json（CN 版运行时实际读取），不要整体覆盖，并把 <ABSOLUTE_PATH> 换成绝对路径。",
   "hooks": {
     "PermissionRequest": [
       {

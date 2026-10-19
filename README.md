@@ -81,8 +81,8 @@ Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同�
     npm run hooks:install       # 配所有支持的 Agent
     npm run hooks              # 查看状态
 
-会同时写入 `~/.qoder-cn/settings.json`（运行时实际读取）和 `~/.qoder/settings.json`（文档路径兜底），
-每个文件改动前都备份；只装好其中一份时状态页会显示「未配置」，再点一次即可补齐。
+只写 CN 版的 `~/.qoder-cn/settings.json`（运行时实际读取的配置），改动前自动备份；
+`~/.qoder/settings.json` 属于 Qoder 国际版 / IDE，不去碰。
 撤销用 `npm run hooks:uninstall`，或在 /agents 页点「移除」。
 
 限制：

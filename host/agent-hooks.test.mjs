@@ -255,10 +255,11 @@ test("纯函数 planInstall / planUninstall 不修改入参", () => {
   assert.deepEqual(removed.settings, original);
 });
 
-function qoderProfile(overrides) {
+/** 多文件能力的通用夹具；Qoder CN 本身只声明一个 settings 文件。 */
+function multiFileProfile(overrides) {
   return Object.assign({
     id: "qoder-cn",
-    label: "Qoder CN",
+    label: "Qoder CN（多文件夹具）",
     enabled: true,
     hooks: {
       kind: "qoder-cn",
@@ -269,14 +270,14 @@ function qoderProfile(overrides) {
   }, overrides || {});
 }
 
-test("Qoder CN：一键配置同时写运行时目录和文档目录，卸载时两边都还原", () => {
+test("多文件 profile：每份 settings 都写入，卸载时两边都还原", () => {
   const ws = makeWorkspace();
   const primary = path.join(ws.home, ".qoder-cn", "settings.json");
   const secondary = path.join(ws.home, ".qoder", "settings.json");
   fs.mkdirSync(path.dirname(primary), { recursive: true });
   fs.writeFileSync(primary, JSON.stringify({ model: "qmodel" }, null, 2) + "\n");
 
-  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [multiFileProfile()], log: quiet });
   const [installed] = manager.apply({ agentId: "qoder-cn" });
   assert.equal(installed.ok, true);
   assert.equal(installed.changed, true);
@@ -308,7 +309,7 @@ test("Qoder CN：一键配置同时写运行时目录和文档目录，卸载时
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
-test("Qoder CN：任何一个 settings 坏 JSON 都整体中止，另一份不会被写", () => {
+test("多文件 profile：任何一个 settings 坏 JSON 都整体中止，另一份不会被写", () => {
   const ws = makeWorkspace();
   const primary = path.join(ws.home, ".qoder-cn", "settings.json");
   const secondary = path.join(ws.home, ".qoder", "settings.json");
@@ -317,7 +318,7 @@ test("Qoder CN：任何一个 settings 坏 JSON 都整体中止，另一份不�
   fs.writeFileSync(primary, JSON.stringify({ ok: true }, null, 2));
   fs.writeFileSync(secondary, "{ broken ");
 
-  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [multiFileProfile()], log: quiet });
   const [result] = manager.apply({ agentId: "qoder-cn" });
   assert.equal(result.ok, false);
   assert.match(result.error, /不是合法 JSON/);
@@ -326,11 +327,11 @@ test("Qoder CN：任何一个 settings 坏 JSON 都整体中止，另一份不�
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
-test("Qoder CN：只装了一份时状态算未完成，再跑一次补齐", () => {
+test("多文件 profile：只装了一份时状态算未完成，再跑一次补齐", () => {
   const ws = makeWorkspace();
   const primary = path.join(ws.home, ".qoder-cn", "settings.json");
   const secondary = path.join(ws.home, ".qoder", "settings.json");
-  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+  const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [multiFileProfile()], log: quiet });
 
   const [first] = manager.apply({ agentId: "qoder-cn" });
   assert.equal(first.ok, true);
@@ -346,7 +347,7 @@ test("Qoder CN：只装了一份时状态算未完成，再跑一次补齐", () 
 
 test("settingsPathsFor：去重并保持主文件在前", () => {
   assert.deepEqual(
-    settingsPathsFor(qoderProfile({ hooks: { kind: "qoder-cn", settingsFile: "~/.qoder-cn/settings.json", settingsFiles: ["~/.qoder-cn/settings.json", "~/.qoder/settings.json"] } }), "/tmp/h"),
+    settingsPathsFor(multiFileProfile({ hooks: { kind: "qoder-cn", settingsFile: "~/.qoder-cn/settings.json", settingsFiles: ["~/.qoder-cn/settings.json", "~/.qoder/settings.json"] } }), "/tmp/h"),
     ["/tmp/h/.qoder-cn/settings.json", "/tmp/h/.qoder/settings.json"]
   );
 });
@@ -358,7 +359,7 @@ test("写入失败：返回错误而不是抛异常（例如目录不可写）",
   fs.writeFileSync(primary, JSON.stringify({ model: "qmodel" }, null, 2));
   fs.chmodSync(path.dirname(primary), 0o500);
   try {
-    const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [qoderProfile()], log: quiet });
+    const manager = createHooksManager({ root: ws.root, home: ws.home, profiles: [multiFileProfile()], log: quiet });
     const [result] = manager.apply({ agentId: "qoder-cn" });
     assert.equal(result.ok, false);
     assert.match(result.error, /写入失败/);

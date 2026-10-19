@@ -119,7 +119,8 @@ content block：`thinking` / `text` / `tool_use`。
 - 但 CN 版运行时的用户配置目录是 **`~/.qoder-cn`**（bundle 里 `configDirName: ".qoder-cn"`、`projectConfigDirName: ".qoder"`，worker 环境变量 `QODERCN_CONFIG_DIR=~/.qoder-cn`）；
 - 本机两个文件都存在，内容分别像「桌面版」和「CLI/国际版」。
 
-**做法：以 `~/.qoder-cn/settings.json` 为主，`~/.qoder/settings.json` 同步一份兜底，第一次接入时用探针验证哪份生效。**
+**做法：只写 `~/.qoder-cn/settings.json`。** `~/.qoder` 是 Qoder 国际版 / IDE 的配置目录，不能混写；
+落地时已经确认桌面端读的是 `~/.qoder-cn`。
 
 ### 4.3 输出格式：和 Claude Code 一样
 
@@ -197,7 +198,7 @@ CLI 里两条消费路径也分别对上了：
     "control": []
   },
   "hooks": {
-    "kind": "claude-code",
+    "kind": "qoder-cn",
     "settingsFile": "~/.qoder-cn/settings.json",
     "events": { "PermissionRequest": "approval.pending", "Notification": "notice" }
   },
@@ -296,7 +297,7 @@ profile 的 `approval` 改 `none` 即可，不影响 P0。
 |---|---|
 | 抽出 transcript 基类，Claude / Qoder 共用 | `adapters/transcript-adapter.mjs`、`adapters/claude-code.mjs` |
 | 新增 Qoder CN 适配器 | `adapters/qoder-cn.mjs`、`adapters/qoder-cn.test.mjs` |
-| 新增 profile（观测 + hook 映射 + 双 settings） | `adapters/profiles/qoder-cn.json` |
+| 新增 profile（观测 + hook 映射） | `adapters/profiles/qoder-cn.json` |
 | 一键配置支持多文件 + `qoder-cn` kind | `host/agent-hooks.mjs`、`host/agent-hooks.test.mjs` |
 | /agents 页展示多个配置文件 | `host/pair-http.mjs` |
 | 终端快捷入口 | `npm run hooks:qoder-cn`（`package.json`） |
@@ -308,13 +309,13 @@ profile 的 `approval` 改 `none` 即可，不影响 P0。
 2. 电脑浏览器打开 `http://127.0.0.1:7788/agents`；
 3. 终端 `npm run hooks:qoder-cn` 或 `npm run hooks:install`。
 
-会同时写 `~/.qoder-cn/settings.json` 与 `~/.qoder/settings.json`：前者是运行时实际读的，
-后者是官方文档写的；只装好一份时状态页显示「未配置」，再点一次补齐。任何一个文件坏 JSON 都整体中止。
+只写 `~/.qoder-cn/settings.json`（CN 版运行时实际读的配置）；`~/.qoder/settings.json` 是 Qoder 国际版 / IDE 的，
+不去碰。多 settings 文件的写入能力保留在 `host/agent-hooks.mjs` 里备用。
 
 本机验证：
 
 - 用真实 transcript 跑新适配器：31 个会话全部解析出标题 / 状态 / 轮次 / 权限模式；
-- `npm test` 249 项通过，`npm run check`、`npm run docs:capabilities:check` 通过；
+- `npm test` 252 项通过，`npm run check`、`npm run docs:capabilities:check` 通过；
 - `--dry-run` 能正确列出 PermissionRequest / Notification 两条待写 hook。
 
 **仍然待办（唯一未闭环项）**：第 7 节的真机授权验证——在 Qoder CN 桌面端里跑一个需要授权的任务，
