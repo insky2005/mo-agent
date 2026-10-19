@@ -88,9 +88,14 @@ function text(value) {
   return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
 }
 
-/** 通知正文里的来源：Agent 名 + 会话标题，避免只看到标题分不清谁。 */
-function labelOf(payload) {
-  return [payload.agentLabel, payload.sessionTitle].filter(Boolean).join(" · ");
+/** 标题后缀：Agent 名放方括号里，多 Agent 时手机通知栏一眼能分清。 */
+function titleWithAgent(base, agentLabel) {
+  const title = text(base);
+  const label = text(agentLabel);
+  if (!label) return title;
+  const suffix = " [" + label + "]";
+  // 自定义标题已经带过同样的后缀时不再重复
+  return title.endsWith(suffix) ? title : title + suffix;
 }
 
 /** 会话是否具备某个控制能力（prompt / cancel）。缺 capabilities 时兼容旧 DSH 快照。 */
@@ -143,11 +148,13 @@ export const NOTIFY_POLICY = Object.freeze({
   [EVENT.APPROVAL_PENDING]: (p) => ({
     severity: SEVERITY.CRITICAL,
     kind: "approval",
-    title: "授权请求",
-    body: withPrefix(p.agentLabel || p.agent || "Agent", p.title || p.toolName || "该操作需要你的授权才能继续"),
+    title: titleWithAgent("授权请求", p.agentLabel),
+    body: withPrefix(p.sessionTitle, p.title || p.toolName || "该操作需要你的授权才能继续"),
     eventId: p.id || null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
+    agentLabel: p.agentLabel || null,
+    sessionTitle: p.sessionTitle || null,
     toolName: p.toolName || null,
   }),
 
@@ -156,36 +163,44 @@ export const NOTIFY_POLICY = Object.freeze({
     return {
       severity: SEVERITY.CRITICAL,
       kind: isApproval ? "approval" : "question",
-      title: isApproval ? "授权请求" : "等待回答",
-      body: withPrefix(labelOf(p), describeQuestion(p.question)),
+      title: titleWithAgent(isApproval ? "授权请求" : "等待回答", p.agentLabel),
+      body: withPrefix(p.sessionTitle, describeQuestion(p.question)),
       eventId: p.eventId || null,
       sessionId: p.sessionId || null,
       agent: null,
+      agentLabel: p.agentLabel || null,
+      sessionTitle: p.sessionTitle || null,
       toolName: null,
     };
   },
 
-  // notice 只用于 hook 的「需要关注」，完成/失败走 run.*，避免重复分支。
+  // notice 用于 hook 的「需要关注」；severity / kind 由来源声明
+  // （Claude 的 notification_type 会映射成授权请求 / 等待回答 / 任务完成…），
+  // 没有声明时保持 critical。
   [EVENT.NOTICE]: (p) => ({
-    severity: SEVERITY.CRITICAL,
+    severity: p.severity || SEVERITY.CRITICAL,
     kind: p.kind || "attention",
-    title: p.title || "提醒",
-    body: withPrefix(labelOf(p), p.body || ""),
+    title: titleWithAgent(p.title || "提醒", p.agentLabel),
+    body: withPrefix(p.sessionTitle, p.body || ""),
     eventId: null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
+    agentLabel: p.agentLabel || null,
+    sessionTitle: p.sessionTitle || null,
+    notificationType: p.notificationType || null,
     toolName: null,
   }),
 
   [EVENT.RUN_COMPLETED]: (p) => ({
     severity: SEVERITY.NORMAL,
     kind: "completed",
-    title: "任务完成",
-    body: withPrefix(labelOf(p) || p.title || p.agent, clip(p.text || p.body || "")),
+    title: titleWithAgent("任务完成", p.agentLabel),
+    body: withPrefix(p.sessionTitle || p.title, clip(p.text || p.body || "")),
     eventId: null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
+    sessionTitle: p.sessionTitle || null,
     toolName: null,
     runId: p.runId || null,
   }),
@@ -193,12 +208,13 @@ export const NOTIFY_POLICY = Object.freeze({
   [EVENT.RUN_FAILED]: (p) => ({
     severity: SEVERITY.CRITICAL,
     kind: "error",
-    title: "出错了",
-    body: withPrefix(labelOf(p) || p.title || p.agent, clip(p.text || p.body || "")),
+    title: titleWithAgent("出错了", p.agentLabel),
+    body: withPrefix(p.sessionTitle || p.title, clip(p.text || p.body || "")),
     eventId: null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
+    sessionTitle: p.sessionTitle || null,
     toolName: null,
     runId: p.runId || null,
   }),
@@ -206,12 +222,13 @@ export const NOTIFY_POLICY = Object.freeze({
   [EVENT.RUN_CANCELED]: (p) => ({
     severity: SEVERITY.NORMAL,
     kind: "canceled",
-    title: "已中断",
-    body: withPrefix(labelOf(p) || p.title || p.agent, ""),
+    title: titleWithAgent("已中断", p.agentLabel),
+    body: withPrefix(p.sessionTitle || p.title, ""),
     eventId: null,
     sessionId: p.sessionId || null,
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
+    sessionTitle: p.sessionTitle || null,
     toolName: null,
     runId: p.runId || null,
   }),

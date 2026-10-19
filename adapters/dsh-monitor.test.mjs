@@ -118,7 +118,7 @@ test("DSH 完成走 run.completed -> 一条「任务完成」通知", () => {
   monitor.applySession(sessionItem("s1", false, "第一轮回复"));
   assert.equal(notifies.length, 1);
   assert.equal(notifies[0].kind, "completed");
-  assert.equal(notifies[0].title, "任务完成");
+  assert.equal(notifies[0].title, "任务完成 [DeepSeek Harness]");
   assert.ok(notifies[0].runId);
   assert.match(notifies[0].body, /第一轮回复/);
   assert.equal(events.filter((e) => e.type === EVENT.NOTICE).length, 0, "完成不应再发 notice");

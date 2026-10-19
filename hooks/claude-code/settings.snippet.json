@@ -1,5 +1,5 @@
 {
-  "_comment": "把这段合并进 ~/.claude/settings.json（已存在 hooks 时合并，不要整体覆盖）。把 <ABSOLUTE_PATH> 换成本仓库的绝对路径。",
+  "_comment": "推荐用设置页 /agents 或 npm run hooks:install 自动配置。这个文件只作手动兜底：合并进 ~/.claude/settings.json（不要整体覆盖），并把 <ABSOLUTE_PATH> 换成绝对路径。",
   "hooks": {
     "PermissionRequest": [
       {

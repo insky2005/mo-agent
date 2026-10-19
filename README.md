@@ -16,6 +16,7 @@
 | adapters/claude-code  Claude Code transcript 观测 | 可用（只读；手机不能发指令） |
 | adapters/process-scan  进程发现 | 可用 |
 | approvals/ 远程批准中枢 + hook CLI | 已实现并端到端验证 |
+| host/agent-hooks.mjs Agent hooks 配置管理（一键配置 / 备份 / 卸载） | 已实现（Claude Code；托盘「一键配置 Agent…」/ /agents / npm run hooks） |
 | host/ 主程序（HTTP + SSE + 配对 + 二维码） | 可用 |
 | app/web/ 手机端 PWA（扫码配对 / 授权卡片 / 语音） | 可用 |
 | app/android/ Capacitor 原生外壳 + HMS Push | 已打包出 APK |
@@ -47,11 +48,22 @@
 
 ## 启用远程批准（Claude Code）
 
-1. 把 hooks/claude-code/settings.snippet.json 合并进 ~/.claude/settings.json，把 <ABSOLUTE_PATH> 换成本仓库的绝对路径。
-2. 保持 mo-agent 在运行。
-3. 在 Claude Code 里触发一个需要授权的操作：
+1. 启动 mo-agent。
+2. 配置 hooks（任选一种）：
+   - 菜单栏托盘 →「一键配置 Agent…」→「一键配置」；
+   - 或电脑浏览器打开 http://127.0.0.1:7788/agents；
+   - 或在仓库里执行 `npm run hooks:install`。
+   两种方式共用同一套逻辑：只增删 mo-agent 自己的 hook，写入前自动备份 `~/.claude/settings.json`，
+   不会碰其它设置；文件不是合法 JSON 时会拒绝写入。撤销用 `npm run hooks:uninstall`（或设置页「移除」）。
+3. **重启 Claude Code**，它只在启动时读取 settings.json。
+4. 在 Claude Code 里触发一个需要授权的操作：
    - 手机在线：手机弹出授权卡片，点「允许一次」后 Agent 继续；
    - 手机不在线 / 超时：hook 不输出任何内容并退出 0，你在终端里照常看到原来的授权提示。
+
+查看当前接入状态：`npm run hooks`。手动配置的旧方式仍保留在
+[hooks/claude-code/settings.snippet.json](hooks/claude-code/settings.snippet.json)，仅作兜底。
+配置管理的设计与边界见 [docs/agent-hooks.md](docs/agent-hooks.md)。
+Claude Code 的 Notification 类型、标题与正文模板见 [docs/claude-code-notifications.md](docs/claude-code-notifications.md)。
 
 这条「失败交回本地终端」是刻意设计，见 docs/adr/adr-0001-observational-first.md。
 
@@ -89,7 +101,8 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
 双击启动后菜单栏出现托盘图标，并默认弹出「设置（安装与配对）」面板；菜单项：
 
-- 设置（安装与配对）：弹出面板窗口，里面就是「扫码装 App」和「扫码配对」两个二维码
+- 一键配置 Agent…：弹出「一键配置」窗口，用单个列表列出所有已启用的 Agent；需要 hook 的显示将写入的 hook、状态和按钮，原生接入的只显示状态
+- 设置（安装与配对）：弹出面板窗口，里面是「扫码装 App」「扫码配对」两个二维码
 - 语音：启用语音 / 麦克风权限设置… / 语音命令 / 语音测试（详见 [docs/voice.md](docs/voice.md)）
 - 重启服务：重启本地 host 服务，随后自动打开「设置」面板
 - 查看日志：在面板窗口里实时查看 host 日志（仅本机可打开 /logs）
@@ -140,7 +153,8 @@ APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/
 
 旧的 SSE 前台服务已停用，「mo-agent 正在守候」常驻通知不再出现。
 
-通知分级仍在 core/notify.mjs：授权 / 提问 / 失败 = critical，任务完成 = normal，同一件待办只提醒一次。
+通知标题统一为 `<类型> [Agent]`（如 `授权请求 [Claude Code]`），正文为 `<会话> · <内容>`；
+分级仍在 core/notify.mjs：授权 / 提问 / 失败 = critical，任务完成 = normal，同一件待办只提醒一次。
 
 重新打包安装：
 
@@ -214,6 +228,7 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
     adapters/      观测适配层；每 Agent 一份 profile，registry 动态加载（接入见 adapters/README.md）
     approvals/     远程批准：broker + hook 命令行入口
     host/          主程序：HTTP / SSE / 配对 / 二维码 / 编排
+    host/agent-hooks.mjs  Agent hooks 配置管理：检测 / 写入 / 备份 / 卸载（设置页与 CLI 共用）
     host/voice/    两段式语音：文本规则、确认状态机、TTS、whisper、常驻 helper 客户端、p0 诊断 CLI
     app/web/       手机端 PWA 源码
     app/android/   Capacitor 原生工程
@@ -222,6 +237,7 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
     hooks/         各 Agent 的 hook 安装模板
     docs/          adr/ 决策 · research/ 预研 · spec/ 规格 · voice.md 语音手册
     scripts/       probe-dsh（探针）、inspect-sessions（会话排查看派生关系）、e2e-approval（回归）、
+                   configure-hooks（终端版 hooks 配置管理）、
                    build-android / build-desktop / build-voice-bridge / build-whisper
 
 ## 架构
@@ -253,6 +269,7 @@ mo-agent 的处理：
 ## 接口速查
 
     GET  /setup                设置页（装 App + 配对两个二维码；桌面面板打开的就是它）
+    GET  /agents               一键配置页（已启用 Agent 列表 / 写入内容 / 状态 / 按钮；仅回环地址可写）
     GET  /pair                 二维码配对页（公开）
     GET  /pair/qr.svg          二维码图片（公开，?ip= 可指定网卡）
     GET  /logs                 日志页（仅回环地址可访问；桌面「查看日志」打开）
@@ -263,6 +280,9 @@ mo-agent 的处理：
     GET  /api/events           SSE 事件流（?since= 断点重放；固定 message 信封）
     POST /api/approve          手机决定：{id, decision}
     POST /api/prompt           发送指令（仅 control 含 prompt 的会话；Claude 只读返回 409）
+    GET  /local/hooks          各 Agent hook 配置状态（仅回环地址）
+    POST /local/hooks/apply    hooks 安装/卸载：{agentId, action, dryRun}（仅回环地址）
+    POST /setup/hooks/apply    设置页表单动作（仅回环地址，303 回 /agents）
     POST /local/approval       hook 回调（本机令牌）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
 

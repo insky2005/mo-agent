@@ -68,10 +68,22 @@ test("canControl 按 capabilities 判断，Claude 默认只读", () => {
   assert.equal(canControl(null, "prompt"), false);
 });
 
-test("完成通知正文带 Agent 名，能区分 DSH / Claude", () => {
+test("完成通知把 Agent 名放标题后缀，正文只留会话与回答", () => {
   const policy = NOTIFY_POLICY[EVENT.RUN_COMPLETED];
   const intent = policy({ agentLabel: "Claude Code", sessionTitle: "修 bug", text: "好了" });
-  assert.match(intent.body, /Claude Code/);
-  assert.match(intent.body, /修 bug/);
-  assert.match(intent.body, /好了/);
+  assert.equal(intent.title, "任务完成 [Claude Code]");
+  assert.equal(intent.body, "修 bug · 好了");
+  assert.doesNotMatch(intent.body, /Claude Code/);
+});
+
+test("没有 agentLabel 时标题保持旧格式", () => {
+  const policy = NOTIFY_POLICY[EVENT.RUN_COMPLETED];
+  const intent = policy({ sessionTitle: "修 bug", text: "好了" });
+  assert.equal(intent.title, "任务完成");
+});
+
+test("标题已经带相同 Agent 后缀时不重复追加", () => {
+  const policy = NOTIFY_POLICY[EVENT.NOTICE];
+  const intent = policy({ title: "提醒 [Claude Code]", agentLabel: "Claude Code" });
+  assert.equal(intent.title, "提醒 [Claude Code]");
 });

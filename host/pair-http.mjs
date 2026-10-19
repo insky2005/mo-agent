@@ -1,6 +1,11 @@
 import QRCode from "qrcode";
+import { randomBytes } from "node:crypto";
 import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { localIPv4List } from "./http.mjs";
+
+// 配置页是公开的，但写操作只接受本机 + 本进程发出的表单令牌，
+// 防止用户浏览其它网站时被跨站 POST 改 hook。
+const HOOKS_CSRF = randomBytes(16).toString("hex");
 
 function html(res, status, body) {
   res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
@@ -18,6 +23,33 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function redirect(res, location) {
+  res.writeHead(303, { location, "cache-control": "no-store" });
+  res.end();
+}
+
+function readForm(req) {
+  return new Promise((resolve) => {
+    let data = "";
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        req.destroy();
+        return;
+      }
+      data += chunk;
+    });
+    req.on("end", () => {
+      const params = new URLSearchParams(data);
+      const out = {};
+      for (const [key, value] of params) out[key] = value;
+      resolve(out);
+    });
+    req.on("error", () => resolve({}));
+  });
 }
 
 function svg(res, payload) {
@@ -43,8 +75,9 @@ const STYLE = [
   "*{box-sizing:border-box}",
   "body{margin:0;background:#0b1020;color:#e7ecff;font-family:-apple-system,'PingFang SC','Segoe UI',sans-serif;",
   "display:flex;flex-direction:column;align-items:center;padding:28px 18px 40px;min-height:100vh}",
+  "a{color:#8ab4ff}",
   "h1{font-size:20px;margin:0 0 2px}",
-  ".sub{color:#8b97bd;font-size:13px;margin-bottom:22px}",
+  ".sub{color:#8b97bd;font-size:13px;margin-bottom:22px;text-align:center}",
   ".grid{display:flex;gap:22px;flex-wrap:wrap;justify-content:center}",
   ".card{background:#141b32;border:1px solid #263054;border-radius:16px;padding:18px;width:320px;text-align:center}",
   ".card h2{font-size:15px;margin:0 0 4px;color:#e7ecff}",
@@ -59,13 +92,108 @@ const STYLE = [
   ".ip{padding:6px 11px;border:1px solid #263054;border-radius:9px;color:#8b97bd;text-decoration:none;font-size:12.5px}",
   ".ip.on{border-color:#4f8cff;color:#e7ecff}",
   ".warn{margin-top:20px;color:#f5b942;font-size:12px;max-width:620px;text-align:center;line-height:1.7}",
+  ".panel{background:#141b32;border:1px solid #263054;border-radius:16px;padding:18px;margin-top:22px;width:100%;max-width:720px}",
+  ".panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:6px}",
+  ".panel-head h2{font-size:15px;margin:0 0 6px}",
+  ".panel-head p{color:#8b97bd;font-size:12.5px;line-height:1.6;margin:0;max-width:450px}",
+  ".agent-list{margin-top:6px}",
+  ".agent{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:16px 0;",
+  "border-top:1px solid #202a49;flex-wrap:wrap}",
+  ".agent-list .agent:first-child{border-top:0;padding-top:14px}",
+  ".agent-main{min-width:0;flex:1}",
+  ".agent-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}",
+  ".agent-id{color:#8b97bd;font-size:11.5px;font-weight:400;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
+  ".agent-path{color:#8b97bd;font-size:12px;margin-top:6px;word-break:break-all;line-height:1.7}",
+  ".agent-path code{color:#cdd7f7;font-size:11.5px}",
+  ".agent-events{color:#8b97bd;font-size:12px;margin-top:6px;line-height:1.8}",
+  ".agent-error{color:#ffb3ba;font-size:12px;margin-top:6px;line-height:1.7}",
+  ".badge{font-size:11px;border-radius:999px;padding:2px 9px;border:1px solid transparent;white-space:nowrap}",
+  ".badge.ok{background:rgba(53,211,154,.14);color:#35d39a;border-color:rgba(53,211,154,.4)}",
+  ".badge.warn{background:rgba(245,185,66,.14);color:#f5b942;border-color:rgba(245,185,66,.4)}",
+  ".badge.off{background:rgba(139,151,189,.12);color:#8b97bd;border-color:#263054}",
+  ".agent-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
+  ".btn{display:inline-block;border:1px solid #3b5bdb;background:#3b5bdb;color:#fff;border-radius:9px;padding:7px 13px;",
+  "font-size:12.5px;cursor:pointer;text-decoration:none;font-weight:600;font-family:inherit}",
+  ".btn:hover{filter:brightness(1.1)}",
+  ".btn.ghost{background:transparent;color:#aab6dc;border-color:#33406a;font-weight:500}",
+  ".btn.danger{background:transparent;border-color:#6b2b3a;color:#f0858f}",
+  ".btn[disabled]{opacity:.45;cursor:not-allowed}",
+  ".banner{margin-top:18px;border-radius:12px;padding:11px 14px;font-size:13px;line-height:1.6;border:1px solid;width:100%;max-width:720px}",
+  ".banner.ok{background:rgba(53,211,154,.12);border-color:rgba(53,211,154,.4);color:#8ef0c6}",
+  ".banner.bad{background:rgba(240,133,143,.12);border-color:rgba(240,133,143,.4);color:#ffb3ba}",
+  ".note{color:#8b97bd;font-size:12px;margin-top:14px;line-height:1.9}",
+  ".note code{color:#cdd7f7}",
+  ".config-title{font-size:11.5px;color:#8b97bd;margin-top:10px}",
+  ".config-list{margin-top:6px;display:flex;flex-direction:column;gap:6px}",
+  ".config-item{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;background:#10162a;border:1px solid #1f2947;",
+  "border-radius:9px;padding:7px 10px}",
+  ".config-item.done{border-color:rgba(53,211,154,.3)}",
+  ".config-event{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#cdd7f7}",
+  ".config-desc{color:#aab6dc;font-size:12px;flex:1;min-width:150px}",
+  ".config-meta{color:#8b97bd;font-size:11px;white-space:nowrap}",
+  "details.config-detail{margin-top:9px}",
+  "details.config-detail summary{cursor:pointer;color:#8b97bd;font-size:11.5px}",
+  "pre{background:#0d1326;border:1px solid #1f2947;border-radius:9px;padding:10px;overflow:auto;font-size:11px;",
+  "line-height:1.6;margin:6px 0 0;color:#cdd7f7;white-space:pre-wrap;word-break:break-all}",
 ].join("");
 
-/** 处理 /pair、/setup 及其二维码；已处理返回 true。 */
+/** 处理 /pair、/setup、/agents 及其二维码；已处理返回 true。 */
 export async function handlePairRoutes(req, res, url, ctx) {
   const pathname = url.pathname;
-  const known = pathname === "/pair" || pathname === "/setup" || pathname.startsWith("/setup/qr/") || pathname === "/pair/qr.svg" || pathname === "/setup/status" || pathname === "/setup/renew";
+  const applyPath = pathname === "/setup/hooks/apply";
+  const known = applyPath
+    || pathname === "/pair"
+    || pathname === "/setup"
+    || pathname === "/agents"
+    || pathname.startsWith("/setup/qr/")
+    || pathname === "/pair/qr.svg"
+    || pathname === "/setup/status"
+    || pathname === "/setup/renew";
   if (!known) return false;
+
+  // ---- Agent hooks 一键配置（只允许电脑本机；手机/局域网不能改） ----
+  if (applyPath) {
+    if (req.method !== "POST") {
+      html(res, 405, "method not allowed");
+      return true;
+    }
+    if (ctx.isLoopback === false) {
+      html(res, 403, "该操作仅限电脑本机：请在电脑浏览器打开 http://127.0.0.1:" + ctx.port + "/agents");
+      return true;
+    }
+    if (!ctx.hooksManager) {
+      html(res, 503, "配置管理不可用（hooks manager 未加载）");
+      return true;
+    }
+    const form = await readForm(req);
+    if (form.csrf !== HOOKS_CSRF) {
+      html(res, 403, "页面已过期：请刷新 /agents 后重试");
+      return true;
+    }
+    const action = form.action === "uninstall" ? "uninstall" : "install";
+    const agentId = String(form.agentId || "all");
+    let results = [];
+    let thrown = "";
+    try {
+      results = ctx.hooksManager.apply({ agentId, action });
+    } catch (error) {
+      thrown = error && error.message ? error.message : String(error);
+    }
+    const summary = summarize(results, action, thrown);
+    const query = new URLSearchParams({ msg: summary.msg, bad: summary.bad ? "1" : "0" });
+    redirect(res, "/agents?" + query.toString());
+    return true;
+  }
+
+  if (pathname === "/agents") {
+    if (req.method !== "GET") {
+      html(res, 405, "method not allowed");
+      return true;
+    }
+    renderAgentsPage(res, url, ctx);
+    return true;
+  }
+
   if (req.method !== "GET") {
     html(res, 405, "method not allowed");
     return true;
@@ -149,7 +277,6 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='/setup/renew'>换一个配对码</a></p>",
     "</div>",
     "</div>",
-    "</div>",
     "<div class='meta'>配对码 <b>" + escapeHtml(ctx.pin) + "</b>（也可以手动输入）",
     "<div class='ips'>" + buttons + "</div></div>",
     "<div class='warn'>手机连不上时，多半是二维码里选错了网卡——点上面的地址，切换成和手机同一网段的那个。</div>",
@@ -159,4 +286,159 @@ export async function handlePairRoutes(req, res, url, ctx) {
 
   html(res, 200, page);
   return true;
+}
+
+function summarize(results, action, thrown) {
+  if (thrown) return { msg: thrown, bad: true };
+  const failed = results.filter((item) => !item.ok);
+  if (failed.length) {
+    return { msg: failed.map((item) => (item.label || item.id) + "：" + item.error).join("；"), bad: true };
+  }
+  const changed = results.filter((item) => item.changed);
+  if (!changed.length) return { msg: "配置没有变化（已经是最新的）", bad: false };
+  const names = changed.map((item) => item.label || item.id).join("、");
+  if (action === "uninstall") return { msg: "已移除 " + names + " 的 hook 配置；原配置已备份。", bad: false };
+  return { msg: "已配置 " + names + "；重启对应 Agent 后生效。原配置已备份。", bad: false };
+}
+
+function statusBadge(item) {
+  if (item.error) return { cls: "warn", text: "读取失败" };
+  if (item.installed && item.outdated) return { cls: "warn", text: "需要更新" };
+  if (item.installed) return { cls: "ok", text: "已配置" };
+  if (item.events && item.events.some((event) => event.installed)) return { cls: "warn", text: "部分配置" };
+  return { cls: "off", text: "未配置" };
+}
+
+function configRow(event) {
+  const state = event.installed ? (event.outdated ? "路径待更新" : "已配置") : "未配置";
+  const cls = event.installed && !event.outdated ? " done" : "";
+  return "<div class='config-item" + cls + "'>"
+    + "<span class='config-event'>" + escapeHtml(event.event) + "</span>"
+    + (event.label ? "<span class='config-desc'>" + escapeHtml(event.label) + "</span>" : "")
+    + "<span class='config-meta'>超时 " + escapeHtml(String(event.timeout)) + "s · " + state + "</span>"
+    + "</div>";
+}
+
+function renderAgentRow(item, canWrite) {
+  const supported = !!item.supported;
+  const badge = supported
+    ? statusBadge(item)
+    : { cls: "off", text: item.kind === "native" ? "无需配置" : "暂不支持" };
+  const title = "<div class='agent-title'><strong>" + escapeHtml(item.label) + "</strong>"
+    + "<span class='badge " + badge.cls + "'>" + badge.text + "</span>"
+    + "<span class='agent-id'>" + escapeHtml(item.id) + (item.enabled === false ? " · 档案未启用" : "") + "</span></div>";
+  const error = supported && item.error ? "<div class='agent-error'>" + escapeHtml(item.error) + "</div>" : "";
+  const runner = supported && item.runnerMissing
+    ? "<div class='agent-error'>找不到 hook 入口：<code>" + escapeHtml(item.cliPath) + "</code>，请重新构建或安装 mo-agent。</div>"
+    : "";
+  let detail = "";
+  if (supported) {
+    const pathLine = "<div class='agent-path'>配置文件：<code>" + escapeHtml(item.settingsPath || "") + "</code>"
+      + (item.exists ? "" : "（将创建）") + "</div>";
+    const config = item.events && item.events.length
+      ? "<div class='config-title'>将写入的配置（只动 hooks 字段，其它设置原样保留）</div>"
+        + "<div class='config-list'>" + item.events.map(configRow).join("") + "</div>"
+      : "";
+    const commands = item.events && item.events.length
+      ? "<details class='config-detail'><summary>查看实际写入的命令</summary><pre>"
+        + escapeHtml(item.events.map((event) => event.command).join("\n")) + "</pre></details>"
+      : "";
+    detail = pathLine + config + commands + error + runner;
+  } else {
+    detail = "<div class='agent-events'>" + escapeHtml(item.reason || "—") + "</div>";
+  }
+  let actions = "";
+  if (supported && canWrite) {
+    const installed = item.installed;
+    const label = installed ? (item.outdated ? "更新配置" : "重新写入") : "一键配置";
+    const anyInstalled = (item.events || []).some((event) => event.installed);
+    actions = "<div class='agent-actions'>"
+      + "<form method='post' action='/setup/hooks/apply'>"
+      + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
+      + "<input type='hidden' name='agentId' value='" + escapeHtml(item.id) + "' />"
+      + "<input type='hidden' name='action' value='install' />"
+      + "<button class='btn" + (installed && !item.outdated ? " ghost" : "") + "' type='submit'"
+      + (item.runnerMissing ? " disabled" : "") + ">" + label + "</button>"
+      + "</form>"
+      + (anyInstalled
+        ? "<form method='post' action='/setup/hooks/apply' onsubmit=\"return confirm('确定要移除 " + escapeHtml(item.label) + " 的 mo-agent hook 吗？其它配置会保留。');\">"
+          + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
+          + "<input type='hidden' name='agentId' value='" + escapeHtml(item.id) + "' />"
+          + "<input type='hidden' name='action' value='uninstall' />"
+          + "<button class='btn danger' type='submit'>移除</button>"
+          + "</form>"
+        : "")
+      + "</div>";
+  }
+  return "<div class='agent'><div class='agent-main'>" + title + detail + "</div>" + actions + "</div>";
+}
+
+function renderAgentsPage(res, url, ctx) {
+  const agents = ctx.hooksManager ? ctx.hooksManager.status() : [];
+  // 只列当前启用的 Agent；未启用的档案不算「目前支持」。
+  const visible = agents.filter((item) => item.enabled !== false);
+  // 可配置的排在前面，原生接入的排在后面；不分组、不加标题。
+  visible.sort((a, b) => Number(!!b.supported) - Number(!!a.supported));
+  const configurable = visible.filter((item) => item.supported);
+  const ready = configurable.filter((item) => item.installed && !item.outdated && !item.error);
+  const canWrite = ctx.isLoopback !== false;
+  const msg = url.searchParams.get("msg") || "";
+  const bad = url.searchParams.get("bad") === "1";
+  const escScript = [
+    "<script>(function(){",
+    "document.addEventListener('keydown',function(e){",
+    "  if(e.key!=='Escape')return;",
+    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});return;}catch(err){}}",
+    "  try{window.close();}catch(err){}",
+    "});",
+    "})();</script>",
+  ].join("");
+
+  const rows = visible.map((item) => renderAgentRow(item, canWrite)).join("");
+
+  const topAction = configurable.length && canWrite
+    ? "<form method='post' action='/setup/hooks/apply'>"
+      + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
+      + "<input type='hidden' name='agentId' value='all' />"
+      + "<input type='hidden' name='action' value='install' />"
+      + "<button class='btn' type='submit'>" + (ready.length === configurable.length ? "全部重新写入" : "一键配置全部") + "</button>"
+      + "</form>"
+    : (configurable.length && !canWrite ? "<button class='btn' type='button' disabled>一键配置全部</button>" : "");
+
+  const banner = msg
+    ? "<div class='banner " + (bad ? "bad" : "ok") + "'>" + escapeHtml(msg) + "</div>"
+    : "";
+  const localWarning = canWrite
+    ? ""
+    : "<div class='banner bad'>本页只能在电脑本机操作（请用 127.0.0.1 打开）。这样局域网里的其他人不能改你的 Agent 配置。</div>";
+  const unavailable = ctx.hooksManager
+    ? ""
+    : "<div class='banner bad'>配置管理不可用：host 没有加载 hooks manager。</div>";
+  const progress = configurable.length
+    ? "进度：已配置 " + ready.length + " / " + configurable.length + "。"
+    : "当前没有需要 hook 配置的 Agent。";
+
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent · 一键配置</title><style>" + STYLE + "</style></head><body>",
+    "<h1>一键配置</h1><div class='sub'>所有已启用的 Agent 都在这里</div>",
+    banner,
+    localWarning,
+    unavailable,
+    "<div class='panel'>",
+    "<div class='panel-head'><div><h2>Agent</h2>",
+    "<p>需要 hook 的 Agent 可以一键写入；原生接入的只显示当前方式。写入前自动备份，"
+      + "只增删 mo-agent 自己的 hook，其它设置原样保留；Claude Code 需要重启后才会读取新配置。</p></div>",
+    topAction,
+    "</div>",
+    "<div class='agent-list'>" + (rows || "<div class='agent-events'>没有可显示的 Agent。</div>") + "</div>",
+    "<div class='note'>" + progress
+      + "设置文件损坏（不是合法 JSON）时会拒绝写入，不会覆盖你的原文件。</div>",
+    "</div>",
+    "<div class='meta'><a href='/setup'>← 设置（安装与配对）</a></div>",
+    escScript,
+  ].join("");
+
+  html(res, 200, page);
 }

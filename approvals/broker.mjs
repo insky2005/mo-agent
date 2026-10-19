@@ -77,6 +77,7 @@ export class ApprovalBroker {
         agent: payload.agent || "unknown",
         agentLabel: payload.agentLabel || payload.agent || "unknown",
         sessionId: payload.sessionId || null,
+        sessionTitle: payload.sessionTitle || null,
         toolName: payload.toolName || "",
         toolInput: payload.toolInput || null,
         title: payload.title || payload.toolName || "需要授权",

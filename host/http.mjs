@@ -67,6 +67,15 @@ export function localIPv4List() {
   return result;
 }
 
+/** `::1` / `127.0.0.0/8` / IPv4-mapped 都算本机。配置管理只允许本机操作。 */
+export function isLoopbackAddress(address) {
+  if (!address) return false;
+  const value = String(address).toLowerCase();
+  if (value === "::1" || value === "localhost") return true;
+  if (value.startsWith("::ffff:")) return value.slice(7).startsWith("127.");
+  return value.startsWith("127.");
+}
+
 export function createMoAgentServer(options) {
   const config = options.config;
   const hub = options.hub;
@@ -83,6 +92,7 @@ export function createMoAgentServer(options) {
   const logFile = options.logFile;
   const deviceFile = options.deviceFile;
   const pushTokens = options.pushTokens;
+  const hooksManager = options.hooksManager;
 
   const deviceTokens = new Set();
 
@@ -123,6 +133,20 @@ export function createMoAgentServer(options) {
     const header = req.headers["x-mo-agent-local"];
     const token = Array.isArray(header) ? header[0] : header;
     return !!token && token === localToken;
+  };
+
+  // hook 里的 sessionId 是厂商原始 id（如 Claude 的 UUID），会话记录可能带 agent 前缀。
+  // 两种都找一遍，找到就把会话标题补进通知正文。
+  const sessionFor = (payload) => {
+    const raw = payload && payload.sessionId ? String(payload.sessionId) : "";
+    if (!raw) return null;
+    const candidates = [raw];
+    if (payload.agent) candidates.push(payload.agent + ":" + raw);
+    for (const id of candidates) {
+      const found = hub.get(id);
+      if (found) return found;
+    }
+    return null;
   };
 
   const boundPort = () => {
@@ -216,6 +240,8 @@ export function createMoAgentServer(options) {
           apkVersionText: apkInfo.versionCode ? "构建 v" + apkInfo.versionCode + " · " + String(apkInfo.builtAt || "").slice(0, 16).replace("T", " ") : "",
           apkVersionCode: apkInfo.versionCode || 0,
           renewPairing,
+          hooksManager,
+          isLoopback: isLoopbackAddress(req.socket && req.socket.remoteAddress),
         });
         if (handled) return;
       }
@@ -226,11 +252,40 @@ export function createMoAgentServer(options) {
         if (handled) return;
       }
 
+      // ---- Agent 配置管理（仅本机；局域网里的手机不能改电脑配置） ----
+      if (pathname === "/local/hooks" && req.method === "GET") {
+        if (!isLoopbackAddress(req.socket && req.socket.remoteAddress)) {
+          return json(res, 403, { ok: false, error: "仅限电脑本机" });
+        }
+        if (!hooksManager) return json(res, 503, { ok: false, error: "hooks-manager-unavailable" });
+        return json(res, 200, { ok: true, agents: hooksManager.status() });
+      }
+      if (pathname === "/local/hooks/apply" && req.method === "POST") {
+        if (!isLoopbackAddress(req.socket && req.socket.remoteAddress)) {
+          return json(res, 403, { ok: false, error: "仅限电脑本机" });
+        }
+        // 自定义头会触发浏览器预检；跨站页面无法伪造，避免被网页顺手改配置。
+        if (req.headers["x-mo-agent-hooks"] !== "1") {
+          return json(res, 403, { ok: false, error: "缺少 x-mo-agent-hooks: 1 请求头" });
+        }
+        if (!hooksManager) return json(res, 503, { ok: false, error: "hooks-manager-unavailable" });
+        const body = await readBody(req);
+        const results = hooksManager.apply({
+          agentId: body.agentId,
+          action: body.action,
+          dryRun: body.dryRun === true,
+        });
+        return json(res, 200, { ok: results.every((item) => item.ok), results });
+      }
+
       // ---- 本机专用（hook 回调用） ----
       if (pathname === "/local/approval" && req.method === "POST") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const body = await readBody(req);
-        const result = await broker.request(body);
+        const session = sessionFor(body);
+        const payload = Object.assign({}, body);
+        if (!payload.sessionTitle && session && session.title) payload.sessionTitle = session.title;
+        const result = await broker.request(payload);
         return json(res, 200, result);
       }
       if (pathname === "/local/voice-test" && req.method === "POST") {
@@ -311,15 +366,19 @@ export function createMoAgentServer(options) {
       if (pathname === "/local/notify" && req.method === "POST") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         const body = await readBody(req);
-        const agentLabel = body.agentLabel || "Agent";
-        const content = body.body || body.title || body.toolName || "";
-        const prefix = body.sessionTitle || agentLabel;
-        // 标题只表达事件类型；Agent/会话名放正文。需要完全自定义时传 noticeTitle。
+        const session = sessionFor(body);
+        // 标题只表达事件类型，Agent 名由 NOTIFY_POLICY 统一追加成「标题 [Agent]」；
+        // 正文留原始内容，由策略拼上会话标题。
         hub.emit("notice", {
-          kind: "attention",
-          title: body.noticeTitle || "提醒",
-          body: body.noticeTitle ? content : (prefix + (content ? " · " + content : "")),
+          kind: body.kind || "attention",
+          severity: body.severity || null,
+          title: body.noticeTitle || body.title || "提醒",
+          body: body.body || "",
           sessionId: body.sessionId || null,
+          agent: body.agent || null,
+          agentLabel: body.agentLabel || "Agent",
+          sessionTitle: body.sessionTitle || (session && session.title) || "",
+          notificationType: body.notificationType || null,
         });
         return json(res, 200, { ok: true });
       }

@@ -26,9 +26,8 @@ test("approval.pending -> critical，带 eventId", () => {
   assert.equal(intent.severity, SEVERITY.CRITICAL);
   assert.equal(intent.kind, "approval");
   assert.equal(intent.eventId, "a1");
-  assert.equal(intent.title, "授权请求");
-  assert.match(intent.body, /Claude Code/);
-  assert.match(intent.body, /运行 rm/);
+  assert.equal(intent.title, "授权请求 [Claude Code]");
+  assert.equal(intent.body, "运行 rm");
 });
 
 test("pending.added 的提问 -> critical，body 取问题文本", () => {
@@ -38,12 +37,29 @@ test("pending.added 的提问 -> critical，body 取问题文本", () => {
   assert.equal(intent.body, "选哪个分支？");
 });
 
-test("notice 只用于 attention，始终 critical", () => {
+test("notice 默认 critical，但允许通知类型覆盖级别", () => {
   const attention = classifyEvent(eventOf(EVENT.NOTICE, { kind: "attention", title: "需要你的关注" }));
   assert.equal(attention.severity, SEVERITY.CRITICAL);
   assert.equal(attention.title, "需要你的关注");
   const legacy = classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成" }));
-  assert.equal(legacy.severity, SEVERITY.CRITICAL, "完成不再走 notice");
+  assert.equal(legacy.severity, SEVERITY.CRITICAL, "没声明 severity 时保持 critical");
+  const completed = classifyEvent(eventOf(EVENT.NOTICE, { kind: "completed", title: "任务完成", severity: SEVERITY.NORMAL, agentLabel: "Claude Code" }));
+  assert.equal(completed.severity, SEVERITY.NORMAL);
+  assert.equal(completed.title, "任务完成 [Claude Code]");
+});
+
+test("notice 的 Agent 名进标题，正文用会话标题", () => {
+  const intent = classifyEvent(eventOf(EVENT.NOTICE, {
+    kind: "question",
+    title: "等待回答",
+    body: "Claude is waiting for your input",
+    agentLabel: "Claude Code",
+    sessionTitle: "authx-mcp read",
+    notificationType: "idle_prompt",
+  }));
+  assert.equal(intent.title, "等待回答 [Claude Code]");
+  assert.equal(intent.body, "authx-mcp read · Claude is waiting for your input");
+  assert.equal(intent.notificationType, "idle_prompt");
 });
 
 test("pending.added 带会话标题：正文是「会话 · 问题」", () => {

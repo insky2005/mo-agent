@@ -232,7 +232,7 @@ else                                 -> idle
 - 同一轮完成只能有一个权威来源。Claude 以 transcript 为准，当前**不安装 `Stop` hook**；未来若安装，必须用同一 `runId` 去重。DSH 以轮次推进 + `!running` 为准。
 - 适配器负责把字段映射成规范字段，例如 Claude 的“你说了什么”必须取真正的 `user` 消息，而不是 `last-prompt` 元数据。
 - `capabilities.control` 必须同时约束后端与 UI：不含 `prompt` 的会话，手机端不显示发送按钮、`/api/prompt` 返回 409；不含 `cancel` 的会话同理。
-- `session.upsert` 必须带 `agent` 与 `agentLabel`；手机端卡片和通知正文用它区分 DSH / Claude Code / 未来的 Agent。
+- `session.upsert` 必须带 `agent` 与 `agentLabel`；手机端卡片和通知标题用它区分 DSH / Claude Code / 未来的 Agent。
 
 ### 6.3 状态映射
 
@@ -257,14 +257,17 @@ Hub 的 `applyEvent` 改为表驱动：
 
 | 事件 | severity | kind | 标题 | 正文 |
 |---|---|---|---|---|
-| `run.completed` | normal | completed | 任务完成 | `会话标题 · 回答摘要` |
-| `run.failed` | critical | error | 出错了 | `会话标题 · 错误` |
-| `run.canceled` | normal | canceled | 已中断 | `会话标题` |
-| `pending.added`（approval） | critical | approval | 授权请求 | `会话 · 工具/动作` |
-| `pending.added`（question） | critical | question | 等待回答 | `会话 · 问题` |
-| `approval.pending` | critical | approval | 授权请求 | `Agent · 工具/动作` |
-| `notice` | critical | attention | 提醒 | `会话 · 内容` |
+| `run.completed` | normal | completed | `任务完成 [Agent]` | `会话标题 · 回答摘要` |
+| `run.failed` | critical | error | `出错了 [Agent]` | `会话标题 · 错误` |
+| `run.canceled` | normal | canceled | `已中断 [Agent]` | `会话标题` |
+| `pending.added`（approval） | critical | approval | `授权请求 [Agent]` | `会话标题 · 工具/动作` |
+| `pending.added`（question） | critical | question | `等待回答 [Agent]` | `会话标题 · 问题` |
+| `approval.pending` | critical | approval | `授权请求 [Agent]` | `会话标题 · 工具/动作` |
+| `notice` | 默认 critical，可被 `severity` 覆盖 | 默认 attention | `<类型标题> [Agent]` | `会话标题 · 内容` |
 | 其它 | — | — | — | 显式静默 |
+
+有 `agentLabel` 时标题统一追加 `[Agent]`（如 `等待回答 [Claude Code]`）；没有则保持旧标题。
+正文不再重复 Agent 名，只保留会话标题与内容。
 
 规则：
 

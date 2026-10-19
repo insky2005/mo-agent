@@ -53,6 +53,15 @@ for f in core/*.mjs; do
     *) cp "$f" "$RUNTIME_STAGE/core/" ;;
   esac
 done
+# hook 命令是独立的 node 脚本，不在单文件 host 里；
+# 不带上它，一键配置页会写出一个指向空路径的 hook（静默失效）。
+mkdir -p "$RUNTIME_STAGE/approvals"
+for f in approvals/*.mjs; do
+  case "$f" in
+    *.test.mjs) ;;
+    *) cp "$f" "$RUNTIME_STAGE/approvals/" ;;
+  esac
+done
 
 if [ -f host/notify-defaults.json ]; then
   cp host/notify-defaults.json "$RUNTIME_STAGE/notify-defaults.json"

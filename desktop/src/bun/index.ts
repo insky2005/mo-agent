@@ -16,6 +16,7 @@ try {
 const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
 const PANEL_URL = BASE + "/setup";
+const AGENTS_URL = BASE + "/agents";
 // 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
 const DEV_ROOT = process.env.MO_AGENT_ROOT || "";
 const FALLBACK_REPO_ROOT = "/Users/dev/c/work.ai/deepseek-harness/mo-agent";
@@ -347,10 +348,11 @@ function disposePanel(): void {
   try { current.close(); } catch (error) { /* 已经销毁 */ }
 }
 
-function createPanel(): void {
+function createPanel(url: string = PANEL_URL): void {
+  const isAgents = url === AGENTS_URL;
   const win = new BrowserWindow({
-    title: "mo-agent · 设置（安装与配对）",
-    url: PANEL_URL,
+    title: isAgents ? "mo-agent · 一键配置 Agent" : "mo-agent · 设置（安装与配对）",
+    url,
     frame: { width: 760, height: 760 },
   });
   panel = win;
@@ -384,7 +386,7 @@ function createPanel(): void {
   }
 }
 
-async function openPanel(): Promise<void> {
+async function openPanel(url: string = PANEL_URL): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
     logLine("本地服务启动失败，详见 " + LOG_DIR);
@@ -394,17 +396,10 @@ async function openPanel(): Promise<void> {
   // 先收起浮层与浮层球，把设置窗口放在前面；设置窗口关闭后由 close 事件恢复浮层。
   hideVoiceOverlay(false);
   hideVoiceOrb();
-  if (panel) {
-    try {
-      panel.show();
-      panel.activate();
-      focusPanelWebview(panel);
-      return;
-    } catch (error) {
-      panel = null;
-    }
-  }
-  createPanel();
+  // 窗口只有一个：已经开着就按目标页面重建，避免页面内跳转后
+  // 托盘再点另一项时显示成旧页面。
+  if (panel) disposePanel();
+  createPanel(url);
   if (panel) {
     const win = panel;
     setTimeout(() => { if (panel === win) focusPanelWebview(win); }, 80);
@@ -581,6 +576,7 @@ function trayMenu(): any[] {
   ];
   return [
     { type: "normal", label: "设置（安装与配对）", action: "panel" },
+    { type: "normal", label: "一键配置 Agent…", action: "agents" },
     {
       type: "normal",
       label: (voiceOverlayVisible ? "隐藏语音浮层" : "显示语音浮层")
@@ -1500,7 +1496,8 @@ if (typeof shortcutPoll.unref === "function") shortcutPoll.unref();
 
 tray.on("tray-clicked", async (event: any) => {
   const action = event?.data?.action;
-  if (action === "panel") await openPanel();
+  if (action === "agents") await openPanel(AGENTS_URL);
+  else if (action === "panel") await openPanel();
   else if (action === "voice") await toggleVoice();
   else if (action === "voice-command") await runVoiceCommand();
   else if (action === "dictate") await runDictate();

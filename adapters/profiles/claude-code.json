@@ -23,6 +23,10 @@
     "events": {
       "PermissionRequest": "approval.pending",
       "Notification": "notice"
+    },
+    "labels": {
+      "PermissionRequest": "授权请求：手机可批准 / 拒绝",
+      "Notification": "通知：Agent 需要关注时推送提醒"
     }
   },
   "approval": {

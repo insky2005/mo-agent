@@ -23,6 +23,7 @@ import { createCommandExecutor } from "./voice/commands.mjs";
 import { createDictationRunner } from "./voice/dictate.mjs";
 import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
+import { createHooksManager } from "./agent-hooks.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
 import QRCode from "qrcode";
@@ -63,6 +64,8 @@ notifier.start();
 const localToken = process.env.MO_AGENT_LOCAL_TOKEN || randomBytes(24).toString("base64url");
 // profiles 是运行时从磁盘读的，打包成单文件后必须显式指向运行时目录
 const profiles = loadProfiles(path.join(root, "adapters", "profiles"));
+// Agent hook 配置管理：设置页 / CLI 共用，只写自己认识的 hook，改前备份
+const hooksManager = createHooksManager({ root, profiles, home: os.homedir(), log });
 
 // L1：进程发现（独立于会话观测，唯一能覆盖任意 Agent 的手段）
 const procState = { items: [] };
@@ -462,6 +465,7 @@ const moHost = createMoAgentServer({
   dictate: runDictate,
   voiceEvents,
   pairHandler: handlePairRoutes,
+  hooksManager,
   apkPath,
   logFile,
   deviceFile,
@@ -491,6 +495,7 @@ function banner(port) {
   lines.push("  配对码:   " + moHost.pin);
   lines.push("  数据源:   " + created.adapters.map((a) => a.name).join(", "));
   lines.push("  Agent档案: " + profiles.map((p) => p.id + (p.enabled === false ? "(未启用)" : "")).join(", "));
+  lines.push("  Agent接入: http://127.0.0.1:" + port + "/agents （hooks 一键配置）");
   lines.push("  远程批准: " + (config.approvalTimeoutMs / 1000) + "s 超时；无手机在线时交回本地终端");
   lines.push("  语音:     " + voiceStatus);
   lines.push("");

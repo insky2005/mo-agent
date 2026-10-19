@@ -17,6 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadProfile, hookTarget } from "./hook-map.mjs";
+import { describeClaudeNotification } from "./claude-notifications.mjs";
 
 const args = process.argv.slice(2);
 const MODE = args[0] || "permission";
@@ -85,13 +86,22 @@ async function main() {
 
   const toolName = firstString(input, ["tool_name", "toolName"]);
   const noticeText = firstString(input, ["message", "notification_message"]);
+  const notificationType = firstString(input, ["notification_type", "notificationType"]);
+  // 把厂商通知类型翻成 mo-agent 的统一语义（授权请求 / 等待回答 / 任务完成…）；
+  // Agent 名由 host 的 NOTIFY_POLICY 统一拼到标题后面，这里不拼。
+  const notice = describeClaudeNotification({ notificationType, message: noticeText, toolName });
+  const isNotice = TARGET === "notice";
   const payload = {
     agent: (profile && profile.id) || AGENT_ID,
     agentLabel: process.env.MO_AGENT_AGENT_LABEL || (profile && profile.label) || "Claude Code",
     sessionId: firstString(input, ["session_id", "sessionId"]),
     toolName,
     toolInput: input.tool_input || input.toolInput || null,
-    title: toolName || (TARGET === "notice" ? (noticeText || "需要你的关注") : "需要授权"),
+    title: isNotice ? notice.title : (toolName || "需要授权"),
+    body: isNotice ? notice.body : "",
+    kind: isNotice ? notice.kind : "approval",
+    severity: isNotice ? notice.severity : "critical",
+    notificationType: notice.notificationType,
     cwd: firstString(input, ["cwd"]),
     permissionMode: firstString(input, ["permission_mode", "permissionMode"]),
   };
