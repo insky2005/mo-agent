@@ -277,3 +277,47 @@ test("Qoder CN：标题晚到时会重新发布会话", () => {
   assert.equal(latest.payload.title, "真正的会话标题");
   fs.rmSync(path.dirname(project), { recursive: true, force: true });
 });
+
+test("Qoder CN：上下文压缩后，卡片仍显示最后一条人类提问", async () => {
+  const { root, file, project } = makeRoot();
+  const prompt = "切分支，然后按阶段实施，先完成 P1";
+  const entries = [
+    { type: "user", sessionId, origin: { kind: "human" }, humanInput: { text: prompt, mode: "prompt" }, message: { role: "user", content: [{ type: "text", text: prompt }] } },
+    { type: "assistant", sessionId, message: { role: "assistant", stop_reason: "tool_use", content: [{ type: "text", text: "中间过程".repeat(50000) }] } },
+    { type: "assistant", sessionId, message: { role: "assistant", stop_reason: "tool_use", content: [{ type: "text", text: "更多过程".repeat(50000) }] } },
+    { type: "user", sessionId, isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: "user", content: [{ type: "text", text: "This session is being continued from a previous conversation…" }] } }
+  ];
+  fs.writeFileSync(file, entries.map(line).join(""));
+  // 人类提问必须落在尾部 512KB 之外，模拟压缩后 transcript 变很大
+  assert.ok(fs.statSync(file).size > 512 * 1024);
+
+  fs.appendFileSync(file, line({ type: "assistant", sessionId, message: { role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: "P1 已完成" }] } }));
+  const hub = new Hub({ log: quiet });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
+  adapter.tick();
+
+  const record = hub.get("qoder-cn:" + sessionId);
+  assert.equal(record.lastPrompt, prompt, "压缩后仍能看到最后一条人类提问");
+  assert.equal(record.lastResponse, "P1 已完成");
+  assert.equal(record.turns, 1, "压缩摘要不算一轮");
+  const history = await adapter.history("qoder-cn:" + sessionId, { limit: 20 });
+  assert.equal(history.total, 1, "详情里也不显示压缩摘要");
+  assert.equal(history.turns[0].prompt, prompt);
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
+
+test("Qoder CN：压缩摘要本身不算用户提问", () => {
+  const { root, file, project } = makeRoot();
+  fs.writeFileSync(
+    file,
+    line({ type: "user", sessionId, isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: "user", content: [{ type: "text", text: "This session is being continued…" }] } }) +
+      line({ type: "assistant", sessionId, message: { role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: "继续完成" }] } })
+  );
+  const hub = new Hub({ log: quiet });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
+  adapter.tick();
+  const record = hub.get("qoder-cn:" + sessionId);
+  assert.equal(record.turns, 0);
+  assert.equal(record.lastPrompt, "");
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});

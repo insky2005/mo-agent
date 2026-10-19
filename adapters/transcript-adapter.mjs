@@ -37,7 +37,9 @@ function assistantText(entry) {
 }
 
 function userText(entry) {
-  if (!entry || entry.isMeta || entry.isSidechain) return "";
+  // isCompactSummary：上下文压缩后 CLI 自己注入的「上次聊到哪」摘要，
+  // 不是用户提问，不能显示成「你：」也不能算一轮。
+  if (!entry || entry.isMeta || entry.isSidechain || entry.isCompactSummary === true) return "";
   const content = entry.message && entry.message.content;
   const blocks = Array.isArray(content) ? content : [];
   if (blocks.some((c) => c && c.type === "tool_result")) return "";
@@ -231,21 +233,25 @@ export class TranscriptAdapter {
     }
   }
 
-  /** 一行是不是真正的用户提问；与 applyLine 的计数规则保持一致。 */
-  isUserTurnLine(line) {
-    if (!line || line.indexOf('"type":"user"') === -1) return false;
+  /** 一行里的用户提问文本；与 applyLine 的计数规则保持一致。 */
+  userTurnText(line) {
+    if (!line || line.indexOf('"type":"user"') === -1) return "";
     try {
       const entry = JSON.parse(line);
-      return entry.type === "user" && !!userText(entry);
+      return entry.type === "user" ? userText(entry) : "";
     } catch (error) {
-      return false;
+      return "";
     }
   }
 
-  /** 只读尾部之前，先把前缀里的用户轮次数出来，否则卡片会少算轮次。 */
-  countTurns(file, end) {
-    if (!(end > 0)) return 0;
-    let count = 0;
+  /**
+   * 只读尾部之前，把前缀里的用户轮次和最后一条用户提问补出来：
+   *  - 轮次：卡片「第 N 轮」要和详情一致；
+   *  - 最后提问：上下文压缩后，最后一条人类提问可能落在尾部窗口之前。
+   */
+  scanPrefix(file, end) {
+    const result = { turns: 0, lastPrompt: "" };
+    if (!(end > 0)) return result;
     let position = 0;
     let rest = "";
     const chunk = 1024 * 1024;
@@ -260,17 +266,19 @@ export class TranscriptAdapter {
           const lines = (rest + buf.toString("utf8")).split("\n");
           rest = lines.pop() || "";
           for (const line of lines) {
-            if (this.isUserTurnLine(line.trim())) count += 1;
+            const text = this.userTurnText(line.trim());
+            if (!text) continue;
+            result.turns += 1;
+            result.lastPrompt = text;
           }
         }
       } finally {
         fs.closeSync(fd);
       }
     } catch (error) {
-      this.log.debug("统计 transcript 轮次失败: " + error.message);
-      return count;
+      this.log.debug("统计 transcript 前缀失败: " + error.message);
     }
-    return count;
+    return result;
   }
 
   /** 大 transcript 只读尾部时，用头部 64KB 找回稳定的会话标题和第一问。 */
@@ -301,9 +309,16 @@ export class TranscriptAdapter {
     } catch (error) {
       this.log.debug("读取 transcript 头部失败: " + error.message);
     }
-    // 尾部读取会跳过前缀；前缀里的轮次要补上，卡片上的「N 轮」才和详情一致。
+    // 尾部读取会跳过前缀；前缀里的轮次和最后一条用户提问都要补上。
     const tailStart = this.alignLineStart(file.path, Math.max(0, file.size - MAX_READ_BYTES));
-    st.turns = this.countTurns(file.path, tailStart);
+    const prefix = this.scanPrefix(file.path, tailStart);
+    st.turns = prefix.turns;
+    if (prefix.lastPrompt) {
+      if (!st.firstPrompt) st.firstPrompt = preview(prefix.lastPrompt, 200);
+      st.lastPrompt = prefix.lastPrompt;
+      // 已经有真实提问了，后面的 last-prompt 元数据不要再来覆盖（Claude 会写回第一句）。
+      st.promptFromUser = true;
+    }
   }
 
   applyLine(st, line) {

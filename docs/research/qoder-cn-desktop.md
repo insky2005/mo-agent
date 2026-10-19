@@ -75,6 +75,10 @@ content block：`thinking` / `text` / `tool_use`。
 **差异点**：Qoder 没有 `ai-title` 条目（39 个 transcript 实测 0 个），标题要退回「第一问」或从 SQLite 读；
 权限模式的取法也要改（读 user 条目的 `permissionMode`，不是等 `permission-mode` 行）。
 
+**上下文压缩**：压缩后 CLI 会写一条 `isCompactSummary: true` 的 `user` 条目（正文是
+"This session is being continued…"）。适配器把它排除在「用户提问」之外，既不算轮次、也不显示成「你：」；
+然后靠前缀扫描把压缩前的最后一条人类提问补回来——否则大 transcript 只读尾部时，卡片就只剩「Agent：」。
+
 ### 3.2 SQLite —— 标题 / 状态 / 历史（可选增强）
 
 ```
