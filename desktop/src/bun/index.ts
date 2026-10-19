@@ -1,10 +1,11 @@
-import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut, ApplicationMenu } from "electrobun/main";
+import { Tray, BrowserWindow, Utils, Screen, GlobalShortcut, ApplicationMenu, app } from "electrobun/main";
 import { dlopen, FFIType, JSCallback, ptr } from "bun:ffi";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { createSingleInstance } from "./single-instance";
 
 // 只驻留菜单栏，不占 Dock
 try {
@@ -25,6 +26,9 @@ const RUNTIME_DIR = join(homedir(), "Library", "Application Support", "mo-agent"
 const RUNTIME_VERSION_FILE = "runtime.json";
 
 const LOG_DIR = join(homedir(), "Library", "Logs", "mo-agent");
+// 单实例锁与「再次启动」请求文件。请求文件由主实例轮询，避免第二次启动另起托盘。
+const SINGLE_INSTANCE_LOCK = join(homedir(), ".mo-agent", "desktop.lock");
+const SINGLE_INSTANCE_REQUEST = join(homedir(), ".mo-agent", "desktop.launch");
 const LOG_FILE = join(LOG_DIR, "host.log");
 // 桌面壳只写自己的 desktop.log；host.log 由 host 自己写并在 5MB 处轮转。
 const DESKTOP_LOG_FILE = join(LOG_DIR, "desktop.log");
@@ -54,6 +58,8 @@ function writeVoiceEnabled(enabled: boolean): void {
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
+// 托盘在确认自己是主实例之后才创建，否则第二次启动会多出一个菜单栏图标。
+let tray: Tray | null = null;
 const VOICE_OVERLAY_STATE = join(homedir(), ".mo-agent", "voice-overlay.json");
 const VOICE_OVERLAY_WIDTH = 392;
 // 常驻浮层同时显示草稿区与三个操作按钮，比 P1 的命令浮层高一档。
@@ -124,10 +130,6 @@ let carbonKeyHandler: JSCallback | null = null;
 let carbonHotKeyRef: Buffer | null = null;
 let carbonHotKeyRegistered = false;
 let panelEscPending = false;
-let objcLib: { symbols: {
-  sel_registerName: (name: string) => number;
-  objc_msgSend: (target: unknown, selector: unknown, arg1: unknown, arg2: unknown, wait: boolean) => void;
-} } | null = null;
 let carbonLib: { symbols: {
   GetApplicationEventTarget: () => number;
   InstallEventHandler: (target: number, handler: number, count: number, types: unknown, userData: unknown, out: unknown) => number;
@@ -386,6 +388,22 @@ function createPanel(url: string = PANEL_URL): void {
   }
 }
 
+/** 第二次打开 .app 时，把已经存在的设置窗口直接拉到前台。 */
+function focusPanel(): boolean {
+  if (!panel) return false;
+  const current = panel;
+  try {
+    current.show();
+    current.activate();
+    focusPanelWebview(current);
+    return true;
+  } catch (error) {
+    logLine("聚焦设置窗口失败: " + error);
+    if (panel === current) panel = null;
+    return false;
+  }
+}
+
 async function openPanel(url: string = PANEL_URL): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
@@ -484,33 +502,16 @@ async function restartHost(): Promise<void> {
   return restartService(true);
 }
 
-/** 让设置窗口一打开就把第一响应者给 WebView，否则 Esc 不会进网页。 */
+/** 让设置窗口一打开就把焦点交给 WebView，否则 Esc 不会进网页。 */
 function focusPanelWebview(win: BrowserWindow): void {
+  const webview = win.webview as unknown as {
+    executeJavascript?: (js: string) => void;
+  } | undefined;
+  if (!webview || typeof webview.executeJavascript !== "function") return;
   try {
-    const winPtr = win.ptr;
-    const webview = win.webview as unknown as {
-      ptr?: unknown;
-      executeJavascript?: (js: string) => void;
-    } | undefined;
-    const viewPtr = webview && webview.ptr;
-    if (!winPtr || !viewPtr) return;
-    if (!objcLib) {
-      objcLib = dlopen("/usr/lib/libobjc.A.dylib", {
-        sel_registerName: { args: [FFIType.cstring], returns: FFIType.ptr },
-        objc_msgSend: {
-          args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.bool],
-          returns: FFIType.void,
-        },
-      }) as unknown as typeof objcLib;
-    }
-    if (!objcLib) return;
-    // 通过 performSelectorOnMainThread 调度，避免从 Bun 线程直接碰 AppKit。
-    const perform = objcLib.symbols.sel_registerName("performSelectorOnMainThread:withObject:waitUntilDone:");
-    const makeFirst = objcLib.symbols.sel_registerName("makeFirstResponder:");
-    objcLib.symbols.objc_msgSend(winPtr, perform, makeFirst, viewPtr, false);
-    if (webview && typeof webview.executeJavascript === "function") {
-      webview.executeJavascript("try{window.focus();}catch(e){}");
-    }
+    // 用页面层的 focus 把 WebView 变成第一响应者；跨线程调 AppKit 的 FFI
+    // （performSelectorOnMainThread）参数无法正确编码，之前每次都会失败。
+    webview.executeJavascript("try{window.focus();}catch(e){}");
   } catch (error) {
     logLine("聚焦设置页失败: " + error);
   }
@@ -595,6 +596,7 @@ function trayMenu(): any[] {
 }
 
 function refreshTrayMenu(): void {
+  if (!tray) return;
   try {
     tray.setMenu(trayMenu());
   } catch (error) {
@@ -1471,60 +1473,92 @@ async function runVoiceTest(): Promise<void> {
   }
 }
 
-const tray = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
-
-tray.setMenu(trayMenu());
-setupApplicationMenu();
-ensureCarbonHotkey();
-syncVoiceOverlayShortcut();
-// 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
-const focusPoll = setInterval(focusVisibleOverlayOnCursorEnter, 40);
-if (typeof focusPoll.unref === "function") focusPoll.unref();
-// Carbon 回调只置标记；在 JS 线程里统一处理，避免跨线程直接调窗口 API。
-const shortcutPoll = setInterval(function () {
-  if (panelEscPending) {
-    panelEscPending = false;
-    if (panel) {
-      try { panel.close(); } catch (error) { /* 已经关闭 */ }
-    }
-  }
-  if (!overlayShortcutPending) return;
-  overlayShortcutPending = false;
-  triggerOverlayShortcut();
-}, 80);
-if (typeof shortcutPoll.unref === "function") shortcutPoll.unref();
-
-tray.on("tray-clicked", async (event: any) => {
-  const action = event?.data?.action;
-  if (action === "agents") await openPanel(AGENTS_URL);
-  else if (action === "panel") await openPanel();
-  else if (action === "voice") await toggleVoice();
-  else if (action === "voice-command") await runVoiceCommand();
-  else if (action === "dictate") await runDictate();
-  else if (action === "voice-test") await runVoiceTest();
-  else if (action === "toggle-overlay") await toggleVoiceOverlay();
-  else if (action === "mic-settings") openMicSettings();
-  else if (action === "accessibility-settings") openAccessibilitySettings();
-  else if (action === "restart") await restartHost();
-  else if (action === "logs") await openLogs();
-  else if (action === "quit") {
-    unregisterCarbonHotkey();
-    GlobalShortcut.unregisterAll();
-    hideVoiceOverlay(false);
-    hideVoiceOrb();
-    if (host) host.kill();
-    tray.remove();
-    process.exit(0);
-  }
+const singleInstance = createSingleInstance({
+  lockPath: SINGLE_INSTANCE_LOCK,
+  requestPath: SINGLE_INSTANCE_REQUEST,
+  log: logLine,
+  onLaunch: () => {
+    // 第二次双击 .app：把已有的设置窗口直接拉到前台；窗口已关就补开一个。
+    logLine("检测到再次启动，打开设置窗口");
+    if (focusPanel()) return;
+    void openPanel().catch((error) => logLine("再次启动时打开设置失败: " + error));
+  },
 });
 
-ensureHost().then(async (ready) => {
+async function startShell(): Promise<void> {
+  const created = new Tray({ image: "views://mainview/tray.png", template: true, width: 18, height: 18 });
+  tray = created;
+  created.setMenu(trayMenu());
+  // 已经运行时再次双击（或点 Dock 图标）不会启动新进程，macOS 只发 reopen。
+  // Electrobun 的 reopen 回调会强制把 Dock 图标显示出来，这里立刻收回去。
+  app.on("reopen", () => {
+    try { Utils.setDockIconVisible(false); } catch (error) { /* 非 macOS */ }
+    logLine("收到 reopen，打开设置窗口");
+    if (focusPanel()) return;
+    void openPanel().catch((error) => logLine("reopen 时打开设置失败: " + error));
+  });
+  setupApplicationMenu();
+  ensureCarbonHotkey();
+  syncVoiceOverlayShortcut();
+  // 未激活窗口的第一次点击只会激活窗口；光标刚移入时先激活，保证第一次点击就生效。
+  const focusPoll = setInterval(focusVisibleOverlayOnCursorEnter, 40);
+  if (typeof focusPoll.unref === "function") focusPoll.unref();
+  // Carbon 回调只置标记；在 JS 线程里统一处理，避免跨线程直接调窗口 API。
+  const shortcutPoll = setInterval(function () {
+    if (panelEscPending) {
+      panelEscPending = false;
+      if (panel) {
+        try { panel.close(); } catch (error) { /* 已经关闭 */ }
+      }
+    }
+    if (!overlayShortcutPending) return;
+    overlayShortcutPending = false;
+    triggerOverlayShortcut();
+  }, 80);
+  if (typeof shortcutPoll.unref === "function") shortcutPoll.unref();
+
+  created.on("tray-clicked", async (event: any) => {
+    const action = event?.data?.action;
+    if (action === "agents") await openPanel(AGENTS_URL);
+    else if (action === "panel") await openPanel();
+    else if (action === "voice") await toggleVoice();
+    else if (action === "voice-command") await runVoiceCommand();
+    else if (action === "dictate") await runDictate();
+    else if (action === "voice-test") await runVoiceTest();
+    else if (action === "toggle-overlay") await toggleVoiceOverlay();
+    else if (action === "mic-settings") openMicSettings();
+    else if (action === "accessibility-settings") openAccessibilitySettings();
+    else if (action === "restart") await restartHost();
+    else if (action === "logs") await openLogs();
+    else if (action === "quit") {
+      unregisterCarbonHotkey();
+      GlobalShortcut.unregisterAll();
+      hideVoiceOverlay(false);
+      hideVoiceOrb();
+      if (host) host.kill();
+      created.remove();
+      if (tray === created) tray = null;
+      singleInstance.release();
+      process.exit(0);
+    }
+  });
+
+  const ready = await ensureHost();
   logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_DIR + "）");
-  // 启动后默认打开「设置（安装与配对）」面板
+  // 启动后默认打开「设置（安装与配对）」面板。
+  // 如果启动过程中已经有第二次启动提前打开了窗口，就只聚焦，不重建。
   if (ready) {
-    await openPanel();
+    if (!focusPanel()) await openPanel();
     // 启动时设置窗口在前；浮层等设置窗口关闭后由 close 事件显示。
     await syncVoiceOverlay();
   }
+}
+
+singleInstance.claim().then(async (primary) => {
+  if (!primary) {
+    logLine("已有 mo-agent 实例在运行，已请求它打开设置窗口，本次启动退出");
+    process.exit(0);
+  }
+  await startShell();
 }).catch((error) => logLine("启动流程异常: " + error));
 

@@ -125,7 +125,11 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 产物：desktop/build/stable-macos-arm64/mo-agent.app（含单文件 host 运行时；默认带语音约 282MB，
 不带语音用 `WITH_VOICE=0 ./scripts/build-desktop.sh` 约 46MB）
 
-双击启动后菜单栏出现托盘图标，并默认弹出「设置（安装与配对）」面板；菜单项：
+双击启动后菜单栏出现托盘图标，不占 Dock，并默认弹出「设置（安装与配对）」面板。App 是单实例的：
+已经运行时再次双击，不会多出一个托盘图标或第二个 host，而是把已有的设置窗口拉到前台
+（窗口已关则重新打开「设置（安装与配对）」）；macOS 的 reopen 事件也不会把 Dock 图标带出来。
+
+菜单项：
 
 - 一键配置 Agent…：弹出「一键配置」窗口，用单个列表列出所有已启用的 Agent；需要 hook 的显示将写入的 hook、状态和按钮，原生接入的只显示状态
 - 设置（安装与配对）：弹出面板窗口，里面是「扫码装 App」「扫码配对」两个二维码
@@ -144,6 +148,8 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
     ~/Library/Application Support/mo-agent/runtime
 
 - 升级 .app 后再次启动，会按 runtime.json 的版本号自动覆盖运行时；
+- 首次安装会重写 .app 内的 Info.plist；install-desktop.sh 会在最终签名前补回
+  LSUIElement 和麦克风用途说明，避免 App 出现在 Dock；
 - 用户数据（配置、设备令牌、push token）在 ~/.mo-agent，升级不会动；
 - 因此分发包不再依赖本机仓库路径，也不需要用户安装 Node；
 - 开发时设置 MO_AGENT_ROOT=<仓库路径> 可直接运行源码。

@@ -111,6 +111,15 @@ fi
 # codesign 会因此认为 bundle 格式无效（"bundle format unrecognized"）。
 rm -rf "$DEST/Contents/MacOS/.cottontail-tmp" 2>/dev/null || true
 
+# 首次安装会重写 Info.plist，只剩 CFBundle* 最小字段，LSUIElement 会丢：
+# 丢了就会出现在 Dock 里，关窗口也留下「运行中」的小点。
+# 必须在最终签名之前补回来。
+PLIST="$DEST/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Delete :LSUIElement" "$PLIST" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$PLIST"
+/usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$PLIST" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string mo-agent 需要麦克风来接收你的语音确认，音频只在本机识别。" "$PLIST"
+
 # ---- 关键：提交改写了 bundle，必须重新签名，否则双击会被拒绝 ----
 echo "[install] 重新签名（提交改写过 bundle）"
 sign_bundle "$DEST"
