@@ -109,6 +109,7 @@ main { padding: 12px; }
 .tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(139, 151, 189, 0.18); color: var(--muted); vertical-align: middle; margin-left: 4px; }
 .tag.agent.dsh { background: rgba(79, 140, 255, 0.18); color: var(--blue); }
 .tag.agent.claude { background: rgba(245, 185, 66, 0.18); color: var(--amber); }
+.tag.agent.qoder { background: rgba(53, 211, 154, 0.16); color: var(--green); }
 .cardTop > .tag.agent { margin-left: 0; margin-right: 4px; }
 .readonly { font-size: 12px; color: var(--muted); padding: 6px 0; }
 button:disabled, input:disabled { opacity: 0.45; }

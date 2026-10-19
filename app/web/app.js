@@ -64,7 +64,7 @@
     idle: { label: "空闲", cls: "idle" }
   };
 
-  var AGENT_LABELS = { dsh: "DeepSeek Harness", "claude-code": "Claude Code" };
+  var AGENT_LABELS = { dsh: "DeepSeek Harness", "claude-code": "Claude Code", "qoder-cn": "Qoder CN" };
 
   function agentName(session) {
     if (!session) return "Agent";
@@ -73,7 +73,10 @@
 
   function agentClass(session) {
     if (!session) return "other";
-    return session.agent === "claude-code" ? "claude" : (session.agent === "dsh" ? "dsh" : "other");
+    if (session.agent === "claude-code") return "claude";
+    if (session.agent === "dsh") return "dsh";
+    if (session.agent === "qoder-cn") return "qoder";
+    return "other";
   }
 
   function pendingMeta(p) {
