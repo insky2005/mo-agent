@@ -350,11 +350,18 @@ function disposePanel(): void {
   try { current.close(); } catch (error) { /* 已经销毁 */ }
 }
 
+/** 管理页需要本机令牌：桌面壳打开时自动附加，页面再换成 HttpOnly Cookie。 */
+function adminUrl(url: string): string {
+  const token = readLocalToken();
+  if (!token) return url;
+  return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+}
+
 function createPanel(url: string = PANEL_URL): void {
   const isAgents = url === AGENTS_URL;
   const win = new BrowserWindow({
     title: isAgents ? "mo-agent · 一键配置 Agent" : "mo-agent · 设置（安装与配对）",
-    url,
+    url: adminUrl(url),
     frame: { width: 760, height: 760 },
   });
   panel = win;
@@ -427,7 +434,7 @@ async function openPanel(url: string = PANEL_URL): Promise<void> {
 function createLogsWindow(): void {
   const win = new BrowserWindow({
     title: "mo-agent · 日志",
-    url: BASE + "/logs",
+    url: adminUrl(BASE + "/logs"),
     frame: { width: 900, height: 640 },
   });
   logs = win;

@@ -39,9 +39,22 @@
 两条路：
 
 1. 看终端：启动日志里直接有一个二维码，用手机 App 扫它。
-2. 看配对页：在电脑浏览器打开 http://127.0.0.1:7788/pair ，页面显示二维码，并可切换网卡（手机连不上时多半是选错了网段）。
+2. 看配对页：从菜单栏打开「设置（安装与配对）」，或在本机浏览器打开带令牌的地址（见下面「管理页鉴权」）。页面显示二维码，并可切换网卡（手机连不上时多半是选错了网段）。
 
 二维码里是一次性令牌：默认 5 分钟有效，兑换一次即作废，比长期不变的配对码安全。
+
+### 管理页鉴权
+
+设置（安装与配对）、一键配置、配对二维码和日志页只允许在**电脑本机**打开，并且必须带 host 生成的本机令牌：
+
+- 桌面 App 的菜单会打开对应页面并自动带上令牌；
+- 直接用本机浏览器访问时，从 `~/.mo-agent/session.json` 取 `token`，例如：
+
+      TOKEN=$(node -p 'require(process.env.HOME + "/.mo-agent/session.json").token')
+      open "http://127.0.0.1:7788/setup?token=$TOKEN"
+
+首次用 `?token=` 打开后，host 会换发一张 HttpOnly、SameSite=Strict 的派生 Cookie（不是令牌原文），页面里的链接、二维码图片和 `fetch` 就不用再逐条带令牌。
+局域网 / 外网访问这些页面一律返回 403；设备令牌只用于手机端的 `/api/*`，不能打开管理页。
 
 手机侧优先用浏览器的 BarcodeDetector，退化到内置的 jsQR；两者都没有时提示手输配对码。
 
@@ -54,10 +67,10 @@
 1. 启动 mo-agent。
 2. 配置 hooks（任选一种）：
    - 菜单栏托盘 →「一键配置 Agent…」→「一键配置」；
-   - 或电脑浏览器打开 http://127.0.0.1:7788/agents；
-   - 或在仓库里执行 `npm run hooks:install`。
-   两种方式共用同一套逻辑：只增删 mo-agent 自己的 hook，写入前自动备份 `~/.claude/settings.json`，
-   不会碰其它设置；文件不是合法 JSON 时会拒绝写入。撤销用 `npm run hooks:uninstall`（或设置页「移除」）。
+   - 或在仓库里执行 `npm run hooks:install`；
+   - 直接开浏览器时，用上面的「管理页鉴权」方式打开 `/agents?token=...`。
+   这些入口共用同一套逻辑：只增删 mo-agent 自己的 hook，写入前自动备份 `~/.claude/settings.json`，
+   不会碰其它设置；文件不是合法 JSON 时会拒绝写入。撤销用 `npm run hooks:uninstall`（或一键配置页「移除」）。
 3. **重启 Claude Code**，它只在启动时读取 settings.json。
 4. 在 Claude Code 里触发一个需要授权的操作：
    - 手机在线：手机弹出授权卡片，点「允许一次」后 Agent 继续；
@@ -87,7 +100,7 @@ Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同�
 
 只写 CN 版的 `~/.qoder-cn/settings.json`（运行时实际读取的配置），改动前自动备份；
 `~/.qoder/settings.json` 属于 Qoder 国际版 / IDE，不去碰。
-撤销用 `npm run hooks:uninstall`，或在 /agents 页点「移除」。
+撤销用 `npm run hooks:uninstall`，或在「一键配置 Agent…」页点「移除」。
 
 限制：
 
@@ -166,7 +179,7 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
 ## 扫码装 App + 扫码配对
 
-电脑浏览器打开 http://127.0.0.1:7788/setup ，页面两步：
+从菜单栏打开「设置（安装与配对）」（本机浏览器需按「管理页鉴权」带令牌访问 `/setup`），页面两步：
 
 1. 第 1 步「装 App」：手机扫码下载 APK（需允许安装未知来源应用）；
 2. 第 2 步「配对」：打开 App 后点「扫码配对」扫第二个码，自动完成连接。
@@ -308,12 +321,12 @@ mo-agent 的处理：
 
 ## 接口速查
 
-    GET  /setup                设置页（装 App + 配对两个二维码；桌面面板打开的就是它）
-    GET  /agents               一键配置页（已启用 Agent 列表 / 写入内容 / 状态 / 按钮；仅回环地址可写）
-    GET  /pair                 二维码配对页（公开）
-    GET  /pair/qr.svg          二维码图片（公开，?ip= 可指定网卡）
-    GET  /logs                 日志页（仅回环地址可访问；桌面「查看日志」打开）
-    GET  /logs/data            日志尾部若干行 JSON（仅回环地址）
+    GET  /setup                设置页（装 App + 配对两个二维码；回环地址 + 本机令牌）
+    GET  /agents               一键配置页（已启用 Agent 列表 / 写入内容 / 状态 / 按钮；回环地址 + 本机令牌）
+    GET  /pair                 二维码配对页（回环地址 + 本机令牌）
+    GET  /pair/qr.svg          二维码图片（回环地址 + 本机令牌，?ip= 可指定网卡）
+    GET  /logs                 日志页（回环地址 + 本机令牌；桌面「查看日志」打开）
+    GET  /logs/data            日志尾部若干行 JSON（回环地址 + 本机令牌）
     POST /api/pair             配对：{pin} 或 {qrToken}
     GET  /api/state            全量快照（会话 + 待批准 + 进程）
     GET  /api/session-history  会话历史轮次（?sessionId=&limit=，按需读取）
@@ -322,11 +335,14 @@ mo-agent 的处理：
     POST /api/prompt           发送指令（仅 control 含 prompt 的会话；Claude 只读返回 409）
     GET  /local/hooks          各 Agent hook 配置状态（仅回环地址）
     POST /local/hooks/apply    hooks 安装/卸载：{agentId, action, dryRun}（仅回环地址）
-    POST /setup/hooks/apply    设置页表单动作（仅回环地址，303 回 /agents）
+    POST /setup/hooks/apply    设置页表单动作（回环地址 + 本机令牌 + csrf，303 回 /agents）
     POST /local/approval       hook 回调（本机令牌）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
 
     SSE  event: message        {v,seq,at,type,payload}（M4 起唯一格式）；type=notify 为通知出口
+
+管理页鉴权：`x-mo-agent-local: <token>` 请求头、`?token=<token>`，或首次访问后换来的
+`mo_agent_admin` HttpOnly Cookie；非回环地址直接 403。
 
 ## 菜单栏图标与 Dock 行为
 

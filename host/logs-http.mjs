@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { grantAdminCookie, isAdminAuthed } from "./admin-auth.mjs";
 
 // 日志只给本机看：host 默认绑 0.0.0.0，若不限制，同网段手机也能读到日志。
 export function isLoopback(req) {
@@ -134,6 +135,27 @@ export async function handleLogRoutes(req, res, url, ctx) {
     json(res, 403, { ok: false, error: "日志仅本机可访问" });
     return true;
   }
+  if (!isAdminAuthed(req, url, ctx.localToken)) {
+    if (pathname === "/logs/data") {
+      json(res, 401, { ok: false, error: "缺少或无效的本机令牌" });
+      return true;
+    }
+    res.writeHead(401, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+      "x-frame-options": "DENY",
+      "x-content-type-options": "nosniff",
+    });
+    res.end("<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />"
+      + "<meta name='viewport' content='width=device-width, initial-scale=1' />"
+      + "<title>mo-agent · 需要本机鉴权</title><style>" + STYLE + "</style></head><body>"
+      + "<header><span class='dot off'></span><h1>日志</h1></header>"
+      + "<pre class='empty'>需要本机鉴权：请从 mo-agent 菜单栏的「查看日志」打开。</pre>"
+      + "</body></html>");
+    return true;
+  }
+  grantAdminCookie(req, res, ctx.localToken, url);
 
   const file = ctx.logFile;
   const requested = Number(url.searchParams.get("lines"));
@@ -145,7 +167,13 @@ export async function handleLogRoutes(req, res, url, ctx) {
     return true;
   }
 
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+  });
   res.end(page(file));
   return true;
 }

@@ -2,14 +2,33 @@ import QRCode from "qrcode";
 import { randomBytes } from "node:crypto";
 import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { localIPv4List } from "./http.mjs";
+import { grantAdminCookie, isAdminAuthed } from "./admin-auth.mjs";
 
-// 配置页是公开的，但写操作只接受本机 + 本进程发出的表单令牌，
+// 管理页只接受回环地址 + 本机令牌；写操作还要求本进程发出的表单令牌，
 // 防止用户浏览其它网站时被跨站 POST 改 hook。
 const HOOKS_CSRF = randomBytes(16).toString("hex");
 
 function html(res, status, body) {
-  res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+  });
   res.end(body);
+}
+
+function deniedPage(res, status, title, detail) {
+  html(res, status,
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />"
+    + "<meta name='viewport' content='width=device-width, initial-scale=1' />"
+    + "<title>mo-agent · 需要本机鉴权</title><style>" + STYLE + "</style></head><body>"
+    + "<h1>" + escapeHtml(title) + "</h1>"
+    + "<div class='sub'>" + escapeHtml(detail) + "</div>"
+    + "<div class='warn'>这些页面只允许在电脑本机、并且通过 mo-agent 的菜单打开。"
+    + "请从菜单栏打开「设置（安装与配对）」或「一键配置 Agent…」。</div>"
+    + "</body></html>");
 }
 
 function json(res, status, body) {
@@ -150,6 +169,19 @@ export async function handlePairRoutes(req, res, url, ctx) {
     || pathname === "/setup/status"
     || pathname === "/setup/renew";
   if (!known) return false;
+
+  // ---- 管理页保护：只允许回环地址 + 本机令牌 ----
+  // 外网 / 局域网一律拒绝，避免设置页、配对二维码和 hooks 写操作暴露在网络上；
+  // 即使在本机，也要带 host 生成的本机令牌（桌面壳打开时自动附加）。
+  if (ctx.isLoopback === false) {
+    deniedPage(res, 403, "仅限电脑本机", "该页面不允许从局域网或外网访问。");
+    return true;
+  }
+  if (!isAdminAuthed(req, url, ctx.localToken)) {
+    deniedPage(res, 401, "需要本机鉴权", "缺少或无效的本机令牌。");
+    return true;
+  }
+  grantAdminCookie(req, res, ctx.localToken, url);
 
   // ---- Agent hooks 一键配置（只允许电脑本机；手机/局域网不能改） ----
   if (applyPath) {
@@ -396,7 +428,8 @@ function renderAgentsPage(res, url, ctx) {
   visible.sort((a, b) => Number(!!b.supported) - Number(!!a.supported));
   const configurable = visible.filter((item) => item.supported);
   const ready = configurable.filter((item) => item.installed && !item.outdated && !item.error);
-  const canWrite = ctx.isLoopback !== false;
+  // 鉴权在 handlePairRoutes 入口完成：能走到这里的都是本机 + 已授权请求。
+  const canWrite = true;
   const msg = url.searchParams.get("msg") || "";
   const bad = url.searchParams.get("bad") === "1";
   const escScript = [
@@ -411,21 +444,18 @@ function renderAgentsPage(res, url, ctx) {
 
   const rows = visible.map((item) => renderAgentRow(item, canWrite)).join("");
 
-  const topAction = configurable.length && canWrite
+  const topAction = configurable.length
     ? "<form method='post' action='/setup/hooks/apply'>"
       + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
       + "<input type='hidden' name='agentId' value='all' />"
       + "<input type='hidden' name='action' value='install' />"
       + "<button class='btn' type='submit'>" + (ready.length === configurable.length ? "全部重新写入" : "一键配置全部") + "</button>"
       + "</form>"
-    : (configurable.length && !canWrite ? "<button class='btn' type='button' disabled>一键配置全部</button>" : "");
+    : "";
 
   const banner = msg
     ? "<div class='banner " + (bad ? "bad" : "ok") + "'>" + escapeHtml(msg) + "</div>"
     : "";
-  const localWarning = canWrite
-    ? ""
-    : "<div class='banner bad'>本页只能在电脑本机操作（请用 127.0.0.1 打开）。这样局域网里的其他人不能改你的 Agent 配置。</div>";
   const unavailable = ctx.hooksManager
     ? ""
     : "<div class='banner bad'>配置管理不可用：host 没有加载 hooks manager。</div>";
@@ -439,7 +469,6 @@ function renderAgentsPage(res, url, ctx) {
     "<title>mo-agent · 一键配置</title><style>" + STYLE + "</style></head><body>",
     "<h1>一键配置</h1><div class='sub'>所有已启用的 Agent 都在这里</div>",
     banner,
-    localWarning,
     unavailable,
     "<div class='panel'>",
     "<div class='panel-head'><div><h2>Agent</h2>",

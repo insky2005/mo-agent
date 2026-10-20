@@ -241,6 +241,7 @@ export function createMoAgentServer(options) {
           apkVersionCode: apkInfo.versionCode || 0,
           renewPairing,
           hooksManager,
+          localToken,
           isLoopback: isLoopbackAddress(req.socket && req.socket.remoteAddress),
         });
         if (handled) return;
@@ -248,7 +249,7 @@ export function createMoAgentServer(options) {
 
       // ---- 日志页面（仅本机） ----
       if (logFile) {
-        const handled = await handleLogRoutes(req, res, url, { logFile });
+        const handled = await handleLogRoutes(req, res, url, { logFile, localToken });
         if (handled) return;
       }
 

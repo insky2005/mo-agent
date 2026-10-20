@@ -62,7 +62,7 @@
     overlay.innerHTML =
       '<div class="dialog scanDialog">' +
       '<h3>扫描电脑上的二维码</h3>' +
-      '<p>在电脑浏览器打开 mo-agent 的设置页（http://127.0.0.1:7788/setup），对准「第 2 步 配对」那个码。</p>' +
+      '<p>在电脑上打开 mo-agent 菜单栏的「设置（安装与配对）」，对准「第 2 步 配对」那个码。</p>' +
       '<video id="scanVideo" playsinline muted autoplay></video>' +
       '<div id="scanStatus" class="scanStatus">正在打开相机…</div>' +
       '<div class="dialogActions"><button id="btnScanClose" class="ghost" type="button">取消</button></div>' +

@@ -80,7 +80,8 @@
 | 每次真正改文件前 | 备份为 `settings.json.mo-agent.bak-<ISO 时间>`，权限 0600 |
 | 没有变化 | 不写盘、不产生备份 |
 | settings.json 是软链接（dotfiles） | 写穿到真实文件，链接本身保留 |
-| 局域网 / 手机访问 `/agents` | 只读；POST 返回 403，页面按钮不渲染 |
+| 局域网 / 外网访问 `/agents` | 直接 403，页面内容（Agent 列表、配置路径）不返回 |
+| 本机访问管理页 | 还要求 host 生成的本机令牌；无令牌返回 401，页面内容不返回 |
 | 卸载 | 只删 mo-agent 的 hook；空事件数组/空 hooks 一起清掉 |
 
 备份文件不会被自动清理；确认配置稳定后可以手动删除旧的 `*.mo-agent.bak-*`。
@@ -122,7 +123,7 @@ node scripts/configure-hooks.mjs --json        # 机器可读
 ## HTTP 接口（仅本机）
 
 ```
-GET  /agents              配置管理页（非回环地址只读）
+GET  /agents              配置管理页（回环地址 + 本机令牌）
 GET  /local/hooks         { ok, agents: [{id,label,supported,installed,outdated,events,...}] }
 POST /local/hooks/apply   { agentId?: "all"|"claude-code", action?: "install"|"uninstall", dryRun?: boolean }
                           必须带请求头 x-mo-agent-hooks: 1
@@ -130,9 +131,10 @@ POST /setup/hooks/apply   设置页表单（application/x-www-form-urlencoded）
                           必须带页面里的一次性 csrf 令牌
 ```
 
-写接口都要求连接来自回环地址（`127.0.0.0/8` / `::1`）。API 的自定义头会触发浏览器预检，
-表单则校验本进程生成的 csrf 令牌——这样即使用户在别的网站点了东西，也不能跨站改本机 hook 配置。
-配置页本身公开只读，只有坐在电脑前的人能改。
+管理页（`/setup`、`/agents`、`/pair`、`/logs`）只接受回环地址，并且必须带本机令牌：
+`x-mo-agent-local` 请求头、`?token=`，或首次访问后换来的 `mo_agent_admin` HttpOnly Cookie。
+桌面壳会自动把令牌附加到打开的 URL 上；非回环地址一律 403，本机无令牌返回 401。
+写接口另外要求回环地址 + 页面里的一次性 csrf 令牌，避免跨站改本机 hook 配置。
 
 ## 新增一个可配置的 Agent
 

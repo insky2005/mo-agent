@@ -6,6 +6,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
+import { adminCookieValue } from "./admin-auth.mjs";
 
 const quiet = { info() {}, warn() {} };
 
@@ -58,6 +59,8 @@ function managerFor(ws, profiles) {
   return createHooksManager({ root: ws.root, home: ws.home, profiles: profiles || [profile()], log: quiet });
 }
 
+const LOCAL_TOKEN = "test-local-token";
+
 function context(ws, overrides) {
   return Object.assign({
     pairing: {
@@ -75,17 +78,22 @@ function context(ws, overrides) {
     apkVersionCode: 0,
     renewPairing() {},
     hooksManager: managerFor(ws),
+    localToken: LOCAL_TOKEN,
     isLoopback: true,
   }, overrides || {});
 }
 
 function fakeResponse() {
   const out = { status: 0, headers: {}, body: "" };
+  const implicit = {};
   return {
     out,
+    setHeader(name, value) {
+      implicit[String(name).toLowerCase()] = String(value);
+    },
     writeHead(status, headers) {
       out.status = status;
-      out.headers = headers || {};
+      out.headers = Object.assign({}, implicit, headers || {});
     },
     end(body) {
       if (body !== undefined) out.body += String(body);
@@ -93,11 +101,16 @@ function fakeResponse() {
   };
 }
 
-function request(method, body) {
-  if (body === undefined) return { method, socket: { remoteAddress: "127.0.0.1" } };
+function request(method, body, options = {}) {
+  const headers = Object.assign({}, options.headers || {});
+  if (options.cookie) headers.cookie = options.cookie;
+  if (body === undefined) {
+    return { method, headers, socket: { remoteAddress: options.remoteAddress || "127.0.0.1" } };
+  }
   const req = Readable.from([Buffer.from(body)]);
   req.method = method;
-  req.socket = { remoteAddress: "127.0.0.1" };
+  req.headers = headers;
+  req.socket = { remoteAddress: options.remoteAddress || "127.0.0.1" };
   return req;
 }
 
@@ -110,9 +123,16 @@ function messageOf(location) {
   return new URLSearchParams(String(location).split("?")[1] || "").get("msg") || "";
 }
 
-async function get(pathname, ctx) {
+async function get(pathname, ctx, options = {}) {
+  const url = new URL("http://x" + pathname);
+  if (options.token !== false) url.searchParams.set("token", options.token || ctx.localToken);
   const res = fakeResponse();
-  const handled = await handlePairRoutes(request("GET"), res, new URL("http://x" + pathname), ctx);
+  const handled = await handlePairRoutes(
+    request("GET", undefined, { cookie: options.cookie, remoteAddress: options.remoteAddress }),
+    res,
+    url,
+    ctx,
+  );
   return { handled, res };
 }
 
@@ -174,12 +194,55 @@ test("单个列表：原生 Agent 只显示状态，不给按钮和配置说明"
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
-test("非本机打开 /agents：只读，不渲染写入表单", async () => {
+test("非本机打开 /agents：直接 403，不泄漏页面内容", async () => {
   const ws = workspace();
   const ctx = context(ws, { isLoopback: false });
   const { res } = await get("/agents", ctx);
-  assert.match(res.out.body, /只能在电脑本机操作/);
+  assert.equal(res.out.status, 403);
+  assert.match(res.out.body, /仅限电脑本机/);
+  assert.doesNotMatch(res.out.body, /Claude Code/);
   assert.doesNotMatch(res.out.body, /action='\/setup\/hooks\/apply'/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("回环地址没有本机令牌：设置页、一键配置、配对页都拒绝", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  for (const pathname of ["/setup", "/agents", "/pair", "/pair/qr.svg"]) {
+    const { res } = await get(pathname, ctx, { token: false });
+    assert.equal(res.out.status, 401, pathname + " 应要求鉴权");
+    assert.match(res.out.body, /需要本机鉴权/);
+    assert.doesNotMatch(res.out.body, /配对码/, pathname + " 不应泄漏内容");
+  }
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("本机令牌可以通过 query 换 HttpOnly Cookie，并复用到子请求", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const first = await get("/agents", ctx);
+  assert.equal(first.res.out.status, 200);
+  const cookie = first.res.out.headers["set-cookie"] || "";
+  assert.match(cookie, new RegExp("mo_agent_admin=" + adminCookieValue(LOCAL_TOKEN)));
+  assert.doesNotMatch(cookie, new RegExp(LOCAL_TOKEN), "Cookie 不应直放本机令牌");
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /SameSite=Strict/);
+
+  const reused = await get("/agents", ctx, { token: false, cookie: "mo_agent_admin=" + adminCookieValue(LOCAL_TOKEN) });
+  assert.equal(reused.res.out.status, 200);
+  assert.match(reused.res.out.body, /Claude Code/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("非本机即使带正确令牌也拒绝（外网访问被切断）", async () => {
+  const ws = workspace();
+  const ctx = context(ws, { isLoopback: false });
+  const { res } = await get("/agents", ctx, {
+    remoteAddress: "192.168.1.9",
+    cookie: "mo_agent_admin=" + adminCookieValue(LOCAL_TOKEN),
+  });
+  assert.equal(res.out.status, 403);
+  assert.match(res.out.body, /仅限电脑本机/);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
@@ -191,7 +254,9 @@ test("POST /setup/hooks/apply：一键写入并重定向回 /agents", async () =
   assert.ok(csrf);
   const res = fakeResponse();
   const handled = await handlePairRoutes(
-    request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install"),
+    request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
     res,
     new URL("http://x/setup/hooks/apply"),
     ctx,
@@ -213,7 +278,9 @@ test("缺少表单令牌的跨站 POST 被拒绝", async () => {
   const ctx = context(ws);
   const res = fakeResponse();
   await handlePairRoutes(
-    request("POST", "agentId=claude-code&action=install"),
+    request("POST", "agentId=claude-code&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
     res,
     new URL("http://x/setup/hooks/apply"),
     ctx,
@@ -229,13 +296,16 @@ test("非本机 POST 被拒绝，不碰配置文件", async () => {
   const ctx = context(ws, { isLoopback: false });
   const res = fakeResponse();
   const handled = await handlePairRoutes(
-    request("POST", "agentId=claude-code&action=install"),
+    request("POST", "agentId=claude-code&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
     res,
     new URL("http://x/setup/hooks/apply"),
     ctx,
   );
   assert.equal(handled, true);
   assert.equal(res.out.status, 403);
+  assert.match(res.out.body, /仅限电脑本机/);
   assert.equal(fs.existsSync(ws.settings), false);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
@@ -246,11 +316,15 @@ test("卸载：从 /agents 移除后配置还原", async () => {
   const page = await get("/agents", ctx);
   const csrf = csrfOf(page.res.out.body);
   const install = fakeResponse();
-  await handlePairRoutes(request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install"), install, new URL("http://x/setup/hooks/apply"), ctx);
+  await handlePairRoutes(request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install", {
+    headers: { "x-mo-agent-local": ctx.localToken },
+  }), install, new URL("http://x/setup/hooks/apply"), ctx);
   assert.ok(fs.existsSync(ws.settings));
 
   const remove = fakeResponse();
-  await handlePairRoutes(request("POST", "csrf=" + csrf + "&agentId=claude-code&action=uninstall"), remove, new URL("http://x/setup/hooks/apply"), ctx);
+  await handlePairRoutes(request("POST", "csrf=" + csrf + "&agentId=claude-code&action=uninstall", {
+    headers: { "x-mo-agent-local": ctx.localToken },
+  }), remove, new URL("http://x/setup/hooks/apply"), ctx);
   assert.equal(remove.out.status, 303);
   assert.match(messageOf(remove.out.headers.location), /已移除 Claude Code/);
   assert.deepEqual(JSON.parse(fs.readFileSync(ws.settings, "utf8")), {});

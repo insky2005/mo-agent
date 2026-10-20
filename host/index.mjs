@@ -478,7 +478,9 @@ function writeSessionFile(port) {
   const file = path.join(dir, "session.json");
   try {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ url: "http://127.0.0.1:" + port, token: localToken }, null, 2));
+    // 管理页鉴权也读这个令牌，文件权限收紧到仅当前用户。
+    fs.writeFileSync(file, JSON.stringify({ url: "http://127.0.0.1:" + port, token: localToken }, null, 2), { mode: 0o600 });
+    try { fs.chmodSync(file, 0o600); } catch (error) { /* 非 POSIX 或无权限时忽略 */ }
     return file;
   } catch (error) {
     return null;
