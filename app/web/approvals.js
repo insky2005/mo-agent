@@ -40,6 +40,30 @@
     list = document.getElementById('approvalList');
   }
 
+  /** 把 toolInput 展开成可读全文：命令/路径优先，其余字段用 JSON 补全。 */
+  function formatToolInput(input) {
+    if (input == null) return '';
+    if (typeof input !== 'object') return String(input);
+    var lines = [];
+    var rest = {};
+    Object.keys(input).forEach(function (key) {
+      if (key === 'command') {
+        if (typeof input[key] === 'string') lines.push(input[key]);
+        else rest[key] = input[key];
+      } else if (key === 'file_path') {
+        if (typeof input[key] === 'string') lines.push(input[key]);
+        else rest[key] = input[key];
+      } else {
+        rest[key] = input[key];
+      }
+    });
+    if (Object.keys(rest).length) {
+      if (lines.length) lines.push('');
+      lines.push(JSON.stringify(rest, null, 2));
+    }
+    return lines.length ? lines.join('\n') : JSON.stringify(input, null, 2);
+  }
+
   function render() {
     var items = [];
     approvals.forEach(function (a) { items.push(a); });
@@ -56,7 +80,7 @@
       parts.push('<div class="cardTop"><div class="cardTitle">等待授权 · ' + esc(a.agentLabel || a.agent || 'Agent') + '</div><span class="badge waiting">需要你决定</span></div>');
       parts.push('<div class="meta">' + esc(a.toolName || '') + ' · ' + ago(a.createdAt) + '</div>');
       parts.push('<div class="qText">' + esc(a.title || a.toolName || '该操作需要你的授权') + '</div>');
-      if (a.toolInput) parts.push('<div class="meta">' + esc(JSON.stringify(a.toolInput).slice(0, 200)) + '</div>');
+      if (a.toolInput) parts.push('<pre class="approvalInput">' + esc(formatToolInput(a.toolInput)) + '</pre>');
       parts.push('<div class="cardActions">');
       parts.push('<button class="ok" data-approval-id="' + esc(a.id) + '" data-approval-decision="allow_once">允许一次</button>');
       parts.push('<button data-approval-id="' + esc(a.id) + '" data-approval-decision="allow_always">总是允许</button>');

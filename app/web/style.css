@@ -127,6 +127,21 @@ button:disabled, input:disabled { opacity: 0.45; }
 .q { margin-bottom: 10px; }
 .qHeader { font-weight: 650; margin-bottom: 4px; }
 .qText { color: #d5ddf8; line-height: 1.5; }
+/* 授权请求的完整输入（命令 / 文件路径 / JSON 参数），长内容在卡片内滚动，不截断。 */
+.approvalInput {
+  margin: 8px 0 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.26);
+  color: #dfe6ff;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 46vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .option { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--panel2); border-radius: 10px; }
 .option input { margin: 0; }
