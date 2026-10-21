@@ -364,7 +364,12 @@ export class TranscriptAdapter {
         // 这样手机卡片上的轮次和「查看完整」里的轮次是同一种计数。
         const promptText = userText(entry);
         const isTurn = !!promptText;
-        if (isTurn) st.turns += 1;
+        if (isTurn) {
+          st.turns += 1;
+          // 新一轮提问刚开始：先清掉上一轮的回答，避免卡片在 Agent 回复前还挂着旧内容。
+          st.lastText = "";
+          st.lastStop = null;
+        }
         // Claude Code 的 last-prompt 记录会重复写第一次的 prompt（实测 2.x），
         // 所以「你说了什么」以真正的 user 消息为准，last-prompt 只作兜底。
         if (isTurn) {

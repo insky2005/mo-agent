@@ -343,3 +343,27 @@ test("Qoder CN IDE：会话在 <project>/transcript/ 子目录里也能观测", 
   assert.equal(record.lastResponse, "IDE 回答");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("Qoder CN：新一轮提问后、回答前，不显示上一轮回复", () => {
+  const { root, file, project } = makeRoot();
+  fs.writeFileSync(file, transcript({ prompt: "第一问", answer: "第一答" }).map(line).join(""));
+  const hub = new Hub({ log: quiet });
+  const events = [];
+  hub.store.subscribe((event) => events.push(event));
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
+  adapter.tick();
+  assert.equal(hub.get("qoder-cn:" + sessionId).lastResponse, "第一答");
+
+  events.length = 0;
+  fs.appendFileSync(file, line({ type: "user", sessionId, cwd: "/tmp/project", message: { role: "user", content: "第二问" } }));
+  adapter.tick();
+  const waiting = hub.get("qoder-cn:" + sessionId);
+  assert.equal(waiting.lastPrompt, "第二问");
+  assert.equal(waiting.lastResponse, "", "Agent 还没回复时不能显示上一轮回答");
+
+  events.length = 0;
+  fs.appendFileSync(file, line({ type: "assistant", sessionId, message: { role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: "第二答" }] } }));
+  adapter.tick();
+  assert.equal(hub.get("qoder-cn:" + sessionId).lastResponse, "第二答");
+  fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
