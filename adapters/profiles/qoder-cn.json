@@ -30,11 +30,13 @@
     "settingsFile": "~/.qoder-cn/settings.json",
     "events": {
       "PermissionRequest": "approval.pending",
-      "Notification": "notice"
+      "Notification": "notice",
+      "Stop": "notice"
     },
     "labels": {
       "PermissionRequest": "授权请求：手机可批准 / 拒绝",
-      "Notification": "通知：Agent 需要关注时推送提醒"
+      "Notification": "通知：Agent 需要关注时推送提醒",
+      "Stop": "任务完成：IDE 每轮结束时通知（桌面端由 transcript 负责）"
     }
   },
   "approval": {

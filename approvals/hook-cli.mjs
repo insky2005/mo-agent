@@ -113,6 +113,23 @@ async function main() {
     permissionMode: firstString(input, ["permission_mode", "permissionMode"]),
   };
 
+  if (TARGET === "notice" && (HOOK_EVENT === "Stop" || firstString(input, ["hook_event_name"]) === "Stop")) {
+    // IDE 的 transcript 没有 stop_reason，只能靠 Stop hook 补「任务完成」。
+    // 桌面端 transcript 有 end_turn，Stop 直接跳过，避免重复通知。
+    const transcript = firstString(input, ["transcript_path"]);
+    if (!transcript || transcript.indexOf("/transcript/") === -1) process.exit(0);
+    payload.title = "任务完成";
+    payload.kind = "completed";
+    payload.severity = "normal";
+    payload.body = firstString(input, ["last_assistant_message", "message"]);
+    try {
+      await post(session, "/local/notify", payload);
+    } catch (error) {
+      /* 上报失败不影响 IDE */
+    }
+    process.exit(0);
+  }
+
   if (TARGET === "notice") {
     // 权限提示已由 PermissionRequest 生成卡片，别重复推一条。
     if (shouldSkipNotice(notificationType, profile)) process.exit(0);

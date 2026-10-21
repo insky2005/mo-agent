@@ -65,6 +65,60 @@ export function defaultDbPath(home) {
   return path.join(base, "Library", "Application Support", "com.qodercn.app.stable", "main.sqlite");
 }
 
+/** Qoder CN IDE 的会话标题存在 VS Code 的 workspaceStorage 里。 */
+export function defaultIdeWorkspaceRoot(home) {
+  const base = home || os.homedir();
+  return path.join(base, "Library", "Application Support", "QoderCN", "User", "workspaceStorage");
+}
+
+export function decodeFileUri(uri) {
+  const text = String(uri || "");
+  if (!text.startsWith("file://")) return "";
+  try {
+    return decodeURIComponent(text.slice("file://".length)).replace(/\/$/, "");
+  } catch (error) {
+    return "";
+  }
+}
+
+/** aicoding.chat.views 的值 -> Map<sessionId, title>。 */
+export function parseIdeViews(text) {
+  const map = new Map();
+  let rows;
+  try {
+    rows = JSON.parse(String(text || ""));
+  } catch (error) {
+    return map;
+  }
+  if (!Array.isArray(rows)) return map;
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const id = row.sessionId;
+    const title = normalizeTitle(row.title);
+    if (typeof id === "string" && id && title) map.set(id, title);
+  }
+  return map;
+}
+
+/** aicoding.chat.tabs 的值 -> Map<sessionId, title>。 */
+export function parseIdeTabs(text) {
+  const map = new Map();
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text || ""));
+  } catch (error) {
+    return map;
+  }
+  const tabs = parsed && Array.isArray(parsed.tabs) ? parsed.tabs : [];
+  for (const tab of tabs) {
+    if (!tab || typeof tab !== "object") continue;
+    const id = tab.sessionId;
+    const title = normalizeTitle(tab.title);
+    if (typeof id === "string" && id && title) map.set(id, title);
+  }
+  return map;
+}
+
 /** 找一个可用的 sqlite3；找不到就返回空字符串（功能降级，不报错）。 */
 export function findSqlite3(env, exists) {
   const check = exists || fs.existsSync;
@@ -110,68 +164,181 @@ function readWithNodeSqlite(mod, dbPath) {
  * @param {Function} [options.run]       测试注入：等价于 execFileSync
  * @param {Function} [options.now]       测试注入
  */
+const IDE_SQL = "select key, cast(value as text) as v from ItemTable where key in ('aicoding.chat.views','aicoding.chat.tabs')";
+
+function mergeIdeRows(rows) {
+  const map = new Map();
+  for (const row of rows || []) {
+    if (!row || typeof row !== "object") continue;
+    const parsed = row.key === "aicoding.chat.views"
+      ? parseIdeViews(row.v)
+      : (row.key === "aicoding.chat.tabs" ? parseIdeTabs(row.v) : null);
+    if (!parsed) continue;
+    for (const [id, title] of parsed) map.set(id, title);
+  }
+  return map;
+}
+
+function readWorkspaceCwd(dir) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, "workspace.json"), "utf8"));
+    return decodeFileUri(raw && raw.folder);
+  } catch (error) {
+    return "";
+  }
+}
+
+/**
+ * @param {object} options
+ * @param {string} [options.dbPath]           桌面端 main.sqlite
+ * @param {string} [options.ideWorkspaceRoot] IDE workspaceStorage 根目录
+ * @param {string} [options.sqlitePath]       sqlite3 可执行文件
+ * @param {object} [options.nodeSqlite]       node:sqlite 模块；缺省自动探测，null 表示禁用
+ * @param {number} [options.intervalMs]       刷新间隔，默认 30s
+ * @param {number} [options.ideWindowMs]      只看最近多久改过的 IDE workspace，默认 6h
+ * @param {Function} [options.run]            测试注入：等价于 execFileSync
+ * @param {Function} [options.now]            测试注入
+ */
 export function createTitleSource(options) {
   const opts = options || {};
   const dbPath = opts.dbPath || defaultDbPath();
+  const ideRoot = opts.ideWorkspaceRoot === undefined ? defaultIdeWorkspaceRoot(opts.home) : opts.ideWorkspaceRoot;
   const intervalMs = typeof opts.intervalMs === "number" ? opts.intervalMs : 30 * 1000;
+  const ideWindowMs = typeof opts.ideWindowMs === "number" ? opts.ideWindowMs : 6 * 3600 * 1000;
   const now = opts.now || Date.now;
   const run = opts.run || execFileSync;
   const sqlitePath = opts.sqlitePath === undefined ? findSqlite3() : opts.sqlitePath;
   const nodeSqlite = opts.nodeSqlite === undefined ? loadNodeSqlite() : opts.nodeSqlite;
   const log = opts.log || { debug() {} };
   let cache = new Map();
+  let ideByCwd = new Map();
+  let ideFlat = new Map();
   let lastAt = -Infinity;
   let warned = false;
 
+  function readDesktop() {
+    if (!fs.existsSync(dbPath)) {
+      if (!warned) {
+        warned = true;
+        log.debug("找不到 Qoder CN 数据库，会话标题退回第一问: " + dbPath);
+      }
+      return;
+    }
+    if (nodeSqlite) {
+      try {
+        cache = readWithNodeSqlite(nodeSqlite, dbPath);
+        warned = false;
+        return;
+      } catch (error) {
+        if (!warned) log.debug("node:sqlite 读取失败，改用 sqlite3 CLI: " + (error && error.message ? error.message : error));
+      }
+    }
+    if (!sqlitePath) {
+      if (!warned) {
+        warned = true;
+        log.debug("没有可用的 sqlite 后端，Qoder CN 会话标题退回第一问");
+      }
+      return;
+    }
+    try {
+      const output = run(sqlitePath, ["-readonly", "-json", dbPath, SQL], {
+        encoding: "utf8",
+        timeout: 5000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      cache = parseTitles(output);
+      warned = false;
+    } catch (error) {
+      if (!warned) {
+        warned = true;
+        log.debug("读取 Qoder CN 会话标题失败: " + (error && error.message ? error.message : error));
+      }
+    }
+  }
+
+  function readIdeDb(dbFile) {
+    if (nodeSqlite) {
+      try {
+        const db = new nodeSqlite.DatabaseSync(dbFile, { readOnly: true });
+        try {
+          return mergeIdeRows(db.prepare(IDE_SQL).all());
+        } finally {
+          try { db.close(); } catch (error) { /* 忽略 */ }
+        }
+      } catch (error) {
+        /* 退到 CLI */
+      }
+    }
+    if (!sqlitePath) return new Map();
+    try {
+      const output = run(sqlitePath, ["-readonly", "-json", dbFile, IDE_SQL], {
+        encoding: "utf8",
+        timeout: 5000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      const rows = JSON.parse(output || "[]");
+      return mergeIdeRows(rows);
+    } catch (error) {
+      return new Map();
+    }
+  }
+
+  function readIde() {
+    if (!ideRoot) return;
+    let dirs = [];
+    try {
+      dirs = fs.readdirSync(ideRoot, { withFileTypes: true });
+    } catch (error) {
+      return;
+    }
+    const cutoff = now() - ideWindowMs;
+    const candidates = [];
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue;
+      const full = path.join(ideRoot, dir.name);
+      let stat;
+      try { stat = fs.statSync(full); } catch (error) { continue; }
+      if (stat.mtimeMs < cutoff) continue;
+      candidates.push({ dir: full, mtime: stat.mtimeMs });
+    }
+    candidates.sort((a, b) => b.mtime - a.mtime);
+    const nextByCwd = new Map();
+    const nextFlat = new Map();
+    for (const item of candidates.slice(0, 4)) {
+      const dbFile = path.join(item.dir, "state.vscdb");
+      if (!fs.existsSync(dbFile)) continue;
+      const titles = readIdeDb(dbFile);
+      if (!titles.size) continue;
+      const cwd = readWorkspaceCwd(item.dir);
+      if (cwd) nextByCwd.set(cwd, titles);
+      for (const [id, title] of titles) nextFlat.set(id, title);
+    }
+    ideByCwd = nextByCwd;
+    ideFlat = nextFlat;
+  }
+
   return {
-    title(sessionId) {
-      return cache.get(sessionId) || "";
+    /** cwd 可以精确匹配 IDE 的 workspace；匹配不到时用全局表兜底。 */
+    title(sessionId, cwd) {
+      const direct = cache.get(sessionId);
+      if (direct) return direct;
+      const key = String(cwd || "").replace(/\/$/, "");
+      const scoped = key ? ideByCwd.get(key) : null;
+      if (scoped) {
+        const hit = scoped.get(sessionId);
+        if (hit) return hit;
+      }
+      return ideFlat.get(sessionId) || "";
     },
     size() {
-      return cache.size;
+      return cache.size + ideFlat.size;
     },
     refresh(force) {
       const at = now();
       if (!force && at - lastAt < intervalMs) return;
       lastAt = at;
-      if (!fs.existsSync(dbPath)) {
-        if (!warned) {
-          warned = true;
-          log.debug("找不到 Qoder CN 数据库，会话标题退回第一问: " + dbPath);
-        }
-        return;
-      }
-      // 首选 Node 内置 sqlite：不 spawn、不依赖外部命令。
-      if (nodeSqlite) {
-        try {
-          cache = readWithNodeSqlite(nodeSqlite, dbPath);
-          warned = false;
-          return;
-        } catch (error) {
-          if (!warned) log.debug("node:sqlite 读取失败，改用 sqlite3 CLI: " + (error && error.message ? error.message : error));
-        }
-      }
-      if (!sqlitePath) {
-        if (!warned) {
-          warned = true;
-          log.debug("没有可用的 sqlite 后端，Qoder CN 会话标题退回第一问");
-        }
-        return;
-      }
-      try {
-        const output = run(sqlitePath, ["-readonly", "-json", dbPath, SQL], {
-          encoding: "utf8",
-          timeout: 5000,
-          maxBuffer: 4 * 1024 * 1024,
-        });
-        cache = parseTitles(output);
-        warned = false;
-      } catch (error) {
-        if (!warned) {
-          warned = true;
-          log.debug("读取 Qoder CN 会话标题失败: " + (error && error.message ? error.message : error));
-        }
-      }
+      readDesktop();
+      readIde();
     },
   };
 }

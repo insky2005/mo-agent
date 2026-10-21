@@ -286,6 +286,7 @@ export function createMoAgentServer(options) {
         const session = sessionFor(body);
         const payload = Object.assign({}, body);
         if (!payload.sessionTitle && session && session.title) payload.sessionTitle = session.title;
+        if (session && session.agentLabel) payload.agentLabel = session.agentLabel;
         const result = await broker.request(payload);
         return json(res, 200, result);
       }
@@ -377,7 +378,7 @@ export function createMoAgentServer(options) {
           body: body.body || "",
           sessionId: body.sessionId || null,
           agent: body.agent || null,
-          agentLabel: body.agentLabel || "Agent",
+          agentLabel: (session && session.agentLabel) || body.agentLabel || "Agent",
           sessionTitle: body.sessionTitle || (session && session.title) || "",
           notificationType: body.notificationType || null,
         });

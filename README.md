@@ -90,9 +90,12 @@ Claude Code 的 Notification 类型、标题与正文模板见 [docs/claude-code
 Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同构，所以观测可以直接用；
 授权卡走同一套 hook 格式（`hookSpecificOutput.decision.behavior`），**hook 脚本不用改**。
 
-会话标题直接读 Qoder CN 自己的标题（`main.sqlite` 的 `chat_sessions.title`）：
-优先用 Node 内置的 `node:sqlite`，Node 20 这类环境退到系统 `sqlite3`，两者都没有才退回第一问并截断到 60 字，
-不会再把整段 prompt 糊在卡片上。
+会话标题直接读 Qoder CN 自己的标题：桌面端取 `main.sqlite` 的 `chat_sessions.title`，
+IDE 取 `workspaceStorage/*/state.vscdb` 里的 `aicoding.chat.views`；
+优先用 Node 内置的 `node:sqlite`，Node 20 这类环境退到系统 `sqlite3`，两者都没有才退回第一问并截断到 60 字。
+
+IDE 会话显示为独立的 **Qoder CN IDE** 标签；它的 transcript 没有 `stop_reason`，
+所以额外用一条 `Stop` hook 补「任务完成」通知（桌面端仍由 transcript 的 `end_turn` 负责）。
 
 一键配置：
 

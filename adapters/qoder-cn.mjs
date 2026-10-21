@@ -36,9 +36,14 @@ export class QoderCnAdapter extends TranscriptAdapter {
     this.titleSource.refresh();
   }
 
+  /** IDE 的 transcript 在 <project>/transcript/ 下，和桌面端分开显示。 */
+  labelFor(st) {
+    return st && st.path && st.path.includes("/transcript/") ? "Qoder CN IDE" : this.agentLabel;
+  }
+
   /** 优先用 Qoder CN 自己的会话标题；没有就第一问截断到 60 字。 */
   titleFor(st) {
-    const exact = this.titleSource.title(st.sessionId);
+    const exact = this.titleSource.title(st.sessionId, st.cwd);
     if (exact) return exact;
     const fallback = st.firstPrompt || st.lastPrompt || this.defaultTitle;
     return preview(fallback, FALLBACK_TITLE_LIMIT);

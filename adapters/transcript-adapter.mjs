@@ -104,6 +104,11 @@ export class TranscriptAdapter {
     return this.prefix + sessionId;
   }
 
+  /** 会话显示名；子类可以按 transcript 路径区分同一产品的不同客户端。 */
+  labelFor(st) {
+    return this.agentLabel;
+  }
+
   /** 会话标题：优先厂商标题，其次第一问；最新一问只放 lastPrompt。 */
   titleFor(st) {
     return st.title || st.firstPrompt || st.lastPrompt || this.defaultTitle;
@@ -470,7 +475,7 @@ export class TranscriptAdapter {
       id: this.idFor(st.sessionId),
       sessionId: this.idFor(st.sessionId),
       agent: this.name,
-      agentLabel: this.agentLabel,
+      agentLabel: this.labelFor(st),
       capabilities: this.profile.capabilities || null,
       // 会话名保持稳定：优先厂商标题，其次第一问；最新一问只放在 lastPrompt。
       title,

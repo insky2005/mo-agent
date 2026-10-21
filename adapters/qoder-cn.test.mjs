@@ -339,6 +339,7 @@ test("Qoder CN IDE：会话在 <project>/transcript/ 子目录里也能观测", 
   const record = hub.get("qoder-cn:" + id);
   assert.ok(record, "嵌套目录里的会话也要出现");
   assert.equal(record.title, "IDE 里的第一个问题");
+  assert.equal(record.agentLabel, "Qoder CN IDE", "IDE 会话要有独立标签");
   assert.equal(record.lastResponse, "IDE 回答");
   fs.rmSync(root, { recursive: true, force: true });
 });
