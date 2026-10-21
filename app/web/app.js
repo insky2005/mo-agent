@@ -90,22 +90,20 @@
       .replace(/^\/Users\/[^/]+\//, "~/")
       .replace(/^\/home\/[^/]+\//, "~/")
       .replace(/^[A-Za-z]:\\Users\\[^\\]+\\/, "~\\");
-    var limit = 38;
+    var limit = 34;
     if (text.length <= limit) return text;
     var sep = text.indexOf("\\") !== -1 && text.indexOf("/") === -1 ? "\\" : "/";
     var prefix = text.indexOf("~/") === 0 ? "~/" : (text.indexOf("~\\") === 0 ? "~\\" : (text.indexOf("/") === 0 ? "/" : ""));
     var parts = text.slice(prefix.length).split(/[\\/]/).filter(Boolean);
     if (!parts.length) return text;
     var last = parts[parts.length - 1];
-    var first = parts.length > 1 ? parts[0] : "";
-    var options = [];
-    if (first && first !== last) options.push(prefix + first + sep + "…" + sep + last);
-    options.push(prefix + "…" + sep + last);
-    options.push("…" + sep + last);
-    for (var i = 0; i < options.length; i += 1) {
-      if (options[i].length <= limit) return options[i];
+    // 从左边尽量多保留几级目录，只在不够放时省略中间；最后一级永远保留。
+    for (var keep = parts.length - 1; keep >= 1; keep -= 1) {
+      var candidate = prefix + parts.slice(0, keep).join(sep) + sep + "…" + sep + last;
+      if (candidate.length <= limit) return candidate;
     }
-    return options[options.length - 1];
+    var minimal = prefix + "…" + sep + last;
+    return minimal.length <= limit ? minimal : "…" + sep + last;
   }
 
   function pendingMeta(p) {
