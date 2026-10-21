@@ -79,6 +79,35 @@
     return "other";
   }
 
+  /**
+   * 会话卡片上的路径：家目录缩成 ~，太长时省略中间，但最后一级目录必须保留。
+   * 例：/Users/dev/c/work.ai/git/authx-platform -> ~/c/…/authx-platform
+   */
+  function displayPath(value) {
+    var text = String(value || "");
+    if (!text) return "";
+    text = text
+      .replace(/^\/Users\/[^/]+\//, "~/")
+      .replace(/^\/home\/[^/]+\//, "~/")
+      .replace(/^[A-Za-z]:\\Users\\[^\\]+\\/, "~\\");
+    var limit = 38;
+    if (text.length <= limit) return text;
+    var sep = text.indexOf("\\") !== -1 && text.indexOf("/") === -1 ? "\\" : "/";
+    var prefix = text.indexOf("~/") === 0 ? "~/" : (text.indexOf("~\\") === 0 ? "~\\" : (text.indexOf("/") === 0 ? "/" : ""));
+    var parts = text.slice(prefix.length).split(/[\\/]/).filter(Boolean);
+    if (!parts.length) return text;
+    var last = parts[parts.length - 1];
+    var first = parts.length > 1 ? parts[0] : "";
+    var options = [];
+    if (first && first !== last) options.push(prefix + first + sep + "…" + sep + last);
+    options.push(prefix + "…" + sep + last);
+    options.push("…" + sep + last);
+    for (var i = 0; i < options.length; i += 1) {
+      if (options[i].length <= limit) return options[i];
+    }
+    return options[options.length - 1];
+  }
+
   function pendingMeta(p) {
     return [p && p.agentLabel, p && p.sessionTitle].filter(Boolean).join(" · ");
   }
@@ -252,7 +281,7 @@
       var origin = s.parentId ? '分支自其它会话 · ' : '';
       // 路径可截断；时间与轮数固定在右侧，始终可见。
       parts.push('<div class="meta sessionMeta">'
-        + '<span class="metaPath">' + origin + esc(s.cwd || "") + '</span>'
+        + '<span class="metaPath" title="' + esc(s.cwd || "") + '">' + origin + esc(displayPath(s.cwd)) + '</span>'
         + '<span class="metaRight">' + ago(s.updatedAt) + ' · 第 ' + (s.turns || 0) + ' 轮</span>'
         + '</div>');
       if (s.lastPrompt) parts.push('<div class="line clamp" data-detail="' + esc(s.sessionId) + '"><b>你：</b>' + esc(s.lastPrompt) + '</div>');
@@ -451,7 +480,7 @@
     var info = STATUS[s.status] || STATUS.idle;
     dom.detailTitle.textContent = agentName(s) + " · " + (s.title || s.sessionId);
     dom.detailMeta.textContent = info.label
-      + " · " + (s.cwd || "无路径")
+      + " · " + (displayPath(s.cwd) || "无路径")
       + " · " + ago(s.updatedAt)
       + " · 第 " + (s.turns || 0) + " 轮";
 
