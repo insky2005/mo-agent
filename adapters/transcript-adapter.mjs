@@ -117,18 +117,22 @@ export class TranscriptAdapter {
     } catch (error) {
       return out;
     }
-    for (const dir of dirs) {
-      if (!dir.isDirectory()) continue;
-      const full = path.join(this.root, dir.name);
-      let files = [];
+    // 会话目录可能再套一层：桌面端是 <project>/<id>.jsonl，
+    // Qoder CN IDE 是 <project>/transcript/<id>.jsonl，两种都要认。
+    const visit = (dirPath, depth) => {
+      let entries = [];
       try {
-        files = fs.readdirSync(full, { withFileTypes: true });
+        entries = fs.readdirSync(dirPath, { withFileTypes: true });
       } catch (error) {
-        continue;
+        return;
       }
-      for (const file of files) {
-        if (!file.isFile() || !file.name.endsWith(".jsonl")) continue;
-        const p = path.join(full, file.name);
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (depth < 1) visit(path.join(dirPath, entry.name), depth + 1);
+          continue;
+        }
+        if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+        const p = path.join(dirPath, entry.name);
         let stat;
         try {
           stat = fs.statSync(p);
@@ -138,6 +142,9 @@ export class TranscriptAdapter {
         if (Date.now() - stat.mtimeMs > this.activeWindowMs) continue;
         out.push({ path: p, size: stat.size, mtimeMs: stat.mtimeMs });
       }
+    };
+    for (const dir of dirs) {
+      if (dir.isDirectory()) visit(path.join(this.root, dir.name), 0);
     }
     out.sort((a, b) => b.mtimeMs - a.mtimeMs);
     return out.slice(0, 40);

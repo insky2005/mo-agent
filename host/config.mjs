@@ -17,7 +17,7 @@ const DEFAULTS = {
   logLevel: "info",
   speak: false,
   // 有推送设备但 App 尚未连上时，等它连上来的窗口；超时才交回本地终端。
-  approvalNoClientGraceMs: 20000,
+  approvalNoClientGraceMs: 60000,
 };
 
 export function loadConfig(argv) {

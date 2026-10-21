@@ -247,6 +247,8 @@ test("host 集成：语音命令（暂停 → 状态 → 继续）", { skip, tim
       MO_AGENT_VOICE_MUTE_MINUTES: "15",
       MO_AGENT_LOCAL_TOKEN: token,
       MO_AGENT_NO_PARENT_WATCH: "1",
+      // 这条用例断言「没有手机在线时立即交回终端」，关掉等待推送设备的窗口。
+      MO_AGENT_APPROVAL_GRACE_MS: "0",
       MO_AGENT_DEVICE_FILE: path.join(root, ".build", "devices-e2e-cmd.json"),
     }),
     stdio: ["ignore", "pipe", "pipe"],

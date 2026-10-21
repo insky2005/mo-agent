@@ -47,8 +47,12 @@ export class ApprovalBroker {
     }
 
     const connected = this.isClientConnected();
-    const reachable = connected || (this.hasRemoteClient ? this.hasRemoteClient() : false);
-    if (!reachable) {
+    // 只有「配置了等待窗口」且「存在推送设备」时，才为未连接的 App 挂起；
+    // grace=0 保持旧行为：没连上就立刻交回终端。
+    const waitForClient = !connected
+      && this.noClientGraceMs > 0
+      && !!this.hasRemoteClient && this.hasRemoteClient();
+    if (!connected && !waitForClient) {
       this.log.info("无手机在线，批准请求交回本地终端: " + key);
       return Promise.resolve({ decision: DECISION.DEFER, reason: "no-client", id: null });
     }

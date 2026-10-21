@@ -321,3 +321,24 @@ test("Qoder CN：压缩摘要本身不算用户提问", () => {
   assert.equal(record.lastPrompt, "");
   fs.rmSync(path.dirname(project), { recursive: true, force: true });
 });
+
+test("Qoder CN IDE：会话在 <project>/transcript/ 子目录里也能观测", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-agent-qoder-"));
+  const project = path.join(root, "-Users-dev-ide-project");
+  const nested = path.join(project, "transcript");
+  fs.mkdirSync(nested, { recursive: true });
+  const id = "9085e591-a5d0-4b95-8173-4e48375426c9";
+  fs.writeFileSync(path.join(nested, id + ".jsonl"),
+    line({ type: "session_meta", sessionId: id, cwd: "/tmp/ide", data: { meta_type: "session_info" } }) +
+    line({ type: "user", sessionId: id, cwd: "/tmp/ide", message: { role: "user", content: "IDE 里的第一个问题" } }) +
+    line({ type: "assistant", sessionId: id, cwd: "/tmp/ide", message: { role: "assistant", content: [{ type: "text", text: "IDE 回答" }] } })
+  );
+  const hub = new Hub({ log: quiet });
+  const adapter = new QoderCnAdapter({ hub, log: quiet, titleSource: noTitles(), profile: { session: { root } } });
+  adapter.tick();
+  const record = hub.get("qoder-cn:" + id);
+  assert.ok(record, "嵌套目录里的会话也要出现");
+  assert.equal(record.title, "IDE 里的第一个问题");
+  assert.equal(record.lastResponse, "IDE 回答");
+  fs.rmSync(root, { recursive: true, force: true });
+});
