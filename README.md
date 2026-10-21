@@ -194,6 +194,9 @@ APK 由 GET /app.apk 直接提供，来源是 app/android/app/build/outputs/apk/
 更新 APK 后需要重新构建桌面 App，分发包里的安装包才会更新。
 页面底部可切换网卡（手机连不上时多半是选错网段）。
 
+App 在前台时保持屏幕常亮（`FLAG_KEEP_SCREEN_ON`），手机可以一直放在桌上盯着 Agent 状态；
+退到后台或按电源键后即恢复系统息屏，不需要额外权限，也不持有常驻唤醒锁。
+
 ## 锁屏通知（Android / HMS Push）
 
 局域网是明文 HTTP，浏览器 PWA 拿不到 Service Worker / Notification，页面一关就收不到。
@@ -309,6 +312,7 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
 
 事件契约：docs/spec/event-contract.md（统一事件、状态语义与映射；决策见 docs/adr/adr-0003-event-contract.md）。
 Agent 能力表：docs/capabilities.md（由 scripts/gen-capabilities.mjs 生成）。
+Agent 适配性矩阵：docs/agent-adaptation-matrix.md（研究态总表，含未接入/不可行与证据级别，持续更新）。
 
 ## 会话派生关系（分支）
 
