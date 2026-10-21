@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadProfile, hookTarget } from "./hook-map.mjs";
-import { describeClaudeNotification } from "./claude-notifications.mjs";
+import { describeClaudeNotification, shouldSkipNotice } from "./claude-notifications.mjs";
 
 const args = process.argv.slice(2);
 const MODE = args[0] || "permission";
@@ -102,11 +102,11 @@ async function main() {
     sessionId: firstString(input, ["session_id", "sessionId"]),
     toolName,
     toolInput,
-    kind: isNotice ? "notice" : (isQuestion ? "question" : "approval"),
+    // 注意：只保留一个 kind；重复键会让后面的值覆盖掉「question」。
+    kind: isNotice ? notice.kind : (isQuestion ? "question" : "approval"),
     questions: isQuestion ? questions : null,
     title: isNotice ? notice.title : (toolName || "需要授权"),
     body: isNotice ? notice.body : "",
-    kind: isNotice ? notice.kind : "approval",
     severity: isNotice ? notice.severity : "critical",
     notificationType: notice.notificationType,
     cwd: firstString(input, ["cwd"]),
@@ -114,6 +114,8 @@ async function main() {
   };
 
   if (TARGET === "notice") {
+    // 权限提示已由 PermissionRequest 生成卡片，别重复推一条。
+    if (shouldSkipNotice(notificationType, profile)) process.exit(0);
     try {
       await post(session, "/local/notify", payload);
     } catch (error) {

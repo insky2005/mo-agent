@@ -86,6 +86,7 @@ export class ApprovalBroker {
         ? setTimeout(() => {
           if (this.isClientConnected()) return;
           if (!this.pending.has(id)) return;
+          clearTimeout(timer);
           this.pending.delete(id);
           this.hub.emit(EVENT.APPROVAL_RESOLVED, { id, decision: DECISION.DEFER, reason: "no-client" });
           this.log.warn("手机仍未连接，批准请求交回本地终端: " + key);

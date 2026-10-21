@@ -38,6 +38,18 @@ export const CLAUDE_NOTIFICATION_MAP = Object.freeze({
   push_notification: { title: "提醒", kind: "attention", severity: SEVERITY.NORMAL },
 });
 
+// 这些通知和 PermissionRequest 是同一件事：权限 hook 已经会生成授权卡，
+// 再发一条 notice 会在手机上出现两条重复通知。
+const PERMISSION_NOTICE_TYPES = new Set(["permission_prompt", "worker_permission_prompt"]);
+
+/** 有 PermissionRequest 能力的 Agent，不需要再为权限提示发一条重复通知。 */
+export function shouldSkipNotice(notificationType, profile) {
+  if (!PERMISSION_NOTICE_TYPES.has(String(notificationType || ""))) return false;
+  const caps = (profile && profile.capabilities) || {};
+  const approval = caps.approval || (profile && profile.approval && profile.approval.capability);
+  return approval === "allow";
+}
+
 /** 把 Notification hook 输入压成 mo-agent 的 notice 字段。 */
 export function describeClaudeNotification(input) {
   const raw = input || {};

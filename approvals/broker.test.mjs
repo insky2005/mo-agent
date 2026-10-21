@@ -129,3 +129,23 @@ test("窗口内 App 连上：继续等正常超时，仍可手机批准", async 
   const result = await pending;
   assert.equal(result.decision, DECISION.ALLOW_ONCE);
 });
+
+test("grace 交回后不会再触发一次 resolved", async () => {
+  const hub = new Hub({ log: silent });
+  const events = [];
+  hub.store.subscribe(function (event) { events.push(event); });
+  const broker = new ApprovalBroker({
+    hub,
+    log: silent,
+    isClientConnected: () => false,
+    hasRemoteClient: () => true,
+    noClientGraceMs: 20,
+    timeoutMs: 60,
+  });
+  const pending = broker.request({ agent: "qoder-cn", toolName: "Bash" });
+  const result = await pending;
+  assert.equal(result.reason, "no-client");
+  await new Promise(function (resolve) { setTimeout(resolve, 80); });
+  const resolved = events.filter(function (event) { return event.type === "approval.resolved"; });
+  assert.equal(resolved.length, 1, "grace 已经交回，正常超时不应该再发一次 resolved");
+});
