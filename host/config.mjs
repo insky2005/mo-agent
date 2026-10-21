@@ -16,6 +16,8 @@ const DEFAULTS = {
   maxSessions: 40,
   logLevel: "info",
   speak: false,
+  // 有推送设备但 App 尚未连上时，等它连上来的窗口；超时才交回本地终端。
+  approvalNoClientGraceMs: 20000,
 };
 
 export function loadConfig(argv) {
@@ -35,12 +37,14 @@ export function loadConfig(argv) {
     else if (a === "--max-sessions") cfg.maxSessions = Number(next());
     else if (a === "--no-auth") cfg.authRequired = false;
     else if (a === "--log-level") cfg.logLevel = String(next());
+    else if (a === "--approval-grace") cfg.approvalNoClientGraceMs = Number(next()) * 1000;
   }
   if (process.env.MO_AGENT_PORT) cfg.port = Number(process.env.MO_AGENT_PORT);
   if (process.env.MO_AGENT_PIN) cfg.pin = String(process.env.MO_AGENT_PIN);
   if (process.env.MO_AGENT_NO_AUTH === "1") cfg.authRequired = false;
   if (process.env.MO_AGENT_POLL) cfg.pollMs = Number(process.env.MO_AGENT_POLL);
   if (process.env.MO_AGENT_LOG_LEVEL) cfg.logLevel = String(process.env.MO_AGENT_LOG_LEVEL);
+  if (process.env.MO_AGENT_APPROVAL_GRACE_MS) cfg.approvalNoClientGraceMs = Number(process.env.MO_AGENT_APPROVAL_GRACE_MS);
   return cfg;
 }
 

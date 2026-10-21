@@ -24,6 +24,9 @@ export class ApprovalBroker {
     this.log = opts.log || (() => {});
     this.timeoutMs = opts.timeoutMs || 120000;
     this.isClientConnected = opts.isClientConnected || (() => false);
+    // 有推送设备但 App 还没连上时，先挂起一小会儿等它连上来（用户可能正被推送叫醒）。
+    this.noClientGraceMs = Number(opts.noClientGraceMs) > 0 ? Number(opts.noClientGraceMs) : 0;
+    this.hasRemoteClient = typeof opts.hasRemoteClient === "function" ? opts.hasRemoteClient : null;
     // 语音等其它决策端可以订阅这个回调，拿到 pending 的 id 后再回 decide。
     this.onPending = opts.onPending || null;
     this.pending = new Map();
@@ -43,9 +46,14 @@ export class ApprovalBroker {
       return Promise.resolve({ decision: remembered, reason: "remembered", id: null });
     }
 
-    if (!this.isClientConnected()) {
+    const connected = this.isClientConnected();
+    const reachable = connected || (this.hasRemoteClient ? this.hasRemoteClient() : false);
+    if (!reachable) {
       this.log.info("无手机在线，批准请求交回本地终端: " + key);
       return Promise.resolve({ decision: DECISION.DEFER, reason: "no-client", id: null });
+    }
+    if (!connected) {
+      this.log.info("手机还没连上，先挂起等它 " + Math.round(this.noClientGraceMs / 1000) + " 秒: " + key);
     }
 
     const id = randomUUID();
@@ -64,6 +72,7 @@ export class ApprovalBroker {
         createdAt: Date.now(),
         finish: (decision, reason, extra) => {
           clearTimeout(timer);
+          if (graceTimer) clearTimeout(graceTimer);
           this.pending.delete(id);
           if (decision === DECISION.ALLOW_ALWAYS || decision === DECISION.REJECT_ALWAYS) this.rules.set(key, decision);
           this.hub.emit(EVENT.APPROVAL_RESOLVED, { id, decision, reason: reason || "user" });
@@ -71,6 +80,18 @@ export class ApprovalBroker {
         },
       };
       this.pending.set(id, item);
+
+      // 推送已发但 App 可能还在后台/冷启动：给一个很短的窗口，连上后照常走 120s 超时。
+      const graceTimer = (!connected && this.noClientGraceMs > 0)
+        ? setTimeout(() => {
+          if (this.isClientConnected()) return;
+          if (!this.pending.has(id)) return;
+          this.pending.delete(id);
+          this.hub.emit(EVENT.APPROVAL_RESOLVED, { id, decision: DECISION.DEFER, reason: "no-client" });
+          this.log.warn("手机仍未连接，批准请求交回本地终端: " + key);
+          resolve({ decision: DECISION.DEFER, reason: "no-client", id });
+        }, this.noClientGraceMs)
+        : null;
 
       this.hub.emit(EVENT.APPROVAL_PENDING, {
         id,

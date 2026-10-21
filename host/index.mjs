@@ -235,6 +235,9 @@ const broker = new ApprovalBroker({
   // 静音时语音不再算作「在线决策端」：没有手机就直接交回终端，不白等。
   isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false)
     || (!!voice && !(voiceCommands && voiceCommands.isMuted())),
+  // 有配对过推送设备时，App 可能正被通知叫醒：先等一小段时间再决定是否交回终端。
+  noClientGraceMs: config.approvalNoClientGraceMs,
+  hasRemoteClient: () => pushTokens.size() > 0,
   onPending: (item) => {
     if (!voice) return;
     // 静音期间审批仍进 pending，只是不念、不接语音决策。
