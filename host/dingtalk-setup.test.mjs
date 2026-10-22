@@ -33,6 +33,7 @@ test("setup：扫码成功后写入 notify.json 并回调", async () => {
   let provisioned = null;
   const setup = createDingTalkSetup({
     notifyFile,
+    source: "MO_AGENT",
     fetchImpl: fakeFetch(),
     sleep: async () => {},
     onProvisioned: async (creds) => { provisioned = creds; },
@@ -80,6 +81,22 @@ test("setup：页面关闭后 15 秒无状态请求，自动停止轮询", async
   t = 20000;
   await new Promise((resolve) => setTimeout(resolve, 40));
   assert.equal(setup.status().state, "idle");
+});
+test("setup：手动凭据写入并回调", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
+  const notifyFile = path.join(dir, "notify.json");
+  let provisioned = null;
+  const setup = createDingTalkSetup({
+    notifyFile,
+    onProvisioned: async (creds) => { provisioned = creds; },
+  });
+  await setup.saveManual({ clientId: "manual-id", clientSecret: "manual-sec", robotCode: "robot-x" });
+  assert.equal(setup.status().state, "done");
+  assert.equal(provisioned.clientId, "manual-id");
+  const saved = JSON.parse(fs.readFileSync(notifyFile, "utf8"));
+  const dt = saved.channels.find((item) => item.type === "dingtalk-bot");
+  assert.equal(dt.clientId, "manual-id");
+  assert.equal(dt.robotCode, "robot-x");
 });
 test("setup：cancel 后忽略迟到结果", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));

@@ -71,7 +71,7 @@ export function createDingTalkSetup(options) {
   const log = opts.log || { info: () => {}, warn: () => {} };
   const fetchImpl = opts.fetchImpl || fetch;
   const notifyFile = opts.notifyFile || notifyFileDefault();
-  const source = opts.source || DEFAULT_SOURCE;
+  const source = opts.source || process.env.MO_AGENT_DINGTALK_REGISTRATION_SOURCE || DEFAULT_SOURCE;
   const onProvisioned = typeof opts.onProvisioned === "function" ? opts.onProvisioned : null;
   const now = opts.now || Date.now;
   const sleep = opts.sleep;
@@ -82,6 +82,7 @@ export function createDingTalkSetup(options) {
   let startedAt = 0;
   let generation = 0;
   let progress = "";
+  let progressDetail = null;
   let lastStatusAt = 0;
 
   function status() {
@@ -92,6 +93,7 @@ export function createDingTalkSetup(options) {
       error,
       startedAt: startedAt || null,
       progress: progress || null,
+      progressDetail: progressDetail || null,
       expiresAt: registration
         ? startedAt + (Number(registration.expiresInSeconds) || 0) * 1000
         : null,
@@ -115,6 +117,7 @@ export function createDingTalkSetup(options) {
     state = "qr_waiting";
     error = null;
     progress = "";
+    progressDetail = null;
     startedAt = now();
     lastStatusAt = now();
     registration = null;
@@ -135,9 +138,10 @@ export function createDingTalkSetup(options) {
           fetchImpl,
           now,
           sleep,
-          onStatus: (status) => {
+          onStatus: (status, detail) => {
             progress = status;
-            log.info("钉钉扫码状态: " + status);
+            progressDetail = detail || null;
+            log.info("钉钉扫码状态: " + status + (detail && detail.failReason ? " (" + detail.failReason + ")" : ""));
           },
           shouldStop: () => generation !== current || (lastStatusAt > 0 && now() - lastStatusAt > 15000),
         });
@@ -152,6 +156,7 @@ export function createDingTalkSetup(options) {
           state = "idle";
           registration = null;
           progress = "";
+          progressDetail = null;
           lastStatusAt = 0;
           return;
         }
@@ -170,9 +175,35 @@ export function createDingTalkSetup(options) {
     registration = null;
     error = null;
     progress = "";
+    progressDetail = null;
     lastStatusAt = 0;
     return status();
   }
 
-  return { start, status, cancel };
+  /** 用户已在开发者后台手动创建应用/机器人，直接保存凭据。 */
+  async function saveManual(input) {
+    const data = input || {};
+    const credentials = {
+      clientId: String(data.clientId || "").trim(),
+      clientSecret: String(data.clientSecret || "").trim(),
+      robotCode: String(data.robotCode || "").trim(),
+      status: "MANUAL",
+    };
+    if (!credentials.clientId || !credentials.clientSecret) {
+      throw new Error("Client ID 和 Client Secret 必填");
+    }
+    generation += 1;
+    writeCredentials(notifyFile, credentials, source);
+    state = "done";
+    error = null;
+    progress = "MANUAL";
+    progressDetail = null;
+    registration = null;
+    lastStatusAt = 0;
+    log.info("已手动写入钉钉应用凭据: " + notifyFile);
+    if (onProvisioned) await onProvisioned(credentials);
+    return status();
+  }
+
+  return { start, status, cancel, saveManual };
 }

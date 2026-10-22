@@ -11,7 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
  */
 
 export const DEFAULT_BASE_URL = "https://oapi.dingtalk.com";
-export const DEFAULT_SOURCE = "MO_AGENT";
+export const DEFAULT_SOURCE = "openClaw";
 export const DEFAULT_TIMEOUT_MS = 15000;
 export const DEFAULT_EXPIRES_IN = 7200;
 export const DEFAULT_INTERVAL = 5;
@@ -55,7 +55,7 @@ export async function beginRegistration(options) {
   const opts = options || {};
   const fetchImpl = opts.fetchImpl || fetch;
   const baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const source = opts.source || DEFAULT_SOURCE;
+  const source = opts.source || process.env.MO_AGENT_DINGTALK_REGISTRATION_SOURCE || DEFAULT_SOURCE;
   const timeoutMs = Number(opts.timeoutMs) || DEFAULT_TIMEOUT_MS;
 
   const init = await post(fetchImpl, baseUrl + "/app/registration/init", { source }, timeoutMs);
@@ -120,8 +120,14 @@ export async function waitForCredentials(registration, options) {
 
     // SCANNED / CREATING / PUBLISHING / APPROVING 都是中间态；
     // 只要 client_id + client_secret 已下发，就算成功。
+    const detail = {
+      status,
+      errcode: polled && polled.errcode,
+      errmsg: clean(polled && polled.errmsg),
+      failReason: clean(polled && polled.fail_reason),
+    };
     if (clientId && clientSecret) {
-      if (typeof opts.onStatus === "function") opts.onStatus(status || "SUCCESS");
+      if (typeof opts.onStatus === "function") opts.onStatus(status || "SUCCESS", detail);
       return {
         clientId,
         clientSecret,
@@ -131,14 +137,16 @@ export async function waitForCredentials(registration, options) {
       };
     }
     if (status === "FAIL") {
+      if (typeof opts.onStatus === "function") opts.onStatus(status, detail);
       const reason = clean(polled && polled.fail_reason);
       throw new Error("device-code: authorization failed" + (reason ? ": " + reason : ""));
     }
     if (status === "EXPIRED") {
+      if (typeof opts.onStatus === "function") opts.onStatus(status, detail);
       throw new Error("device-code: authorization expired, scan again");
     }
 
-    if (typeof opts.onStatus === "function" && status) opts.onStatus(status);
+    if (typeof opts.onStatus === "function" && status) opts.onStatus(status, detail);
     retryStart = 0;
     continue;
     throw new Error("device-code: unknown poll status " + (status || "(empty)"));

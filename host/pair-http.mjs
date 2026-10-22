@@ -71,6 +71,25 @@ function readForm(req) {
   });
 }
 
+function readJson(req) {
+  return new Promise((resolve) => {
+    let data = "";
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        req.destroy();
+        return;
+      }
+      data += chunk;
+    });
+    req.on("end", () => {
+      try { resolve(JSON.parse(data || "{}")); } catch (error) { resolve({}); }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
+
 function svg(res, payload) {
   return QRCode.toString(payload, { type: "svg", margin: 1, width: 420 }).then((markup) => {
     res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "no-store" });
@@ -395,6 +414,12 @@ function handleDingTalkRoutes(req, res, url, ctx) {
         json(res, 200, { ok: true });
         return;
       }
+      if (pathname === "/setup/dingtalk/manual") {
+        if (!ctx.dingtalkSetup) throw new Error("钉钉配置不可用");
+        const body = await readJson(req);
+        json(res, 200, await ctx.dingtalkSetup.saveManual(body));
+        return;
+      }
       if (pathname === "/setup/dingtalk/bind/start") {
         if (!ctx.dingtalk) throw new Error("钉钉通道未配置");
         json(res, 200, ctx.dingtalk.startBinding());
@@ -425,7 +450,7 @@ function renderDingTalkPage(res) {
     "function setText(id,text){var el=$(id);if(el)el.textContent=text;}",
     "function show(id,on){var el=$(id);if(el)el.style.display=on?'inline-block':'none';}",
     "function showBlock(id,on){var el=$(id);if(el)el.style.display=on?'block':'none';}",
-    "function post(path){return fetch(path,{method:'POST',cache:'no-store',headers:{'x-mo-agent-local':'1'}}).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j;})})}",
+    "function post(path,body){var opt={method:'POST',cache:'no-store',headers:{'x-mo-agent-local':'1'}};if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body);}return fetch(path,opt).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j;})})}",
     "var autoScan=false, autoBind=false, phase='', scanRetry=null;",
     "var STEPS=['stepScan','stepBind','stepApprove'];",
     "function setPhase(next){",
@@ -467,7 +492,7 @@ function renderDingTalkPage(res) {
     "  else if(on.state==='error')next='error';",
     "  else next='scan';",
     "  setPhase(next);",
-    "  showBlock('qrWrap',false);showBlock('codeWrap',false);show('retry',false);show('reset',false);",
+    "  showBlock('qrWrap',false);showBlock('codeWrap',false);show('retry',false);show('reset',false);setText('diag','');",
     "  if(next==='scan'){",
     "    setText('title',on.verificationUriComplete?'用手机钉钉扫码':'正在生成二维码…');",
     "    setText('desc','扫码后会自动创建企业内部应用和机器人，不需要手填 Client ID/Secret。');",
@@ -479,6 +504,9 @@ function renderDingTalkPage(res) {
     "    } else setText('hint','正在向钉钉申请二维码…');",
     "    var pmap={SCANNED:'已扫码，请在钉钉里确认创建。',CREATING:'钉钉正在创建应用…',PUBLISHING:'钉钉正在发布机器人…',APPROVING:'应用已创建，等待管理员审批…'};",
     "    if(pmap[on.progress])setText('hint',pmap[on.progress]);",
+    "    var d=on.progressDetail||{};",
+    "    var diag=[on.progress,d.status,d.failReason,d.errmsg].filter(Boolean).join(' · ');",
+    "    if(diag)setText('diag','诊断：'+diag);",
     "    show('retry',true);",
     "    if($('retry'))$('retry').textContent='重新生成二维码';",
     "  } else if(next==='starting'){",
@@ -507,6 +535,9 @@ function renderDingTalkPage(res) {
     "    setText('title','扫码创建失败');",
     "    setText('desc',on.error||'未知错误');",
     "    setText('hint','3 秒后自动重试；也可以点「重新生成二维码」。');",
+    "    var d2=on.progressDetail||{};",
+    "    var diag2=[on.progress,d2.status,d2.failReason,d2.errmsg].filter(Boolean).join(' · ');",
+    "    if(diag2)setText('diag','诊断：'+diag2);",
     "    show('retry',true);",
     "    if($('retry'))$('retry').textContent='重新生成二维码';",
     "    scheduleScan(3000);",
@@ -519,6 +550,9 @@ function renderDingTalkPage(res) {
     "  else if(phase==='bind'||phase==='waiting'){autoBind=false;startBind();}",
     "};",
     "$('reset').onclick=function(){if(confirm('解除绑定？'))post('/setup/dingtalk/bind/reset').then(refresh)};",
+    "$('manualSave').onclick=function(){",
+    "  post('/setup/dingtalk/manual',{clientId:$('manualId').value.trim(),clientSecret:$('manualSecret').value.trim(),robotCode:$('manualRobot').value.trim()}).then(function(){refresh()}).catch(function(err){setText('diag','保存失败：'+(err&&err.message||'未知错误'));});",
+    "};",
     "refresh().then(function(s){",
     "  var bot=(s&&s.bot)||{}, on=(s&&s.onboarding)||{};",
     "  if(!bot.configured && on.state==='idle'){startScan();}",
@@ -541,10 +575,19 @@ function renderDingTalkPage(res) {
     "<div id='codeBox' style='font:700 34px/1.2 ui-monospace,Menlo,monospace;letter-spacing:8px;color:#e7ecff;background:#0d1326;border:1px solid #263054;border-radius:12px;padding:14px 10px;margin:10px 0'>------</div>",
     "</div>",
     "<p id='hint' style='min-height:0;color:#8b97bd'></p>",
+    "<p id='diag' style='min-height:0;color:#6f7ca0;font-size:11px;word-break:break-all'></p>",
     "<div class='ips' style='justify-content:flex-start'>",
     "<button class='ip' id='retry' type='button' style='display:none'>重新生成</button>",
     "<button class='ip' id='reset' type='button' style='display:none'>解绑</button>",
     "</div>",
+    "<details style='margin-top:16px;width:100%'>",
+    "<summary style='cursor:pointer;color:#8b97bd;font-size:12px'>扫码创建失败？手动填写已有应用</summary>",
+    "<p style='font-size:12px;color:#8b97bd;text-align:left'>在开发者后台创建应用 + 机器人(Stream) 并发布后，把 Client ID / Client Secret 填到这里。</p>",
+    "<input id='manualId' placeholder='Client ID' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<input id='manualSecret' placeholder='Client Secret' type='password' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<input id='manualRobot' placeholder='robotCode（可选）' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<button class='ip' id='manualSave' type='button' style='margin-top:6px'>保存并连接</button>",
+    "</details>",
     "</div>",
     "<div class='card' style='width:260px;text-align:left'>",
     "<h2>接下来</h2>",
