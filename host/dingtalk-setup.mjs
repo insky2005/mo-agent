@@ -96,6 +96,14 @@ export function createDingTalkSetup(options) {
   }
 
   async function start() {
+    if (state === "polling" && registration) {
+      const expiresAt = startedAt + (Number(registration.expiresInSeconds) || 0) * 1000;
+      if (expiresAt && now() > expiresAt) {
+        generation += 1;
+        state = "idle";
+        registration = null;
+      }
+    }
     if (state === "qr_waiting" || state === "polling") return status();
     generation += 1;
     const current = generation;

@@ -152,7 +152,7 @@ test("固定文本：批准 <ID> 生效，少空格/小写不生效", async () =
   assert.equal(brokerCalls.length, 1);
 });
 
-test("首次绑定：waiting → 首条消息 → 桌面确认 → bound", async () => {
+test("配对码绑定：错误码不绑定，正确码立即绑定", async () => {
   const { bot, stream, bindingFile } = makeBot({
     binding: false,
     fetchImpl: fakeFetch((entry) => {
@@ -164,10 +164,16 @@ test("首次绑定：waiting → 首条消息 → 桌面确认 → bound", async
     }),
   });
   await bot.start();
-  assert.equal(bot.startBinding().ok, true);
-  await stream.onMessage(inbound("hi"));
-  assert.equal(bot.getState().binding.state, "pending_confirm");
-  assert.equal(await bot.confirmBinding(), true);
+  const started = bot.startBinding();
+  assert.equal(started.ok, true);
+  assert.match(started.code, /^\d{6}$/);
+  assert.equal(bot.getState().binding.code, started.code);
+
+  const wrong = started.code === "000000" ? "111111" : "000000";
+  await stream.onMessage(inbound(wrong));
+  assert.equal(bot.getState().binding.state, "waiting");
+
+  await stream.onMessage(inbound(started.code));
   assert.equal(bot.getState().binding.state, "bound");
   assert.ok(fs.existsSync(bindingFile));
 });

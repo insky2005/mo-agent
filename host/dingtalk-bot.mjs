@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { randomInt } from "node:crypto";
 import { DECISION } from "../approvals/broker.mjs";
 import { loadChannelConfigs } from "./notify-webhook.mjs";
 import { createDingTalkStream } from "./dingtalk-stream.mjs";
@@ -171,6 +172,8 @@ export function createDingTalkBot(options) {
   if (binding && !binding.userId && !binding.conversationId) binding = null;
   let bindingState = binding ? "bound" : "unbound";
   let bindingExpiresAt = 0;
+  let bindingCode = "";
+  let bindingCodeAttempts = 0;
   let pendingBind = null;
   let stream = null;
   let lastError = null;
@@ -555,6 +558,8 @@ export function createDingTalkBot(options) {
     saveBinding();
     bindingState = "bound";
     bindingExpiresAt = 0;
+    bindingCode = "";
+    bindingCodeAttempts = 0;
     pendingBind = null;
     log.info("钉钉已绑定: " + mask(binding.userId) + " / " + mask(binding.conversationId));
     audit({ action: "bind", userId: binding.userId, conversationId: binding.conversationId, ok: true });
@@ -639,9 +644,10 @@ export function createDingTalkBot(options) {
     if (config.corpId && corpId && config.corpId !== corpId) return;
     if (bindingState === "unbound") return;
 
-    if (bindingState === "waiting" || bindingState === "pending_confirm") {
+    if (bindingState === "waiting") {
       if (bindingExpiresAt && now() > bindingExpiresAt) {
         bindingState = "unbound";
+        bindingCode = "";
         pendingBind = null;
         return;
       }
@@ -649,21 +655,26 @@ export function createDingTalkBot(options) {
       if (config.target.mode === "group" && conversationType !== 2) return;
       if (config.allowedUserIds.length && !config.allowedUserIds.includes(sender)) return;
 
-      if (bindingState === "pending_confirm" && pendingBind && pendingBind.userId === sender) {
-        await replyTo(inbound, "已收到，请在桌面确认绑定。", "reply");
-        return;
-      }
-      if (bindingState === "pending_confirm" && pendingBind && pendingBind.userId !== sender) {
-        return;
-      }
-      pendingBind = inbound;
-      if (config.binding.requireConfirm) {
-        bindingState = "pending_confirm";
-        await replyTo(inbound, "已收到绑定请求，请在桌面确认。", "reply");
-      } else {
+      if (bindingCode && text === bindingCode) {
         commitBinding(inbound);
         await replyTo(inbound, "绑定成功。审批回复：批准 <ID> / 拒绝 <ID>", "reply");
+        return;
       }
+      if (bindingCode) {
+        bindingCodeAttempts += 1;
+        if (bindingCodeAttempts > 5) {
+          bindingState = "unbound";
+          bindingCode = "";
+          await replyTo(inbound, "配对码错误次数过多，请在设置页重新生成。", "reply");
+        } else {
+          await replyTo(inbound, "配对码不正确，请发送设置页显示的 6 位配对码。", "reply");
+        }
+        return;
+      }
+
+      // 兼容没有配对码的旧状态：首条消息直接绑定。
+      commitBinding(inbound);
+      await replyTo(inbound, "绑定成功。审批回复：批准 <ID> / 拒绝 <ID>", "reply");
       return;
     }
 
@@ -756,6 +767,7 @@ export function createDingTalkBot(options) {
           state: bindingState,
           boundAt: binding ? binding.boundAt : null,
           expiresAt: bindingExpiresAt || null,
+          code: bindingState === "waiting" ? bindingCode : "",
           pendingNick: pendingBind ? pendingBind.senderNick : null,
           userId: binding ? mask(binding.userId) : "",
           conversationId: binding ? mask(binding.conversationId) : "",
@@ -774,8 +786,10 @@ export function createDingTalkBot(options) {
       if (isBound()) return { ok: false, error: "already-bound" };
       bindingState = "waiting";
       bindingExpiresAt = now() + config.binding.windowMs;
+      bindingCode = String(randomInt(0, 1000000)).padStart(6, "0");
+      bindingCodeAttempts = 0;
       pendingBind = null;
-      return { ok: true, expiresAt: bindingExpiresAt };
+      return { ok: true, code: bindingCode, expiresAt: bindingExpiresAt };
     },
 
     async confirmBinding() {
@@ -794,6 +808,7 @@ export function createDingTalkBot(options) {
     rejectBinding() {
       bindingState = "unbound";
       bindingExpiresAt = 0;
+      bindingCode = "";
       pendingBind = null;
     },
 
@@ -801,6 +816,7 @@ export function createDingTalkBot(options) {
       binding = null;
       bindingState = "unbound";
       bindingExpiresAt = 0;
+      bindingCode = "";
       pendingBind = null;
       saveBinding();
       audit({ action: "unbind", ok: true });

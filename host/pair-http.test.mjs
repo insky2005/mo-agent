@@ -145,7 +145,7 @@ test("/setup/dingtalk 渲染钉钉通道页", async () => {
   const { res } = await get("/setup/dingtalk", ctx);
   assert.equal(res.out.status, 200);
   assert.match(res.out.body, /钉钉机器人绑定/);
-  assert.match(res.out.body, /开始绑定/);
+  assert.match(res.out.body, /配对码/);
   assert.match(res.out.body, /startScan/);
   const script = String(res.out.body).match(/<script>([\s\S]*)<\/script>/);
   assert.ok(script, "页面应包含内联脚本");
