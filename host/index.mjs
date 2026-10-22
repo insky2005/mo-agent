@@ -8,7 +8,7 @@ import { createLogger } from "./log.mjs";
 import { createRotatingSink } from "./log-file.mjs";
 import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
-import { loadNotifyChannels } from "./notify-webhook.mjs";
+import { loadMobileMode, loadNotifyChannels } from "./notify-webhook.mjs";
 import { createDingTalkBot, loadDingTalkBotConfig } from "./dingtalk-bot.mjs";
 import { createDingTalkSetup } from "./dingtalk-setup.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
@@ -58,7 +58,7 @@ const notifyDefaults = process.env.MO_AGENT_NOTIFY_DEFAULTS
     ? path.join(root, "host", "notify-defaults.json")
     : path.join(root, "notify-defaults.json"));
 ensureNotifyConfig({ log, defaults: notifyDefaults });
-for (const channel of loadNotifyChannels({ log, getPushTokens: () => pushTokens.list() })) {
+for (const channel of loadNotifyChannels({ log, mobileMode: loadMobileMode({ log }), getPushTokens: () => pushTokens.list() })) {
   notifier.register(channel);
   log.info("已注册通知通道: " + channel.name);
 }
@@ -259,6 +259,8 @@ const broker = new ApprovalBroker({
 
 // 钉钉单应用机器人（可选）：Stream 入站 + 固定文本审批 + 主动推送。
 async function ensureDingTalkBot() {
+  const mode = loadMobileMode({ log });
+  if (mode === "apk" || mode === "none") return null;
   const cfg = loadDingTalkBotConfig({ log });
   if (!cfg) return null;
   if (dingtalkBot) {

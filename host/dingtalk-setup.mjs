@@ -48,12 +48,15 @@ function writeCredentials(file, credentials, source) {
   };
   let next;
   if (current.kind === "array") {
-    next = current.value.filter((item) => !item || item.type !== "dingtalk-bot");
-    next.push(channel);
+    const channels = current.value.filter((item) => !item || item.type !== "dingtalk-bot");
+    channels.push(channel);
+    next = { mobile: { mode: "dingtalk" }, channels };
   } else {
     const channels = (current.value.channels || []).filter((item) => !item || item.type !== "dingtalk-bot");
     channels.push(channel);
-    next = Object.assign({}, current.value, { channels });
+    const currentMode = current.value.mobile && current.value.mobile.mode;
+    const mode = currentMode === "both" ? "both" : "dingtalk";
+    next = Object.assign({}, current.value, { mobile: { mode }, channels });
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + ".tmp." + process.pid;
