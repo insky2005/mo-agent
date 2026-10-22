@@ -43,6 +43,7 @@
     processes: [],
     clients: 0,
     monitor: null,
+    dingtalk: null,
     seq: 0,
     startedAt: 0,
     receivedSnapshot: false,
@@ -87,6 +88,16 @@
     processCount: $("processCount"),
     sourceCount: $("sourceCount"),
     monitorNote: $("monitorNote"),
+    dtState: $("dtState"),
+    dtBar: $("dtBar"),
+    dtBind: $("dtBind"),
+    dtLocal: $("dtLocal"),
+    dtUsage: $("dtUsage"),
+    dtToday: $("dtToday"),
+    dtFail: $("dtFail"),
+    dtDir: $("dtDir"),
+    dtTop: $("dtTop"),
+    dtRecent: $("dtRecent"),
     scrim: $("scrim"),
     drawer: $("drawer"),
     drawerTitle: $("drawerTitle"),
@@ -371,6 +382,7 @@
     state.processes = data.processes || [];
     state.clients = Number(data.clients) || 0;
     state.monitor = data.monitor || null;
+    state.dingtalk = data.dingtalk || null;
     state.seq = Number(data.seq) || state.seq;
     state.startedAt = Number(data.startedAt) || state.startedAt;
     setSources(data.sources, data.sourceErrors);
@@ -666,11 +678,84 @@
     }
   }
 
+  function renderDingtalk() {
+    var data = state.dingtalk;
+    if (!dom.dtState) return;
+    if (!data) {
+      dom.dtState.textContent = "未配置";
+      dom.dtState.className = "connTag off";
+      dom.dtBar.style.width = "0%";
+      dom.dtBar.className = "";
+      dom.dtBind.textContent = "未绑定";
+      dom.dtLocal.textContent = "0";
+      dom.dtUsage.textContent = "0 / 3000";
+      dom.dtToday.textContent = "0";
+      dom.dtFail.textContent = "0 / 0";
+      dom.dtDir.textContent = "0 / 0";
+      dom.dtTop.textContent = "—";
+      dom.dtRecent.textContent = "—";
+      return;
+    }
+
+    var binding = data.binding || {};
+    var usage = data.usage || {};
+    var local = usage.local || {};
+    var bill = usage.billable || {};
+    var stateText = "未配置";
+    var stateClass = "off";
+    if (data.configured) {
+      if (binding.state === "pending_confirm") { stateText = "待确认"; stateClass = "warn"; }
+      else if (binding.state === "waiting") { stateText = "待绑定"; stateClass = "warn"; }
+      else if (data.connected && binding.state === "bound") { stateText = "已连接"; stateClass = "ok"; }
+      else if (data.status === "reconnecting") { stateText = "重连中"; stateClass = "warn"; }
+      else if (data.connected) { stateText = "连接中"; stateClass = "warn"; }
+      else { stateText = "已断开"; stateClass = "bad"; }
+    }
+    dom.dtState.textContent = stateText;
+    dom.dtState.className = "connTag " + stateClass;
+
+    var bindText = "未绑定";
+    if (binding.state === "waiting") bindText = "等待首条消息";
+    else if (binding.state === "pending_confirm") bindText = "待确认" + (binding.pendingNick ? " · " + binding.pendingNick : "");
+    else if (binding.state === "bound") bindText = binding.userId || "已绑定";
+    dom.dtBind.textContent = bindText;
+
+    var percent = Number(bill.percent) || 0;
+    dom.dtBar.style.width = Math.min(100, Math.round(percent * 100)) + "%";
+    dom.dtBar.className = percent >= 1 ? "bad" : (percent >= 0.8 ? "warn" : "");
+
+    dom.dtLocal.textContent = fmtNum(local.total || 0);
+    dom.dtUsage.textContent = fmtNum(bill.total || 0) + " / " + fmtNum(bill.limit || 0);
+    dom.dtToday.textContent = fmtNum(local.today || 0);
+    dom.dtFail.textContent = (local.fail || 0) + " / " + (local.retries || 0);
+    var direction = bill.byDirection || {};
+    dom.dtDir.textContent = (direction.in || 0) + " / " + (direction.out || 0);
+
+    var byApi = local.byApi || {};
+    var top = Object.keys(byApi).sort(function (a, b) { return byApi[b] - byApi[a]; }).slice(0, 2);
+    dom.dtTop.textContent = top.length
+      ? top.map(function (key) { return key.split("/").pop() + " " + byApi[key]; }).join(" · ")
+      : "—";
+
+    var recent = (local.recent || []).slice(0, 6);
+    dom.dtRecent.innerHTML = recent.length
+      ? recent.map(function (item) {
+        return '<div class="recentCall">'
+          + '<span class="' + (item.ok ? "ok" : "bad") + '">' + (item.ok ? "✓" : "✕") + '</span>'
+          + '<span class="api">' + esc(clip(item.api, 28)) + '</span>'
+          + '<span class="ms">' + (item.ms || 0) + 'ms</span>'
+          + '<span class="time">' + clockText(item.at) + '</span>'
+          + '</div>';
+      }).join("")
+      : '<div class="emptyMini">暂无调用</div>';
+  }
+
   function renderAll() {
     renderStats();
     renderSources();
     renderSessions();
     renderPending();
+    renderDingtalk();
     renderEvents();
     renderFooter();
     if (state.selected) renderDrawer();

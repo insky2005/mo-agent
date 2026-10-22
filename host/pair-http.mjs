@@ -160,7 +160,9 @@ const STYLE = [
 export async function handlePairRoutes(req, res, url, ctx) {
   const pathname = url.pathname;
   const applyPath = pathname === "/setup/hooks/apply";
+  const dingtalkPath = pathname === "/setup/dingtalk" || pathname.startsWith("/setup/dingtalk/");
   const known = applyPath
+    || dingtalkPath
     || pathname === "/pair"
     || pathname === "/setup"
     || pathname === "/agents"
@@ -224,6 +226,10 @@ export async function handlePairRoutes(req, res, url, ctx) {
     }
     renderAgentsPage(res, url, ctx);
     return true;
+  }
+
+  if (dingtalkPath) {
+    return handleDingTalkRoutes(req, res, url, ctx);
   }
 
   if (req.method !== "GET") {
@@ -319,6 +325,10 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功，正在关闭窗口…</p>",
     "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='/setup/renew'>换一个配对码</a></p>",
     "</div>",
+    "<div class='card'><div class='step'>可选</div><h2>钉钉</h2>",
+    "<p>不装 APK 也能在手机钉钉里收审批。扫码后自动创建企业内部应用与机器人。</p>",
+    "<p><a class='ip' href='/setup/dingtalk'>打开钉钉通道 →</a></p>",
+    "</div>",
     "</div>",
     "<div class='meta'>配对码 <b>" + escapeHtml(ctx.pin) + "</b>（也可以手动输入）",
     "<div class='ips'>" + buttons + "</div></div>",
@@ -329,6 +339,131 @@ export async function handlePairRoutes(req, res, url, ctx) {
 
   html(res, 200, page);
   return true;
+}
+
+function handleDingTalkRoutes(req, res, url, ctx) {
+  const pathname = url.pathname;
+  if (pathname === "/setup/dingtalk") {
+    if (req.method !== "GET") {
+      html(res, 405, "method not allowed");
+      return true;
+    }
+    renderDingTalkPage(res);
+    return true;
+  }
+
+  if (pathname === "/setup/dingtalk/qr.svg") {
+    const status = ctx.dingtalkSetup ? ctx.dingtalkSetup.status() : null;
+    if (!status || !status.verificationUriComplete) {
+      json(res, 404, { ok: false, error: "no-qr" });
+      return true;
+    }
+    return svg(res, status.verificationUriComplete).then(() => true);
+  }
+
+  if (pathname === "/setup/dingtalk/status") {
+    if (req.method !== "GET") {
+      json(res, 405, { ok: false, error: "method not allowed" });
+      return true;
+    }
+    const bot = ctx.dingtalk || null;
+    json(res, 200, {
+      ok: true,
+      onboarding: ctx.dingtalkSetup ? ctx.dingtalkSetup.status() : { state: "unavailable" },
+      bot: bot && typeof bot.getState === "function" ? bot.getState() : null,
+    });
+    return true;
+  }
+
+  if (req.method !== "POST") {
+    json(res, 405, { ok: false, error: "method not allowed" });
+    return true;
+  }
+
+  (async () => {
+    try {
+      if (pathname === "/setup/dingtalk/onboard/start") {
+        if (!ctx.dingtalkSetup) throw new Error("钉钉扫码创建不可用");
+        json(res, 200, await ctx.dingtalkSetup.start());
+        return;
+      }
+      if (pathname === "/setup/dingtalk/onboard/cancel") {
+        if (ctx.dingtalkSetup) ctx.dingtalkSetup.cancel();
+        json(res, 200, { ok: true });
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/start") {
+        if (!ctx.dingtalk) throw new Error("钉钉通道未配置");
+        json(res, 200, ctx.dingtalk.startBinding());
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/confirm") {
+        if (!ctx.dingtalk) throw new Error("钉钉通道未配置");
+        json(res, 200, { ok: await ctx.dingtalk.confirmBinding() });
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/reset") {
+        if (ctx.dingtalk) ctx.dingtalk.unbind();
+        json(res, 200, { ok: true });
+        return;
+      }
+      json(res, 404, { ok: false, error: "not found" });
+    } catch (error) {
+      json(res, 400, { ok: false, error: error && error.message ? error.message : String(error) });
+    }
+  })();
+  return true;
+}
+
+function renderDingTalkPage(res) {
+  const script = [
+    "<script>(function(){",
+    "function $(id){return document.getElementById(id)}",
+    "function post(path){return fetch(path,{method:'POST',cache:'no-store'}).then(function(r){return r.json()})}",
+    "function render(s){",
+    "  var on=s.onboarding||{}, bot=s.bot||{};",
+    "  var st=on.state||'idle';",
+    "  var text={idle:'未配置',qr_waiting:'正在生成二维码',polling:'等待扫码',done:'应用已创建',error:'失败：'+(on.error||'')}[st]||st;",
+    "  if(bot.configured){text=bot.connected?'已连接':'已配置（未连接）';}",
+    "  $('state').textContent=text;",
+    "  $('qrWrap').style.display=(st==='polling'&&on.verificationUriComplete)?'block':'none';",
+    "  if(st==='polling')$('qr').src='/setup/dingtalk/qr.svg?ts='+Date.now();",
+    "  var b=bot.binding||{};",
+    "  $('bindState').textContent=b.state==='bound'?('已绑定 '+(b.userId||'')):b.state==='waiting'?'等待首条消息':b.state==='pending_confirm'?'待确认 '+(b.pendingNick||''):'未绑定';",
+    "  $('start').style.display=bot.configured?'none':'inline-block';",
+    "  $('start').disabled=false;",
+    "  $('bind').style.display=(bot.configured&&b.state==='unbound')?'inline-block':'none';",
+    "  $('confirm').style.display=b.state==='pending_confirm'?'inline-block':'none';",
+    "  $('reset').style.display=bot.configured?'inline-block':'none';",
+    "}",
+    "function refresh(){fetch('/setup/dingtalk/status',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(function(){})}",
+    "$('start').onclick=function(){$('start').disabled=true;post('/setup/dingtalk/onboard/start').then(render).then(refresh).catch(function(){})};",
+    "$('bind').onclick=function(){post('/setup/dingtalk/bind/start').then(refresh)};",
+    "$('confirm').onclick=function(){post('/setup/dingtalk/bind/confirm').then(refresh)};",
+    "$('reset').onclick=function(){if(confirm('解除绑定？'))post('/setup/dingtalk/bind/reset').then(refresh)};",
+    "refresh();setInterval(refresh,2000);",
+    "})();</script>",
+  ].join("");
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent · 钉钉通道</title><style>" + STYLE + "</style></head><body>",
+    "<h1>钉钉通道</h1><div class='sub'>扫码自动创建应用与机器人；不装 APK 也能在手机钉钉里收审批。</div>",
+    "<div class='card'>",
+    "<p>状态：<b id='state'>加载中…</b></p>",
+    "<p>绑定：<b id='bindState'>—</b></p>",
+    "<p><button class='ip' id='start' type='button'>扫码创建机器人</button></p>",
+    "<div id='qrWrap' style='display:none'><div class='qr'><img id='qr' alt='dingtalk qr' width='240' height='240' /></div>",
+    "<p style='min-height:0'>用手机钉钉扫码，确认创建并授权。</p></div>",
+    "<p><button class='ip' id='bind' type='button' style='display:none'>开始绑定</button>",
+    "<button class='ip' id='confirm' type='button' style='display:none'>确认绑定</button>",
+    "<button class='ip' id='reset' type='button' style='display:none'>解绑</button></p>",
+    "<p class='warn' style='margin-top:14px'>绑定：点「开始绑定」后，在钉钉里给机器人发任意一句话，再回这里确认。</p>",
+    "</div>",
+    "<div class='meta'><a href='/setup'>← 返回设置</a></div>",
+    script,
+  ].join("");
+  html(res, 200, page);
 }
 
 function summarize(results, action, thrown) {

@@ -543,6 +543,22 @@ b, strong { font-weight: 650; }
 .todoDot.completed { background: var(--green); }
 .todoDot.in_progress, .todoDot.in-progress { background: var(--blue); }
 .todoDot.failed { background: var(--red); }
+.dingtalkPanel .connTag { font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(53, 209, 154, 0.35); color: #35d19a; }
+.dingtalkPanel .connTag.off { color: var(--muted2); border-color: rgba(90, 105, 145, 0.35); }
+.dingtalkPanel .connTag.warn { color: #ffc46b; border-color: rgba(255, 196, 107, 0.4); }
+.dingtalkPanel .connTag.bad { color: #ff8b96; border-color: rgba(255, 139, 150, 0.4); }
+.usageBar { height: 6px; border-radius: 999px; background: rgba(35, 48, 85, 0.9); overflow: hidden; margin: 8px 0 10px; }
+.usageBar i { display: block; height: 100%; width: 0; background: #35d19a; transition: width 0.3s ease; }
+.usageBar i.warn { background: #ffc46b; }
+.usageBar i.bad { background: #ff6b7a; }
+.usageDetail { margin-top: 8px; }
+.usageDetail summary { cursor: pointer; color: var(--muted2); font-size: 10.5px; }
+.recentCalls { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 150px; overflow: auto; }
+.recentCall { display: grid; grid-template-columns: 12px minmax(0, 1fr) 48px 58px; gap: 6px; align-items: center; font-size: 10px; color: var(--muted); }
+.recentCall .api { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9c8ec; }
+.recentCall .ms, .recentCall .time { text-align: right; font-variant-numeric: tabular-nums; }
+.recentCall .ok { color: #35d19a; }
+.recentCall .bad { color: #ff6b7a; }
 .hidden { display: none !important; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }

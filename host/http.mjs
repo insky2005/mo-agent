@@ -94,7 +94,10 @@ export function createMoAgentServer(options) {
   const deviceFile = options.deviceFile;
   const pushTokens = options.pushTokens;
   const hooksManager = options.hooksManager;
-  const dingtalk = options.dingtalk || null;
+  const getDingTalk = typeof options.getDingTalk === "function"
+    ? options.getDingTalk
+    : () => options.dingtalk || null;
+  const dingtalkSetup = options.dingtalkSetup || null;
 
   const deviceTokens = new Set();
 
@@ -243,6 +246,8 @@ export function createMoAgentServer(options) {
           apkVersionCode: apkInfo.versionCode || 0,
           renewPairing,
           hooksManager,
+          dingtalk: getDingTalk(),
+          dingtalkSetup,
           localToken,
           isLoopback: isLoopbackAddress(req.socket && req.socket.remoteAddress),
         });
@@ -265,7 +270,7 @@ export function createMoAgentServer(options) {
           runtime,
           webDir,
           localToken,
-          dingtalk,
+          dingtalk: getDingTalk(),
         });
         if (handled) return;
       }

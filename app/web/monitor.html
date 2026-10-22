@@ -106,6 +106,25 @@
               <div class="emptyMini">没有等待处理的请求</div>
             </div>
           </section>
+          <section class="panel dingtalkPanel">
+            <div class="panelHead">
+              <h2>钉钉通道</h2>
+              <span class="connTag" id="dtState">未配置</span>
+            </div>
+            <div class="usageBar"><i id="dtBar"></i></div>
+            <div class="footRow"><span>绑定</span><b id="dtBind">未绑定</b></div>
+            <div class="footRow"><span>本月本地调用</span><b id="dtLocal">0</b></div>
+            <div class="footRow"><span>其中计费</span><b id="dtUsage">0 / 3000</b></div>
+            <div class="footRow"><span>今日</span><b id="dtToday">0</b></div>
+            <div class="footRow"><span>失败 / 重试</span><b id="dtFail">0 / 0</b></div>
+            <div class="footRow"><span>入站 / 出站</span><b id="dtDir">0 / 0</b></div>
+            <div class="footRow"><span>Top 接口</span><b id="dtTop">—</b></div>
+            <details class="usageDetail">
+              <summary>最近调用</summary>
+              <div id="dtRecent" class="recentCalls">—</div>
+            </details>
+            <div class="footNote">本地调用逐条计；计费以钉钉资源管理为准。</div>
+          </section>
           <section class="panel eventsPanel">
             <div class="panelHead">
               <h2>实时事件</h2>

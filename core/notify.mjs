@@ -41,6 +41,11 @@ export class Notifier {
     return channel;
   }
 
+  unregister(channel) {
+    this.channels = this.channels.filter((item) => item !== channel);
+    return channel;
+  }
+
   start() {
     if (this.unsubscribe) return this.unsubscribe;
     this.unsubscribe = this.hub.store.subscribe((event) => this.handle(event));

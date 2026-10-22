@@ -10,6 +10,7 @@ import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
 import { loadNotifyChannels } from "./notify-webhook.mjs";
 import { createDingTalkBot, loadDingTalkBotConfig } from "./dingtalk-bot.mjs";
+import { createDingTalkSetup } from "./dingtalk-setup.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
 import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
@@ -257,18 +258,28 @@ const broker = new ApprovalBroker({
 });
 
 // 钉钉单应用机器人（可选）：Stream 入站 + 固定文本审批 + 主动推送。
-const dingtalkConfig = loadDingTalkBotConfig({ log });
-if (dingtalkConfig) {
-  dingtalkBot = createDingTalkBot({ config: dingtalkConfig, log, broker });
+async function ensureDingTalkBot() {
+  const cfg = loadDingTalkBotConfig({ log });
+  if (!cfg) return null;
+  if (dingtalkBot) {
+    notifier.unregister(dingtalkBot);
+    dingtalkBot.stop();
+  }
+  dingtalkBot = createDingTalkBot({ config: cfg, log, broker });
   notifier.register(dingtalkBot);
-  dingtalkBot.start()
-    .then((started) => {
-      if (started) log.info("钉钉通道已启用（Stream）");
-    })
-    .catch((error) => {
-      log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
-    });
+  await dingtalkBot.start();
+  log.info("钉钉通道已启用（Stream）");
+  return dingtalkBot;
 }
+
+void ensureDingTalkBot().catch((error) => {
+  log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
+});
+
+const dingtalkSetup = createDingTalkSetup({
+  log,
+  onProvisioned: () => ensureDingTalkBot(),
+});
 
 // P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。
 // 只持有内存状态（voiceTargetSessionId、voiceMutedUntil），host 重启即复位。
@@ -479,7 +490,8 @@ const moHost = createMoAgentServer({
   webDir,
   localToken,
   monitor,
-  dingtalk: dingtalkBot,
+  getDingTalk: () => dingtalkBot,
+  dingtalkSetup,
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
