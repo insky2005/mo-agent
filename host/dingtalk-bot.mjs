@@ -804,11 +804,13 @@ export function createDingTalkBot(options) {
       return isBound() && Boolean(stream && stream.isConnected());
     },
 
-    startBinding() {
+    startBinding(input) {
       if (isBound()) return { ok: false, error: "already-bound" };
+      const data = input || {};
+      const code = typeof data.code === "string" && /^\d{6}$/.test(data.code) ? data.code : String(randomInt(0, 1000000)).padStart(6, "0");
       bindingState = "waiting";
-      bindingExpiresAt = now() + config.binding.windowMs;
-      bindingCode = String(randomInt(0, 1000000)).padStart(6, "0");
+      bindingExpiresAt = Number(data.expiresAt) > 0 ? Number(data.expiresAt) : now() + config.binding.windowMs;
+      bindingCode = code;
       bindingCodeAttempts = 0;
       pendingBind = null;
       return { ok: true, code: bindingCode, expiresAt: bindingExpiresAt };

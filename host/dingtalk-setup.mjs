@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { randomInt } from "node:crypto";
 import { beginRegistration, waitForCredentials } from "./dingtalk-device.mjs";
 
 /**
@@ -84,6 +85,7 @@ export function createDingTalkSetup(options) {
   let progress = "";
   let progressDetail = null;
   let lastStatusAt = 0;
+  let pendingBinding = null;
 
   function status() {
     lastStatusAt = now();
@@ -94,6 +96,7 @@ export function createDingTalkSetup(options) {
       startedAt: startedAt || null,
       progress: progress || null,
       progressDetail: progressDetail || null,
+      pendingBinding,
       expiresAt: registration
         ? startedAt + (Number(registration.expiresInSeconds) || 0) * 1000
         : null,
@@ -180,6 +183,17 @@ export function createDingTalkSetup(options) {
     return status();
   }
 
+  /** 应用还没创建时，也可以先把配对码展示出来；bot 创建后自动接管。 */
+  function startPendingBinding() {
+    const code = String(randomInt(0, 1000000)).padStart(6, "0");
+    pendingBinding = { code, expiresAt: now() + 300000 };
+    return { ok: true, code, expiresAt: pendingBinding.expiresAt };
+  }
+
+  function clearPendingBinding() {
+    pendingBinding = null;
+  }
+
   /** 用户已在开发者后台手动创建应用/机器人，直接保存凭据。 */
   async function saveManual(input) {
     const data = input || {};
@@ -227,8 +241,9 @@ export function createDingTalkSetup(options) {
     progress = "";
     progressDetail = null;
     lastStatusAt = 0;
+    pendingBinding = null;
     return status();
   }
 
-  return { start, status, cancel, saveManual, removeCredentials };
+  return { start, status, cancel, saveManual, removeCredentials, startPendingBinding, clearPendingBinding };
 }

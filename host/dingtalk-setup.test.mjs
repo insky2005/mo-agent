@@ -109,6 +109,17 @@ test("setup：解绑会清除本机钉钉配置", async () => {
   assert.equal(saved.channels.length, 0);
   assert.equal(setup.status().state, "idle");
 });
+test("setup：应用未创建也能先生成配对码", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
+  const setup = createDingTalkSetup({ notifyFile: path.join(dir, "notify.json") });
+  const first = setup.startPendingBinding();
+  assert.match(first.code, /^\d{6}$/);
+  assert.equal(setup.status().pendingBinding.code, first.code);
+  const second = setup.startPendingBinding();
+  assert.notEqual(second.code, first.code);
+  setup.clearPendingBinding();
+  assert.equal(setup.status().pendingBinding, null);
+});
 test("setup：cancel 后忽略迟到结果", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
   const setup = createDingTalkSetup({

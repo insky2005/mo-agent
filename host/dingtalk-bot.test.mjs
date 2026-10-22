@@ -192,6 +192,13 @@ test("配对码绑定：错误码不绑定，正确码立即绑定", async () =>
   assert.ok(fs.existsSync(bindingFile));
 });
 
+test("startBinding：可接管预生成配对码", async () => {
+  const { bot } = makeBot({ binding: false });
+  const started = bot.startBinding({ code: "123456", expiresAt: 999 });
+  assert.equal(started.code, "123456");
+  assert.equal(started.expiresAt, 999);
+  assert.equal(bot.getState().binding.code, "123456");
+});
 test("dedupe：同一个 msgId 只处理一次", async () => {
   const { bot, stream, brokerCalls } = makeBot({
     pending: [{ id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" }],

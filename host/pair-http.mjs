@@ -429,8 +429,13 @@ function handleDingTalkRoutes(req, res, url, ctx) {
         return;
       }
       if (pathname === "/setup/dingtalk/bind/start") {
-        if (!ctx.dingtalk) throw new Error("钉钉通道未配置");
-        json(res, 200, ctx.dingtalk.startBinding());
+        if (ctx.dingtalk) {
+          json(res, 200, ctx.dingtalk.startBinding());
+        } else if (ctx.dingtalkSetup) {
+          json(res, 200, ctx.dingtalkSetup.startPendingBinding());
+        } else {
+          throw new Error("钉钉通道未配置");
+        }
         return;
       }
       if (pathname === "/setup/dingtalk/bind/confirm") {
@@ -489,14 +494,24 @@ function renderDingTalkPage(res) {
     "  if(on.state==='done')hint='应用已创建，正在启动机器人…';",
     "  if(on.state==='error'){setText('createTitle','创建失败');setText('createDesc',on.error||'未知错误');hint='3 秒后自动重试；也可以点「重新生成二维码」。';scheduleScan(3000);}",
     "  setText('createHint',hint);",
-    "  var d=on.progressDetail||{};var diag=[on.progress,d.status,d.failReason,d.errmsg].filter(Boolean).join(' · ');setText('diag',diag?'诊断：'+diag:'');",
+    "  var d=on.progressDetail||{};var diag='';",
+    "  if(on.state==='error'||d.failReason||(d.errcode&&d.errcode!==0)){diag=[on.progress,d.status,d.failReason,d.errmsg].filter(Boolean).join(' · ');}",
+    "  setText('diag',diag?'诊断：'+diag:'');",
     "}",
     "function renderPair(on,bot,b){",
+    "  var pending=on.pendingBinding||{};",
+    "  var code=b.code||pending.code||'';",
+    "  var expires=b.expiresAt||pending.expiresAt||0;",
     "  if(!bot.configured){",
     "    setText('pairTitle','配对');",
-    "    setText('pairDesc','先完成左侧的「创建机器人」。');",
-    "    setText('pairHint','');",
-    "    showBlock('codeWrap',false);showBlock('bindInfo',false);show('regenPair',false);show('reset',false);",
+    "    setText('pairDesc','创建完成后，直接发送下面的 6 位配对码。');",
+    "    showBlock('codeWrap',true);showBlock('bindInfo',false);",
+    "    if(!code){startBind();}",
+    "    setText('codeBox',code||'------');",
+    "    var left0=expires?expires-Date.now():0;",
+    "    if(code&&left0<=0){autoBind=false;startBind();}",
+    "    setText('pairHint',code?'等待左侧创建完成；配对码 '+(left0>0?'剩余 '+fmtLeft(left0):'已过期，正在刷新'):'正在生成配对码…');",
+    "    show('regenPair',true);show('reset',false);",
     "    return;",
     "  }",
     "  if(b.state==='bound'){",
@@ -512,12 +527,12 @@ function renderDingTalkPage(res) {
     "  setText('pairTitle','配对');",
     "  setText('pairDesc','打开钉钉，找到机器人，直接发送下面的 6 位配对码。');",
     "  showBlock('codeWrap',true);showBlock('bindInfo',false);",
-    "  if(!b.code){startBind();}",
-    "  setText('codeBox',b.code||'------');",
-    "  var left=b.expiresAt?b.expiresAt-Date.now():0;",
-    "  if(left<=0&&b.code){autoBind=false;startBind();}",
+    "  if(!code){startBind();}",
+    "  setText('codeBox',code||'------');",
+    "  var left=expires?expires-Date.now():0;",
+    "  if(left<=0&&code){autoBind=false;startBind();}",
     "  if(!bot.connected)setText('pairHint','钉钉连接还没建立，请稍等几秒再发送。');",
-    "  else setText('pairHint',b.code?'配对码 '+(left>0?'剩余 '+fmtLeft(left):'已过期，正在刷新')+'；发错 5 次会失效。':'正在生成配对码…');",
+    "  else setText('pairHint',code?'配对码 '+(left>0?'剩余 '+fmtLeft(left):'已过期，正在刷新')+'；发错 5 次会失效。':'正在生成配对码…');",
     "  show('regenPair',true);show('reset',false);",
     "}",
     "function render(s){",

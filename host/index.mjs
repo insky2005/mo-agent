@@ -270,17 +270,24 @@ async function ensureDingTalkBot() {
   dingtalkBot = createDingTalkBot({ config: cfg, log, broker });
   notifier.register(dingtalkBot);
   await dingtalkBot.start();
+  const pending = dingtalkSetup && typeof dingtalkSetup.status === "function"
+    ? dingtalkSetup.status().pendingBinding
+    : null;
+  if (pending && pending.code) {
+    dingtalkBot.startBinding({ code: pending.code, expiresAt: pending.expiresAt });
+    dingtalkSetup.clearPendingBinding();
+  }
   log.info("钉钉通道已启用（Stream）");
   return dingtalkBot;
 }
 
-void ensureDingTalkBot().catch((error) => {
-  log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
-});
-
 const dingtalkSetup = createDingTalkSetup({
   log,
   onProvisioned: () => ensureDingTalkBot(),
+});
+
+void ensureDingTalkBot().catch((error) => {
+  log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
 });
 
 // P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。

@@ -183,6 +183,20 @@ test("/setup/dingtalk/bind/start 需要本机头", async () => {
   assert.match(ok.out.body, /"ok":true/);
 });
 
+test("/setup/dingtalk/bind/start 应用未创建时返回预生成配对码", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: {
+      status: () => ({ state: "idle" }),
+      startPendingBinding: () => ({ ok: true, code: "123456", expiresAt: 1 }),
+    },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/start?token=" + encodeURIComponent(ctx.localToken));
+  const res = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), res, url, ctx);
+  assert.equal(res.out.status, 200);
+  assert.match(res.out.body, /"code":"123456"/);
+});
 test("/agents 显示各 Agent 状态与一键配置入口", async () => {
   const ws = workspace();
   const ctx = context(ws);
