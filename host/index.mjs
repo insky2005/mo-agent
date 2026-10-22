@@ -9,6 +9,7 @@ import { createRotatingSink } from "./log-file.mjs";
 import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
 import { loadNotifyChannels } from "./notify-webhook.mjs";
+import { createDingTalkBot, loadDingTalkBotConfig } from "./dingtalk-bot.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
 import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
@@ -226,6 +227,7 @@ async function testVoice() {
 
 // 远程批准中枢（语音只是另一个决策端）
 const runtime = {};
+let dingtalkBot = null;
 const pairing = new PairingManager({ log, ttlMs: config.qrTtlMs || 5 * 60 * 1000 });
 
 const broker = new ApprovalBroker({
@@ -234,10 +236,11 @@ const broker = new ApprovalBroker({
   timeoutMs: config.approvalTimeoutMs,
   // 静音时语音不再算作「在线决策端」：没有手机就直接交回终端，不白等。
   isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false)
+    || (!!dingtalkBot && dingtalkBot.isAvailable())
     || (!!voice && !(voiceCommands && voiceCommands.isMuted())),
   // 有配对过推送设备时，App 可能正被通知叫醒：先等一小段时间再决定是否交回终端。
   noClientGraceMs: config.approvalNoClientGraceMs,
-  hasRemoteClient: () => pushTokens.size() > 0,
+  hasRemoteClient: () => pushTokens.size() > 0 || !!(dingtalkBot && dingtalkBot.isBound()),
   onPending: (item) => {
     if (!voice) return;
     // 静音期间审批仍进 pending，只是不念、不接语音决策。
@@ -252,6 +255,20 @@ const broker = new ApprovalBroker({
     });
   },
 });
+
+// 钉钉单应用机器人（可选）：Stream 入站 + 固定文本审批 + 主动推送。
+const dingtalkConfig = loadDingTalkBotConfig({ log });
+if (dingtalkConfig) {
+  dingtalkBot = createDingTalkBot({ config: dingtalkConfig, log, broker });
+  notifier.register(dingtalkBot);
+  dingtalkBot.start()
+    .then((started) => {
+      if (started) log.info("钉钉通道已启用（Stream）");
+    })
+    .catch((error) => {
+      log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
+    });
+}
 
 // P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。
 // 只持有内存状态（voiceTargetSessionId、voiceMutedUntil），host 重启即复位。
@@ -462,6 +479,7 @@ const moHost = createMoAgentServer({
   webDir,
   localToken,
   monitor,
+  dingtalk: dingtalkBot,
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
@@ -561,6 +579,7 @@ async function main() {
       }
     }
     if (voice) voice.stop();
+    if (dingtalkBot) dingtalkBot.stop();
     broker.cancelAll("shutdown");
     if (dsh) dsh.close();
     moHost.server.close(() => process.exit(0));

@@ -94,6 +94,7 @@ export function createMoAgentServer(options) {
   const deviceFile = options.deviceFile;
   const pushTokens = options.pushTokens;
   const hooksManager = options.hooksManager;
+  const dingtalk = options.dingtalk || null;
 
   const deviceTokens = new Set();
 
@@ -264,6 +265,7 @@ export function createMoAgentServer(options) {
           runtime,
           webDir,
           localToken,
+          dingtalk,
         });
         if (handled) return;
       }

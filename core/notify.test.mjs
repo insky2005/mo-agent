@@ -109,6 +109,24 @@ test("channel 会收到翻译后的意图", () => {
   assert.equal(got[0].severity, SEVERITY.CRITICAL);
 });
 
+test("requiresAction：授权/提问/失败为 true，完成为 false", () => {
+  assert.equal(classifyEvent(eventOf(EVENT.APPROVAL_PENDING, { id: "a1" })).requiresAction, true);
+  assert.equal(classifyEvent(eventOf(EVENT.PENDING_ADDED, { eventId: "q1", kind: "question" })).requiresAction, true);
+  assert.equal(classifyEvent(eventOf(EVENT.RUN_FAILED, { runId: "r1", text: "x" })).requiresAction, true);
+  assert.equal(classifyEvent(eventOf(EVENT.RUN_COMPLETED, { runId: "r2", text: "x" })).requiresAction, false);
+});
+
+test("channel.accepts 为 false 时不发送", () => {
+  const hub = new Hub({ log: quiet });
+  const got = [];
+  const notifier = new Notifier({ hub, log: quiet });
+  notifier.register({ accepts: () => false, send: (payload) => got.push(payload) });
+  notifier.register({ send: (payload) => got.push(payload) });
+  notifier.start();
+  hub.emit(EVENT.APPROVAL_PENDING, { id: "a1", title: "需要授权" });
+  assert.equal(got.length, 1);
+});
+
 test("去重键：有 eventId 用 id，否则用 seq", () => {
   assert.equal(notificationKey({ type: "pending.added", seq: 3 }, { eventId: "x" }), "pending.added:x");
   assert.equal(notificationKey({ type: "notice", seq: 3 }, { eventId: null }), "notice:3");
