@@ -334,6 +334,9 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
 改完配置后重启服务生效（桌面托盘「重启服务」，或重跑 npm start）。
 临时调试可以用环境变量 MO_AGENT_NOTIFY_WEBHOOKS（JSON 数组）。
 
+钉钉单应用机器人（Stream 入站 + 主动推送 + 计次）的完整设计、事件开关和开放平台配置清单见
+[docs/spec/dingtalk-bot.md](docs/spec/dingtalk-bot.md)。
+
 ## 目录结构
 
     core/          共享：事件模型、状态词表、事件缓冲（纯逻辑，无 IO）
