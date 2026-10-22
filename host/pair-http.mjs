@@ -27,7 +27,7 @@ function deniedPage(res, status, title, detail) {
     + "<h1>" + escapeHtml(title) + "</h1>"
     + "<div class='sub'>" + escapeHtml(detail) + "</div>"
     + "<div class='warn'>这些页面只允许在电脑本机、并且通过 mo-agent 的菜单打开。"
-    + "请从菜单栏打开「设置（安装与配对）」或「一键配置 Agent…」。</div>"
+    + "请从菜单栏打开「设置 → App 安装与配对」或「一键配置 Agent…」。</div>"
     + "</body></html>");
 }
 
@@ -324,10 +324,6 @@ export async function handlePairRoutes(req, res, url, ctx) {
     "<div class='qr'><img src='/setup/qr/pair.svg?ip=" + encodeURIComponent(address) + "' alt='pair qr' width='240' height='240' /></div>",
     "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功，正在关闭窗口…</p>",
     "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='/setup/renew'>换一个配对码</a></p>",
-    "</div>",
-    "<div class='card'><div class='step'>可选</div><h2>钉钉</h2>",
-    "<p>不装 APK 也能在手机钉钉里收审批。扫码后自动创建企业内部应用与机器人。</p>",
-    "<p><a class='ip' href='/setup/dingtalk'>打开钉钉通道 →</a></p>",
     "</div>",
     "</div>",
     "<div class='meta'>配对码 <b>" + escapeHtml(ctx.pin) + "</b>（也可以手动输入）",

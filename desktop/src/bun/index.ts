@@ -17,6 +17,7 @@ try {
 const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
 const PANEL_URL = BASE + "/setup";
+const DINGTALK_URL = BASE + "/setup/dingtalk";
 const AGENTS_URL = BASE + "/agents";
 const MONITOR_URL = BASE + "/monitor";
 // 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
@@ -363,8 +364,14 @@ function adminUrl(url: string): string {
 
 function createPanel(url: string = PANEL_URL): void {
   const isAgents = url === AGENTS_URL;
+  const isDingTalk = url === DINGTALK_URL;
+  const title = isAgents
+    ? "mo-agent · 一键配置 Agent"
+    : isDingTalk
+      ? "mo-agent · 钉钉机器人绑定"
+      : "mo-agent · 设置";
   const win = new BrowserWindow({
-    title: isAgents ? "mo-agent · 一键配置 Agent" : "mo-agent · 设置（安装与配对）",
+    title,
     url: adminUrl(url),
     frame: { width: 760, height: 760 },
   });
@@ -625,7 +632,7 @@ function setupApplicationMenu(): void {
         submenu: [
           { role: "minimize" },
           { type: "divider" },
-          { label: "关闭设置", action: "close-settings-panel", accelerator: "Escape" },
+          { label: "关闭窗口", action: "close-settings-panel", accelerator: "Escape" },
         ],
       },
     ]);
@@ -651,7 +658,14 @@ function trayMenu(): any[] {
     { type: "normal", label: "语音测试", action: "voice-test" },
   ];
   return [
-    { type: "normal", label: "设置（安装与配对）", action: "panel" },
+    {
+      type: "normal",
+      label: "设置",
+      submenu: [
+        { type: "normal", label: "App 安装与配对", action: "panel" },
+        { type: "normal", label: "钉钉机器人绑定", action: "dingtalk" },
+      ],
+    },
     { type: "normal", label: "一键配置 Agent…", action: "agents" },
     {
       type: "normal",
@@ -1596,6 +1610,7 @@ async function startShell(): Promise<void> {
   created.on("tray-clicked", async (event: any) => {
     const action = event?.data?.action;
     if (action === "agents") await openPanel(AGENTS_URL);
+    else if (action === "dingtalk") await openPanel(DINGTALK_URL);
     else if (action === "panel") await openPanel();
     else if (action === "voice") await toggleVoice();
     else if (action === "voice-command") await runVoiceCommand();
