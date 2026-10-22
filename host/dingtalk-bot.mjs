@@ -308,7 +308,7 @@ export function createDingTalkBot(options) {
     const response = await fetchImpl(webhook, {
       method: "POST",
       headers: { "content-type": "application/json", "x-acs-dingtalk-access-token": token },
-      body: JSON.stringify({ msgtype: "markdown", markdown: { title, text } }),
+      body: JSON.stringify({ msgtype: "text", text: { content: text } }),
     }, { api: "robot/sendBySession", category: "stream" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || (data.errcode && data.errcode !== 0)) {
@@ -388,7 +388,7 @@ export function createDingTalkBot(options) {
 
   function buildSingle(intent) {
     const title = intent.title || "mo-agent";
-    let text = "### " + title + "\n\n" + (intent.body || "");
+    let text = title + "\n\n" + (intent.body || "");
     let id = "";
     const isAction = intent.kind === "approval" || intent.kind === "question";
     if (isAction && intent.eventId) {
@@ -410,7 +410,9 @@ export function createDingTalkBot(options) {
         requiresAction: intent.requiresAction,
         sessionId: intent.sessionId || null,
       };
-      entry.timer = setTimeout(() => { void flushAggregate(key); }, config.aggregateMs);
+      entry.timer = setTimeout(() => {
+        flushAggregate(key).catch((error) => log.warn("钉钉聚合发送失败: " + (error && error.message ? error.message : error)));
+      }, config.aggregateMs);
       if (typeof entry.timer.unref === "function") entry.timer.unref();
       aggregates.set(key, entry);
     }
@@ -437,7 +439,7 @@ export function createDingTalkBot(options) {
 
     const base = items[0];
     const title = items.length > 1 ? base.title + " · " + items.length + " 项" : base.title;
-    let text = "### " + title + "\n\n";
+    let text = title + "\n\n";
     if (items.length > 1 && base.sessionTitle) text += base.sessionTitle + "\n";
     for (let i = 0; i < items.length; i += 1) {
       const item = items[i];

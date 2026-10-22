@@ -136,6 +136,35 @@ async function get(pathname, ctx, options = {}) {
   return { handled, res };
 }
 
+test("/setup/dingtalk 渲染钉钉通道页", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "idle" }) },
+    dingtalk: null,
+  });
+  const { res } = await get("/setup/dingtalk", ctx);
+  assert.equal(res.out.status, 200);
+  assert.match(res.out.body, /钉钉通道/);
+  assert.match(res.out.body, /扫码创建机器人/);
+});
+
+test("/setup/dingtalk/bind/start 需要本机头", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "idle" }) },
+    dingtalk: { startBinding: () => ({ ok: true, expiresAt: 1 }) },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/start?token=" + encodeURIComponent(ctx.localToken));
+  const denied = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: {} }), denied, url, ctx);
+  assert.equal(denied.out.status, 403);
+
+  const ok = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), ok, url, ctx);
+  assert.equal(ok.out.status, 200);
+  assert.match(ok.out.body, /"ok":true/);
+});
+
 test("/agents 显示各 Agent 状态与一键配置入口", async () => {
   const ws = workspace();
   const ctx = context(ws);
