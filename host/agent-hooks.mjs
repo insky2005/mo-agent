@@ -18,7 +18,7 @@ import path from "node:path";
 
 const HOOK_CLI_BASENAME = "hook-cli.mjs";
 const DEFAULT_TIMEOUTS = { PermissionRequest: 600, Notification: 10 };
-const MANAGED_KINDS = new Set(["claude-code", "qoder-cn"]);
+const MANAGED_KINDS = new Set(["claude-code", "qoder-cn", "workbuddy"]);
 const BACKUP_SUFFIX = ".mo-agent.bak-";
 
 function isPlainObject(value) {
@@ -67,10 +67,54 @@ export function settingsPathFor(profile, home) {
   return settingsPathsFor(profile, home)[0] || null;
 }
 
+function isExecutableFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch (error) {
+    return false;
+  }
+}
+
+/** Hook 子进程用哪个 node；桌面端从 Finder 启动时 PATH 里没有 nvm / homebrew。 */
+function resolveNodePath() {
+  const override = process.env.MO_AGENT_NODE;
+  if (override && isExecutableFile(override)) return override;
+
+  // 从 CLI 运行时（node host/index.mjs）拿到的就是 node 本身。
+  const exec = process.execPath;
+  if (/(^|[\\/])node(?:\.exe)?$/i.test(exec) && fs.existsSync(exec)) return exec;
+
+  // 桌面壳会把 node 加进 host 的 PATH；按 PATH 找到的路径写死，hook 就不再依赖 PATH。
+  for (const dir of String(process.env.PATH || "").split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of process.platform === "win32" ? ["node.exe", "node"] : ["node"]) {
+      const candidate = path.join(dir, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  for (const candidate of ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return "node";
+}
+
+/**
+ * profile.hooks.nodePath === "auto" 时，把 node 解析成绝对路径写进 hook 命令。
+ * WorkBuddy 桌面端从 Finder 启动时 PATH 只有 /usr/bin:/bin:/usr/sbin:/sbin，
+ * 裸 "node" 会 ENOENT；其它 Agent 保持原有命令格式不变。
+ */
+export function hookNodePath(profile) {
+  const configured = profile && profile.hooks ? profile.hooks.nodePath : "";
+  if (typeof configured === "string" && configured && configured !== "auto") return configured;
+  if (configured !== "auto") return "node";
+  return resolveNodePath();
+}
+
 /** mo-agent 写进 Agent 配置里的命令行。路径可能含空格，所以加引号。 */
-export function hookCommandFor({ root, agentId, event }) {
+export function hookCommandFor({ root, agentId, event, nodePath }) {
   const cli = path.join(root, "approvals", HOOK_CLI_BASENAME);
-  return 'node "' + cli + '" event ' + event + " " + agentId;
+  const node = nodePath || "node";
+  return (node === "node" ? "node" : '"' + node + '"') + ' "' + cli + '" event ' + event + " " + agentId;
 }
 
 function eventPattern(agentId, event) {
@@ -176,7 +220,7 @@ export function planInstall(settings, { root, profile }) {
       matcher: "*",
       hooks: [{
         type: "command",
-        command: hookCommandFor({ root, agentId, event }),
+        command: hookCommandFor({ root, agentId, event, nodePath: hookNodePath(profile) }),
         timeout: timeoutFor(profile, event),
       }],
     });
@@ -269,7 +313,8 @@ function writeTarget(file) {
 /** 单个 settings 文件里的 hook 现状；坏文件不抛，交给调用方汇总。 */
 function inspectSettingsFile(file, { root, profile }) {
   const hooks = (profile && profile.hooks) || {};
-  const commandFor = (event) => hookCommandFor({ root, agentId: profile.id, event });
+  const nodePath = hookNodePath(profile);
+  const commandFor = (event) => hookCommandFor({ root, agentId: profile.id, event, nodePath });
   let info;
   try {
     info = readSettings(file);
@@ -334,7 +379,7 @@ export function inspectProfile({ profile, root, home }) {
   const desired = Object.keys(hooks.events || {});
   const events = desired.map((event) => {
     const perFile = files.map((item) => item.events.find((entry) => entry.event === event) || {});
-    const command = hookCommandFor({ root, agentId: profile.id, event });
+    const command = hookCommandFor({ root, agentId: profile.id, event, nodePath: hookNodePath(profile) });
     return {
       event,
       label: typeof labels[event] === "string" ? labels[event] : "",

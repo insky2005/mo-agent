@@ -148,8 +148,10 @@ async function main() {
   }
 
   let decision = "defer";
+  // result 必须在 try 外可见：手机放行后要用它回填 answers。
+  let result = null;
   try {
-    const result = await post(session, "/local/approval", payload);
+    result = await post(session, "/local/approval", payload);
     if (result && typeof result.decision === "string") decision = result.decision;
   } catch (error) {
     decision = "defer";
@@ -166,8 +168,10 @@ async function main() {
     detail.updatedInput = Object.assign({}, toolInput || {}, { answers });
   }
   const out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: detail } };
-  process.stdout.write(JSON.stringify(out));
-  process.exit(0);
+  // 必须等 stdout 真正写进管道再退出：直接 process.exit 会吞掉决策，Agent 收不到 allow。
+  process.stdout.write(JSON.stringify(out), () => process.exit(0));
+  // 定时器不要 unref：stdout 是管道时 write 不负责撑住事件循环。
+  setTimeout(() => process.exit(0), 100);
 }
 
 main().catch(() => process.exit(0));

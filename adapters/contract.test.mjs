@@ -59,5 +59,5 @@ test("registry 按 profile 动态加载 adapter", async () => {
     dsh,
   });
   const names = created.adapters.map((item) => item.name).sort();
-  assert.deepEqual(names, ["claude-code", "dsh", "qoder-cn"]);
+  assert.deepEqual(names, ["claude-code", "dsh", "qoder-cn", "workbuddy"]);
 });

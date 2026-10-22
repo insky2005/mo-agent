@@ -1,0 +1,38 @@
+{
+  "id": "workbuddy",
+  "label": "WorkBuddy",
+  "enabled": true,
+  "module": "./workbuddy.mjs",
+  "export": "WorkBuddyAdapter",
+  "process": { "match": [] },
+  "session": {
+    "kind": "jsonl-transcript",
+    "root": "~/.workbuddy/projects",
+    "pattern": "*/*.jsonl"
+  },
+  "capabilities": {
+    "observe": ["transcript"],
+    "runEnd": "inferred",
+    "attention": "hook",
+    "approval": "allow",
+    "control": []
+  },
+  "hooks": {
+    "kind": "workbuddy",
+    "settingsFile": "~/.workbuddy/settings.json",
+    "nodePath": "auto",
+    "events": {
+      "PermissionRequest": "approval.pending",
+      "Notification": "notice"
+    },
+    "labels": {
+      "PermissionRequest": "授权请求：手机可批准 / 拒绝",
+      "Notification": "通知：Agent 需要关注时推送提醒"
+    }
+  },
+  "approval": {
+    "capability": "allow",
+    "mechanism": "PermissionRequest hook（decision.behavior，与 Claude Code 同格式）",
+    "note": "桌面端默认 auto / bypass 可能不弹授权；改 settings 后需新开会话或重启 WorkBuddy"
+  }
+}

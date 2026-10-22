@@ -316,6 +316,8 @@ async function ensureHost(): Promise<boolean> {
           ...process.env,
           MO_AGENT_ROOT: root,
           MO_AGENT_LOG_FILE: LOG_FILE,
+          // WorkBuddy 从 Finder 启动时 PATH 里没有 node；写 hook 时用这个绝对路径。
+          MO_AGENT_NODE: resolveNode(),
           PATH: (process.env.PATH || "") + ":/opt/homebrew/bin:/usr/local/bin",
         },
         // host 自己写 host.log；这里不再重定向，避免两个进程抢同一个日志文件。

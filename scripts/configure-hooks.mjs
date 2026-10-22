@@ -6,6 +6,7 @@
  *   node scripts/configure-hooks.mjs --all           一键配置所有支持的 Agent
  *   node scripts/configure-hooks.mjs --agent claude-code
  *   node scripts/configure-hooks.mjs --agent qoder-cn
+ *   node scripts/configure-hooks.mjs --agent workbuddy
  *   node scripts/configure-hooks.mjs --all --uninstall
  *   node scripts/configure-hooks.mjs --all --dry-run 只预览，不写盘
  *
@@ -25,7 +26,7 @@ function usage() {
     "用法: node scripts/configure-hooks.mjs [选项]",
     "",
     "  --all                 所有支持一键配置的 Agent（默认）",
-    "  --agent <id>          只处理一个 Agent，例如 claude-code",
+    "  --agent <id>          只处理一个 Agent，例如 claude-code / workbuddy",
     "  --install             安装/更新 hook 配置（给 --all / --agent 时默认）",
     "  --uninstall           移除 mo-agent 写入的 hook 配置",
     "  --dry-run             只打印将要发生的变化，不写盘",

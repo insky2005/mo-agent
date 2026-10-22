@@ -92,8 +92,23 @@
 |---|---|---|
 | Claude Code | ✅ 一键配置 | `PermissionRequest` + `Notification` |
 | Qoder CN（桌面端） | ✅ 一键配置 | 与 Claude Code 同格式；只写 CN 版的 `~/.qoder-cn/settings.json` |
+| WorkBuddy（桌面端） | ✅ 一键配置 | 与 Claude Code 同格式；只写 `~/.workbuddy/settings.json` |
 | DeepSeek Harness | — 无需配置 | 原生接入，不走 hooks |
 | Codex CLI / Gemini CLI | ⏳ 暂不支持 | profile 已声明 `hooks.kind`，但厂商格式未验证，不猜 |
+
+### WorkBuddy 的注意点
+
+WorkBuddy 桌面端底层是 CodeBuddy CLI，hook 事件与输入/输出格式和 Claude Code 同构，
+所以直接复用 `PermissionRequest` 授权卡。两处差异：
+
+1. **改完要新开会话**：WorkBuddy 在会话启动时解析 `~/.workbuddy/settings.json`，
+   正在跑的会话不会热加载；
+2. **默认权限模式可能不弹卡**：`auto` / `bypassPermissions` 下很多操作会被自动放行，
+   切到「询问审批」（`default`）才会稳定触发 `PermissionRequest`；
+3. **hook 命令写绝对 node 路径**：WorkBuddy 从 Finder 启动时 PATH 只有
+   `/usr/bin:/bin:/usr/sbin:/sbin`，裸 `node` 会 ENOENT；安装器会按
+   `profile.hooks.nodePath: "auto"` 写成绝对路径。换 Node 版本后重新执行一次
+   `npm run hooks:workbuddy`。
 
 ### Qoder CN 的两个注意点
 
@@ -112,6 +127,7 @@ npm run hooks                                  # 查看状态
 npm run hooks:install                          # 一键配置所有支持的 Agent
 node scripts/configure-hooks.mjs --agent claude-code
 npm run hooks:qoder-cn                         # 只配置 Qoder CN
+npm run hooks:workbuddy                        # 只配置 WorkBuddy
 node scripts/configure-hooks.mjs --all --dry-run   # 只预览，不写盘
 node scripts/configure-hooks.mjs --all --uninstall
 node scripts/configure-hooks.mjs --json        # 机器可读
