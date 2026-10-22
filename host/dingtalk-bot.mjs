@@ -14,7 +14,7 @@ import { createUsageStore } from "./dingtalk-usage.mjs";
  * - 入站：Stream（官方 SDK）→ 固定文本审批回复 / 首次绑定
  * - 出站：sessionWebhook 优先，过期后回落 oToMessages / groupMessages
  * - 计次：所有 HTTP 走 dingtalk-http，local 逐条记；成功消息记 billable
- * - 安全：只认绑定用户；审批只认「批准 <ID>」「拒绝 <ID>」完全匹配
+ * - 安全：只认绑定用户；审批只认「A 短码」「D 短码」完全匹配
  */
 
 const API_BASE = "https://api.dingtalk.com";
@@ -22,7 +22,7 @@ const OAPI_BASE = "https://oapi.dingtalk.com";
 const DEFAULT_SOURCE = "MO_AGENT";
 const SEEN_TTL_MS = 30 * 60 * 1000;
 const SHORT_ID_TTL_MS = 24 * 60 * 60 * 1000;
-const BIND_SUCCESS_TEXT = "绑定成功 ✅ 之后审批消息里会带一个短号（如 A3F2），直接回复「批准 A3F2」或「拒绝 A3F2」即可。";
+const BIND_SUCCESS_TEXT = "绑定成功 ✅ 之后审批消息里会带短码（如 A3F2）：回复「A A3F2」同意，「D A3F2」拒绝。";
 
 const ACTION_KINDS = new Set(["approval", "question", "error"]);
 const DEFAULT_EVENTS = Object.freeze({
@@ -397,7 +397,7 @@ export function createDingTalkBot(options) {
     const isAction = intent.kind === "approval" || intent.kind === "question";
     if (isAction && intent.eventId) {
       id = setShortId(intent.eventId, intent.kind);
-      if (id) text += "\n\n回复：批准 " + id + " / 拒绝 " + id;
+      if (id) text += "\n\n回复：A " + id + " 同意 / D " + id + " 拒绝";
     }
     return { title, text, id };
   }
@@ -451,7 +451,7 @@ export function createDingTalkBot(options) {
     }
     const ids = items.map((item) => item.id).filter(Boolean);
     if (ids.length) {
-      text += "\n回复：批准 " + ids[0] + " / 拒绝 " + ids[0] + (ids.length > 1 ? "（按 ID）" : "");
+      text += "\n回复：A " + ids[0] + " 同意 / D " + ids[0] + " 拒绝" + (ids.length > 1 ? "（按短码）" : "");
     }
 
     const synthetic = {
@@ -566,14 +566,24 @@ export function createDingTalkBot(options) {
     audit({ action: "bind", userId: binding.userId, conversationId: binding.conversationId, ok: true });
   }
 
+  function parseDecision(text) {
+    const value = String(text || "").trim().toUpperCase();
+    let match = /^([AD])\s*([0-9A-F]{4,6})$/.exec(value);
+    if (match) return { approve: match[1] === "A", id: match[2] };
+    match = /^批准\s*([0-9A-F]{4,6})$/.exec(value);
+    if (match) return { approve: true, id: match[1] };
+    match = /^拒绝\s*([0-9A-F]{4,6})$/.exec(value);
+    if (match) return { approve: false, id: match[1] };
+    return null;
+  }
+
   async function handleFixedReply(message, text) {
-    const approve = /^批准 ([0-9A-F]{4,6})$/.exec(text);
-    const reject = /^拒绝 ([0-9A-F]{4,6})$/.exec(text);
-    if (!approve && !reject) {
-      await replyTo(message, "未识别。请回复：批准 <ID> 或 拒绝 <ID>", "reply");
+    const parsed = parseDecision(text);
+    if (!parsed) {
+      await replyTo(message, "未识别。请回复「A A3F2」表示同意，或「D A3F2」表示拒绝。", "reply");
       return;
     }
-    const id = (approve || reject)[1];
+    const { approve, id } = parsed;
     const target = resolveShortId(id);
     if (!target) {
       await replyTo(message, "未找到 " + id, "reply");
@@ -588,7 +598,7 @@ export function createDingTalkBot(options) {
     const ok = broker.decide(target.eventId, decision);
     if (ok) {
       shortIds.delete(id);
-      await replyTo(message, (approve ? "已批准 " : "已拒绝 ") + id, "reply");
+      await replyTo(message, (approve ? "已同意 " : "已拒绝 ") + id, "reply");
       audit({ action: "decide", id, eventId: target.eventId, decision, ok: true });
     } else {
       await replyTo(message, "已处理 " + id, "reply");

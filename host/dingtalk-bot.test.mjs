@@ -124,9 +124,12 @@ test("accepts：只放行已绑定、已开启且达到严重级的事件", asyn
   assert.equal(bot.accepts({ kind: "error", severity: "critical" }), true);
 });
 
-test("固定文本：批准 <ID> 生效，少空格/小写不生效", async () => {
+test("固定文本：A/D + 短码生效，非法格式不生效", async () => {
   const { bot, stream, brokerCalls } = makeBot({
-    pending: [{ id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" }],
+    pending: [
+      { id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" },
+      { id: "b7c1d2e3-0000-4000-8000-000000000000", kind: "approval" },
+    ],
     fetchImpl: fakeFetch((entry) => {
       if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
       if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
@@ -138,18 +141,22 @@ test("固定文本：批准 <ID> 生效，少空格/小写不生效", async () =
   await bot.start();
 
   await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试 2", eventId: "b7c1d2e3-0000-4000-8000-000000000000" });
 
-  const sendCall = bot.usage.snapshot();
-  assert.equal(sendCall.billable.total, 1);
+  // 非法格式不调用 broker
+  await stream.onMessage(inbound("同意 A3F2"));
+  await stream.onMessage(inbound("A3F2"));
+  await stream.onMessage(inbound("A A3F2 谢谢"));
+  assert.equal(brokerCalls.length, 0);
 
-  // 短 ID 由 eventId 生成，前 4 位是 A3F2
-  await stream.onMessage(inbound("批准 A3F2"));
+  // 无空格、小写都可以
+  await stream.onMessage(inbound("AA3F2"));
   assert.equal(brokerCalls.length, 1);
   assert.equal(brokerCalls[0].decision, DECISION.ALLOW_ONCE);
 
-  await stream.onMessage(inbound("批准A3F2"));
-  await stream.onMessage(inbound("批准 a3f2"));
-  assert.equal(brokerCalls.length, 1);
+  await stream.onMessage(inbound("d b7c1"));
+  assert.equal(brokerCalls.length, 2);
+  assert.equal(brokerCalls[1].decision, DECISION.REJECT_ONCE);
 });
 
 test("配对码绑定：错误码不绑定，正确码立即绑定", async () => {
@@ -188,7 +195,7 @@ test("dedupe：同一个 msgId 只处理一次", async () => {
     }),
   });
   await bot.start();
-  const frame = inbound("批准 A3F2", { msgId: "same" });
+  const frame = inbound("A A3F2", { msgId: "same" });
   await stream.onMessage(frame);
   await stream.onMessage(frame);
   assert.equal(brokerCalls.length, 1);

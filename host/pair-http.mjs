@@ -588,6 +588,7 @@ function renderDingTalkPage(res) {
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>在钉钉里创建一个企业内部应用和机器人，用来接收审批消息。用手机钉钉扫码，按提示确认创建即可。若一直失败，可展开左侧「手动填写已有应用」，粘贴 Client ID / Client Secret。</p>",
     "<h3 style='font-size:13px;color:#e7ecff'>配对</h3>",
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>打开钉钉，找到机器人，直接发送左侧显示的 6 位配对码。配对码 5 分钟内有效，连续发错 5 次会失效；只绑定第一个发送正确配对码的账号。</p>",
+    "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收到审批时：回复「A A3F2」表示同意，回复「D A3F2」表示拒绝（A3F2 是审批消息里的短码）。</p>",
     "<h3 style='font-size:13px;color:#e7ecff'>常见问题</h3>",
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收不到审批：检查电脑是否开机、mo-agent 是否运行、钉钉是否免打扰、绑定账号是否当前登录账号。解绑后需要重新配对。</p>",
     "</div>",
