@@ -5,6 +5,7 @@ import os from "node:os";
 import { randomBytes } from "node:crypto";
 import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { handleLogRoutes } from "./logs-http.mjs";
+import { handleMonitorRoutes } from "./monitor-http.mjs";
 import { canControl } from "../core/contract.mjs";
 
 const MIME = {
@@ -250,6 +251,20 @@ export function createMoAgentServer(options) {
       // ---- 日志页面（仅本机） ----
       if (logFile) {
         const handled = await handleLogRoutes(req, res, url, { logFile, localToken });
+        if (handled) return;
+      }
+
+      // ---- 实时监控屏（仅本机；会话数据实时走 SSE） ----
+      {
+        const handled = await handleMonitorRoutes(req, res, url, {
+          hub,
+          broker,
+          monitor: dshMonitor,
+          processes,
+          runtime,
+          webDir,
+          localToken,
+        });
         if (handled) return;
       }
 

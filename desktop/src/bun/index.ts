@@ -18,6 +18,7 @@ const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
 const PANEL_URL = BASE + "/setup";
 const AGENTS_URL = BASE + "/agents";
+const MONITOR_URL = BASE + "/monitor";
 // 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
 const DEV_ROOT = process.env.MO_AGENT_ROOT || "";
 const FALLBACK_REPO_ROOT = "/Users/dev/c/work.ai/deepseek-harness/mo-agent";
@@ -58,6 +59,7 @@ function writeVoiceEnabled(enabled: boolean): void {
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
 let logs: BrowserWindow | null = null;
+let monitor: BrowserWindow | null = null;
 // 托盘在确认自己是主实例之后才创建，否则第二次启动会多出一个菜单栏图标。
 let tray: Tray | null = null;
 const VOICE_OVERLAY_STATE = join(homedir(), ".mo-agent", "voice-overlay.json");
@@ -472,6 +474,65 @@ async function openLogs(): Promise<void> {
   createLogsWindow();
 }
 
+function createMonitorWindow(): void {
+  const win = new BrowserWindow({
+    title: "mo-agent · 实时监控",
+    url: adminUrl(MONITOR_URL),
+    frame: { width: 1180, height: 820 },
+  });
+  monitor = win;
+  const webview = win.webview as unknown as {
+    on?: (name: string, handler: (event: unknown) => void) => void;
+  } | undefined;
+  if (webview && typeof webview.on === "function") {
+    webview.on("host-message", (event: unknown) => {
+      const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
+      if (detail && typeof detail === "object" && (detail as { type?: string }).type === "panel-close") {
+        try { win.close(); } catch (error) { /* 已经关闭 */ }
+      }
+    });
+  }
+  try {
+    // 焦点在窗口本身时兜底 Esc：网页里的 Esc 由 monitor.js 转发 panel-close。
+    win.on("keyDown", (event: unknown) => {
+      const data = (event as { data?: { keyCode?: number } } | null)?.data;
+      if (!data || data.keyCode !== 53) return;
+      try { win.close(); } catch (error) { /* 已经关闭 */ }
+    });
+    win.on("close", () => {
+      if (monitor !== win) return;
+      monitor = null;
+      // 监控屏关闭后才恢复语音浮层，避免两个窗口叠在一起。
+      void syncVoiceOverlay();
+      syncVoiceOrb();
+    });
+  } catch (error) {
+    logLine("注册监控屏事件失败: " + error);
+  }
+}
+
+/** 打开桌面端实时监控屏：会话状态和事件通过本地 SSE 实时刷新。 */
+async function openMonitor(): Promise<void> {
+  const ready = await ensureHost();
+  if (!ready) {
+    logLine("本地服务启动失败，无法打开监控屏，详见 " + LOG_DIR);
+    Utils.openExternal("file://" + LOG_DIR);
+    return;
+  }
+  if (monitor) {
+    try {
+      monitor.show();
+      monitor.activate();
+      return;
+    } catch (error) {
+      monitor = null;
+    }
+  }
+  hideVoiceOverlay(false);
+  hideVoiceOrb();
+  createMonitorWindow();
+}
+
 async function restartService(openPanelAfter: boolean): Promise<void> {
   disposePanel();
   if (voiceOverlay) {
@@ -493,6 +554,11 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   if (logs) {
     const current = logs;
     logs = null;
+    try { current.close(); } catch (error) { /* 已经销毁 */ }
+  }
+  if (monitor) {
+    const current = monitor;
+    monitor = null;
     try { current.close(); } catch (error) { /* 已经销毁 */ }
   }
   if (host) {
@@ -597,6 +663,7 @@ function trayMenu(): any[] {
     },
     { type: "normal", label: "语音", submenu: voiceMenu },
     { type: "divider" },
+    { type: "normal", label: "打开监控屏", action: "monitor" },
     { type: "normal", label: "重启服务", action: "restart" },
     { type: "normal", label: "查看日志", action: "logs" },
     { type: "divider" },
@@ -800,7 +867,7 @@ function placeVoiceOverlayAtOrb(): void {
 /** 浮层收起后留下一个可点击的圆形 Logo；再点它恢复浮层。 */
 async function showVoiceOrb(): Promise<void> {
   if (voiceOrbPending) return;
-  if (!readVoiceEnabled() || panel || voiceOverlayVisible) return;
+  if (!readVoiceEnabled() || panel || monitor || voiceOverlayVisible) return;
   voiceOrbPending = true;
   try {
     const frame = voiceOrbFrame();
@@ -867,7 +934,7 @@ async function showVoiceOrb(): Promise<void> {
       try { voiceOrb.setFrame(frame.x, frame.y, frame.width, frame.height); } catch (error) { /* 忽略 */ }
     }
 
-    if (!readVoiceEnabled() || panel || voiceOverlayVisible || !voiceOrb) return;
+    if (!readVoiceEnabled() || panel || monitor || voiceOverlayVisible || !voiceOrb) return;
     try {
       voiceOrb.show();
       voiceOrb.activate();
@@ -929,7 +996,7 @@ function focusVisibleOverlayOnCursorEnter(): void {
 }
 
 function syncVoiceOrb(): void {
-  if (!readVoiceEnabled() || panel || voiceOverlayVisible) {
+  if (!readVoiceEnabled() || panel || monitor || voiceOverlayVisible) {
     hideVoiceOrb();
     return;
   }
@@ -938,7 +1005,7 @@ function syncVoiceOrb(): void {
 
 /** 语音开启时浮层常驻；关闭语音、设置窗口打开或手动隐藏时保持收起。 */
 async function syncVoiceOverlay(): Promise<void> {
-  if (!readVoiceEnabled() || panel) return;
+  if (!readVoiceEnabled() || panel || monitor) return;
   try {
     await ensureVoiceOverlay();
   } catch (error) {
@@ -958,7 +1025,7 @@ function voiceOverlayShortcutLabel(): string {
 }
 
 async function toggleVoiceOverlay(): Promise<void> {
-  if (!readVoiceEnabled() || panel) return;
+  if (!readVoiceEnabled() || panel || monitor) return;
   if (voiceOverlayVisible) hideVoiceOverlay();
   else await syncVoiceOverlay();
 }
@@ -1538,6 +1605,7 @@ async function startShell(): Promise<void> {
     else if (action === "mic-settings") openMicSettings();
     else if (action === "accessibility-settings") openAccessibilitySettings();
     else if (action === "restart") await restartHost();
+    else if (action === "monitor") await openMonitor();
     else if (action === "logs") await openLogs();
     else if (action === "quit") {
       unregisterCarbonHotkey();

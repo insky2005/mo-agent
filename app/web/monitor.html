@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mo-agent · 实时监控</title>
+  <link rel="stylesheet" href="/monitor.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 36 36" width="26" height="26" aria-hidden="true">
+          <defs><mask id="moBrandMask">
+            <rect width="36" height="36" fill="#000"/>
+            <circle cx="18" cy="5.2" r="3.1" fill="#fff"/>
+            <rect x="16.3" y="7" width="3.4" height="5" rx="1.7" fill="#fff"/>
+            <rect x="2" y="14.6" width="4.4" height="9" rx="2.2" fill="#fff"/>
+            <rect x="29.6" y="14.6" width="4.4" height="9" rx="2.2" fill="#fff"/>
+            <rect x="6.4" y="9.4" width="23.2" height="22" rx="7" fill="#fff"/>
+            <circle cx="13.4" cy="19.4" r="3.2" fill="#000"/>
+            <circle cx="22.6" cy="19.4" r="3.2" fill="#000"/>
+            <rect x="13.6" y="25.2" width="8.8" height="2.4" rx="1.2" fill="#000"/>
+          </mask></defs>
+          <rect width="36" height="36" fill="currentColor" mask="url(#moBrandMask)"/>
+        </svg>
+        <div class="brandText">
+          <div class="brandTitle">mo-agent <span>实时监控</span></div>
+          <div class="brandSub">所有会话，一屏看清</div>
+        </div>
+      </div>
+      <div class="topRight">
+        <div class="clockBox">
+          <span class="clock" id="clock">--:--:--</span>
+          <span class="uptime" id="uptime">服务 --</span>
+        </div>
+        <span class="conn connecting" id="conn"><i></i><span>连接中</span></span>
+        <button class="ghost" id="btnPause" type="button">暂停</button>
+      </div>
+    </header>
+
+    <div class="banner hidden" id="banner"></div>
+
+    <main class="main">
+      <section class="stats" id="stats">
+        <button class="stat running" type="button" data-filter="running">
+          <span class="statLabel">运行中</span>
+          <b id="statRunning">0</b>
+          <span class="statHint">正在执行的会话</span>
+        </button>
+        <button class="stat waiting" type="button" data-filter="waiting">
+          <span class="statLabel">等待处理</span>
+          <b id="statWaiting">0</b>
+          <span class="statHint">授权 / 回答</span>
+        </button>
+        <button class="stat error" type="button" data-filter="error">
+          <span class="statLabel">异常</span>
+          <b id="statError">0</b>
+          <span class="statHint">失败 / 拒绝</span>
+        </button>
+        <button class="stat completed" type="button" data-filter="completed">
+          <span class="statLabel">已完成</span>
+          <b id="statCompleted">0</b>
+          <span class="statHint">最近结束的会话</span>
+        </button>
+        <button class="stat idle" type="button" data-filter="idle">
+          <span class="statLabel">空闲</span>
+          <b id="statIdle">0</b>
+          <span class="statHint">存在但无活跃任务</span>
+        </button>
+      </section>
+
+      <div class="workspace">
+        <section class="sessionsPane">
+          <div class="paneHead">
+            <div class="paneTitle">
+              <h2>会话</h2>
+              <span class="count" id="sessionCount">0</span>
+            </div>
+            <div class="filters" id="filters">
+              <button class="filter on" type="button" data-filter="all">全部</button>
+              <button class="filter" type="button" data-filter="active" title="运行中 / 等待处理 / 最近 6 小时有更新">活跃</button>
+              <button class="filter" type="button" data-filter="running">运行中</button>
+              <button class="filter" type="button" data-filter="waiting">等待</button>
+              <button class="filter" type="button" data-filter="completed">完成</button>
+              <button class="filter" type="button" data-filter="error">异常</button>
+            </div>
+            <input class="search" id="search" type="search" placeholder="搜索标题 / 路径 / 最近内容" autocomplete="off" />
+          </div>
+          <div class="sessionList" id="sessionList">
+            <div class="emptyState">
+              <div class="emptyIcon">◌</div>
+              <div class="emptyTitle">正在连接本地服务…</div>
+              <div class="emptySub">会话状态会实时出现在这里</div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side">
+          <section class="panel pendingPanel">
+            <div class="panelHead">
+              <h2>需要你处理</h2>
+              <span class="count warn" id="pendingCount">0</span>
+            </div>
+            <div class="pendingList" id="pendingList">
+              <div class="emptyMini">没有等待处理的请求</div>
+            </div>
+          </section>
+          <section class="panel eventsPanel">
+            <div class="panelHead">
+              <h2>实时事件</h2>
+              <span class="liveTag" id="liveTag">LIVE</span>
+            </div>
+            <div class="eventList" id="eventList">
+              <div class="emptyMini">等待事件…</div>
+            </div>
+          </section>
+          <section class="panel footPanel">
+            <div class="footRow"><span>手机在线</span><b id="clients">0</b></div>
+            <div class="footRow"><span>本机进程</span><b id="processCount">0</b></div>
+            <div class="footRow"><span>数据源</span><b id="sourceCount">0</b></div>
+            <div class="sourceList" id="sources"><div class="emptyMini">无数据源</div></div>
+            <div class="footNote" id="monitorNote">只读监控，不会代替你做决定。</div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="scrim hidden" id="scrim"></div>
+  <aside class="drawer hidden" id="drawer" aria-label="会话详情">
+    <div class="drawerHead">
+      <div>
+        <div class="drawerEyebrow">SESSION DETAIL</div>
+        <h2 id="drawerTitle">会话详情</h2>
+      </div>
+      <button class="iconBtn" id="btnDrawerClose" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="drawerBody" id="drawerBody"></div>
+  </aside>
+
+  <script src="/monitor.js"></script>
+</body>
+</html>
