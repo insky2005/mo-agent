@@ -29,7 +29,7 @@ test("Stream：状态映射 + ACK + 消息回调", async () => {
   });
 
   await stream.start();
-  assert.equal(stream.getStatus(), "connecting");
+  assert.equal(stream.getStatus(), "connected");
 
   client.registered = true;
   assert.equal(stream.refresh(), "connected");

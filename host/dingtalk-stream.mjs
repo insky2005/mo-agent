@@ -11,8 +11,9 @@ const STATUS_POLL_MS = 1000;
 
 function computeStatus(client) {
   if (client.reconnecting) return "reconnecting";
-  if (client.connected && client.registered) return "connected";
-  if (client.connected) return "connecting";
+  // WebSocket 已打开就视为已连接。SDK 的 registered 标记依赖 REGISTERED 系统帧，
+  // 某些网络下该帧会缺失，但收发消息仍然正常，不能因此显示“未连接”。
+  if (client.connected) return "connected";
   return "disconnected";
 }
 
