@@ -96,6 +96,17 @@ Agent 卡住时，手机会亮起。点一下，或在耳机边说一句，任�
 | Windows | 适配中 |
 | iOS | 暂缓 |
 
+## 许可证
+
+Mo Agent 采用 **PolyForm Noncommercial 1.0.0**：个人与非商业用途免费；公司业务、客户交付、托管服务、转售等商业用途需要获得商业授权。
+
+- 许可证全文：[LICENSE](LICENSE)
+- 商业授权说明：[COMMERCIAL.md](COMMERCIAL.md)
+- 品牌与商标：[TRADEMARKS.md](TRADEMARKS.md)
+- 贡献与 CLA：[CONTRIBUTING.md](CONTRIBUTING.md)
+
+> 本仓库是 **source-available**，不是 OSI 定义的开源项目。
+
 ## 进一步了解
 
 - 开发、构建、接口、架构与排障：[DEVELOPMENT.md](DEVELOPMENT.md)

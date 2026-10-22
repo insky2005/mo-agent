@@ -45,3 +45,6 @@ host/notify-defaults.json
 
 # ---- 含密钥的原始凭据（只留本地）----
 docs/raw/
+
+# ---- 仅本地可见的内部分析（不提交）----
+docs/private/
