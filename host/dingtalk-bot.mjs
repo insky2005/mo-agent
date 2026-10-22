@@ -22,7 +22,7 @@ const OAPI_BASE = "https://oapi.dingtalk.com";
 const DEFAULT_SOURCE = "MO_AGENT";
 const SEEN_TTL_MS = 30 * 60 * 1000;
 const SHORT_ID_TTL_MS = 24 * 60 * 60 * 1000;
-const BIND_SUCCESS_TEXT = "绑定成功 ✅ 之后审批消息里会带短码（如 A3F2）：回复「A A3F2」同意，「D A3F2」拒绝。";
+const BIND_SUCCESS_TEXT = "绑定成功 ✅\n\n后续推送的审批消息里会带短码（如 A3F2），直接回复：「A A3F2」同意、「D A3F2」拒绝（空格可省略、可多个）。";
 
 const ACTION_KINDS = new Set(["approval", "question", "error"]);
 const DEFAULT_EVENTS = Object.freeze({
@@ -392,13 +392,13 @@ export function createDingTalkBot(options) {
 
   function buildSingle(intent) {
     const title = intent.title || "mo-agent";
-    let text = title + "\n\n" + (intent.body || "");
     let id = "";
     const isAction = intent.kind === "approval" || intent.kind === "question";
-    if (isAction && intent.eventId) {
-      id = setShortId(intent.eventId, intent.kind);
-      if (id) text += "\n\n回复：A " + id + " 同意 / D " + id + " 拒绝";
-    }
+    if (isAction && intent.eventId) id = setShortId(intent.eventId, intent.kind);
+    let body = intent.body || "";
+    if (id) body = "#" + id + (body ? " " + body : "");
+    let text = title + "\n\n" + body;
+    if (id) text += "\n\n回复：A " + id + " 同意 / D " + id + " 拒绝";
     return { title, text, id };
   }
 

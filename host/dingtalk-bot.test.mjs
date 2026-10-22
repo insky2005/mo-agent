@@ -125,23 +125,30 @@ test("accepts：只放行已绑定、已开启且达到严重级的事件", asyn
 });
 
 test("固定文本：A/D + 短码生效，非法格式不生效", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("session.example")) return jsonResponse({ errcode: 0 });
+    if (entry.url.includes("oToMessages") || entry.url.includes("groupMessages")) return jsonResponse({ processQueryKey: "p" });
+    return jsonResponse({});
+  });
   const { bot, stream, brokerCalls } = makeBot({
     pending: [
       { id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" },
       { id: "b7c1d2e3-0000-4000-8000-000000000000", kind: "approval" },
     ],
-    fetchImpl: fakeFetch((entry) => {
-      if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
-      if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
-      if (entry.url.includes("session.example")) return jsonResponse({ errcode: 0 });
-      if (entry.url.includes("oToMessages") || entry.url.includes("groupMessages")) return jsonResponse({ processQueryKey: "p" });
-      return jsonResponse({});
-    }),
+    fetchImpl,
   });
   await bot.start();
 
   await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
   await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试 2", eventId: "b7c1d2e3-0000-4000-8000-000000000000" });
+
+  const sendCall = fetchImpl.calls.find((entry) => entry.url.includes("oToMessages"));
+  assert.ok(sendCall, "应该发送过审批消息");
+  const sentText = JSON.parse(JSON.parse(sendCall.init.body).msgParam).text;
+  assert.match(sentText, /#A3F2/);
+  assert.match(sentText, /回复：A A3F2 同意/);
 
   // 非法格式不调用 broker
   await stream.onMessage(inbound("同意 A3F2"));
