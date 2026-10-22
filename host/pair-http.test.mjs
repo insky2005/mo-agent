@@ -144,8 +144,12 @@ test("/setup/dingtalk 渲染钉钉通道页", async () => {
   });
   const { res } = await get("/setup/dingtalk", ctx);
   assert.equal(res.out.status, 200);
-  assert.match(res.out.body, /钉钉通道/);
-  assert.match(res.out.body, /扫码创建机器人/);
+  assert.match(res.out.body, /钉钉机器人绑定/);
+  assert.match(res.out.body, /开始绑定/);
+  assert.match(res.out.body, /startScan/);
+  const script = String(res.out.body).match(/<script>([\s\S]*)<\/script>/);
+  assert.ok(script, "页面应包含内联脚本");
+  assert.doesNotThrow(() => new Function(script[1]));
 });
 
 test("/setup/dingtalk/bind/start 需要本机头", async () => {
@@ -193,6 +197,7 @@ test("/setup 只保留安装与配对，不再嵌入一键配置入口", async (
   assert.match(res.out.body, /配对码/);
   assert.doesNotMatch(res.out.body, /href='\/agents'/);
   assert.doesNotMatch(res.out.body, /一键配置 Agent/);
+  assert.doesNotMatch(res.out.body, /钉钉/);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
