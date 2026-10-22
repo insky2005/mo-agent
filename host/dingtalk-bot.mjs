@@ -22,6 +22,7 @@ const OAPI_BASE = "https://oapi.dingtalk.com";
 const DEFAULT_SOURCE = "MO_AGENT";
 const SEEN_TTL_MS = 30 * 60 * 1000;
 const SHORT_ID_TTL_MS = 24 * 60 * 60 * 1000;
+const BIND_SUCCESS_TEXT = "绑定成功 ✅ 之后审批消息里会带一个短号（如 A3F2），直接回复「批准 A3F2」或「拒绝 A3F2」即可。";
 
 const ACTION_KINDS = new Set(["approval", "question", "error"]);
 const DEFAULT_EVENTS = Object.freeze({
@@ -657,7 +658,7 @@ export function createDingTalkBot(options) {
 
       if (bindingCode && text === bindingCode) {
         commitBinding(inbound);
-        await replyTo(inbound, "绑定成功。审批回复：批准 <ID> / 拒绝 <ID>", "reply");
+        await replyTo(inbound, BIND_SUCCESS_TEXT, "reply");
         return;
       }
       if (bindingCode) {
@@ -674,7 +675,7 @@ export function createDingTalkBot(options) {
 
       // 兼容没有配对码的旧状态：首条消息直接绑定。
       commitBinding(inbound);
-      await replyTo(inbound, "绑定成功。审批回复：批准 <ID> / 拒绝 <ID>", "reply");
+      await replyTo(inbound, BIND_SUCCESS_TEXT, "reply");
       return;
     }
 
@@ -796,7 +797,7 @@ export function createDingTalkBot(options) {
       if (bindingState !== "pending_confirm" || !pendingBind) return false;
       commitBinding(pendingBind);
       try {
-        await sendViaApi("mo-agent", "绑定成功。审批回复：批准 <ID> / 拒绝 <ID>");
+        await sendViaApi("mo-agent", BIND_SUCCESS_TEXT);
         usage.recordBillable({ kind: "reply", direction: "out" });
         lastOutboundAt = now();
       } catch (error) {
