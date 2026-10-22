@@ -41,7 +41,7 @@ test("setup：扫码成功后写入 notify.json 并回调", async () => {
 
   const started = await setup.start();
   assert.equal(started.state, "polling");
-  assert.match(started.verificationUriComplete, /source=MO_AGENT/);
+  assert.equal(started.verificationUriComplete, "https://open-dev.example/registration?x=1");
 
   await new Promise((resolve) => setTimeout(resolve, 20));
   const status = setup.status();

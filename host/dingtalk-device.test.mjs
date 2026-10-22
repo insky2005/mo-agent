@@ -40,7 +40,7 @@ test("device-code：init/begin 返回二维码地址并追加 source", async () 
   assert.equal(begin.deviceCode, "dc-1");
   assert.equal(begin.expiresInSeconds, 600);
   assert.equal(begin.intervalSeconds, 2);
-  assert.match(begin.verificationUriComplete, /source=MO_AGENT/);
+  assert.equal(begin.verificationUriComplete, "https://open-dev.dingtalk.com/openapp/registration/openClaw?x=1");
   assert.equal(fetchImpl.calls.length, 2);
 });
 

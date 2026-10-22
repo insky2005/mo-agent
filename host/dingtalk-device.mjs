@@ -17,12 +17,6 @@ export const DEFAULT_EXPIRES_IN = 7200;
 export const DEFAULT_INTERVAL = 5;
 export const DEFAULT_RETRY_WINDOW_MS = 120000;
 
-function withSource(uri, source) {
-  const url = new URL(uri);
-  url.searchParams.set("source", source);
-  return url.toString();
-}
-
 async function post(fetchImpl, url, body, timeoutMs) {
   const response = await fetchImpl(url, {
     method: "POST",
@@ -70,7 +64,8 @@ export async function beginRegistration(options) {
 
   return {
     deviceCode,
-    verificationUriComplete: withSource(verificationUri, source),
+    // 必须原样使用钉钉返回的地址：额外拼 source 会让钉钉判定“创建来源无效”。
+    verificationUriComplete: verificationUri,
     expiresInSeconds: Number(begin.expires_in) > 0 ? Number(begin.expires_in) : DEFAULT_EXPIRES_IN,
     intervalSeconds: Number(begin.interval) > 0 ? Number(begin.interval) : DEFAULT_INTERVAL,
     source,
