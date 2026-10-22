@@ -22,7 +22,18 @@ const OAPI_BASE = "https://oapi.dingtalk.com";
 const DEFAULT_SOURCE = "MO_AGENT";
 const SEEN_TTL_MS = 30 * 60 * 1000;
 const SHORT_ID_TTL_MS = 24 * 60 * 60 * 1000;
-const BIND_SUCCESS_TEXT = "绑定成功 ✅\n\n后续推送的审批消息里会带短码（如 A3F2）\n直接回复：「A A3F2」代表同意、「D A3F2」代表拒绝（空格可省略、可多个）";
+const BIND_SUCCESS_TEXT = [
+  "绑定成功 ✅",
+  "",
+  "**Mo Agent，让智能随行，让掌控随心。**",
+  "",
+  "Mo Agent 是你电脑上的一位 AI Agent 小监理，叫我 Momo，也叫“默默”。",
+  "",
+  "Momo 不会替 Agent们 干活，也不会改变你的工作方式。Agent们 照旧在终端和 IDE 里忙碌；Momo 会守在旁边，默默看着进度，在它需要授权、等待回答、完成任务或失败的那一刻，把消息递到你面前。你只需一句回复，事情就能继续。",
+  "",
+  "Momo 会推送审批消息及短码（如 A3F2）",
+  "你只须回复：「A A3F2」代表同意、「D A3F2」代表拒绝（空格可省略、可多个）",
+].join("\n");
 
 const ACTION_KINDS = new Set(["approval", "question", "error"]);
 const DEFAULT_EVENTS = Object.freeze({
@@ -312,7 +323,7 @@ export function createDingTalkBot(options) {
     const response = await fetchImpl(webhook, {
       method: "POST",
       headers: { "content-type": "application/json", "x-acs-dingtalk-access-token": token },
-      body: JSON.stringify({ msgtype: "text", text: { content: text } }),
+      body: JSON.stringify({ msgtype: "markdown", markdown: { title: title || "mo-agent", text } }),
     }, { api: "robot/sendBySession", category: "stream" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || (data.errcode && data.errcode !== 0)) {
