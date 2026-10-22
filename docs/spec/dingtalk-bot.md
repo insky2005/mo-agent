@@ -1,6 +1,6 @@
 # 钉钉机器人 Stream 通道（单应用机器人）
 
-- 状态：草案（待评审）
+- 状态：P0 / P1 已实现；P2 中群模式已具备，其余按决定延后
 - 日期：2026-10-22
 - 关联：[事件契约](./event-contract.md)、[`host/notify-webhook.mjs`](../../host/notify-webhook.mjs)、[`host/monitor-http.mjs`](../../host/monitor-http.mjs)、[`app/web/monitor.js`](../../app/web/monitor.js)
 
@@ -923,7 +923,7 @@ dingtalk: {
 | 文件 | 改动 |
 |---|---|
 | `host/dingtalk-device.mjs` | 新增：device-code 注册（`init` / `begin` / `poll`）、二维码 URL、凭据写盘、超时/FAIL/EXPIRED 处理 |
-| `host/dingtalk-stream.mjs` | 新增：gateway open → WSS → ACK；订阅 `TOPIC_ROBOT`；状态机与指数重连 |
+| `host/dingtalk-stream.mjs` | 新增：封装官方 `dingtalk-stream` SDK；1s 轮询映射 connected/registered/reconnecting；ACK 与消息回调 |
 | `host/dingtalk-bot.mjs` | 新增：绑定状态机、命令路由、出站、`accepts`、`sessionWebhook` 回复与回执 |
 | `host/dingtalk-http.mjs` | 新增：带计次的 `fetch` 包装，所有钉钉 HTTP 的唯一出口 |
 | `host/dingtalk-usage.mjs` | 新增：`local` / `billable` 双计数器、月度滚动、预算闸门、`recent` 环形缓冲 |
@@ -994,6 +994,8 @@ dingtalk: {
 | P1 | approval/question/error 全链路 + 聚合 + 静默 + 预算闸门 + 审计；打开机器人深链 1 天 spike | 4–5 人日 |
 | P2 | 群模式 + `/run` + 多会话切换 + 卡片按钮（可选） | 2–3 人日 |
 | 合计 | 可用闭环 | **9–13 人日** |
+
+P0 / P1 已落地（device-code、Stream、固定审批回复、双计次、监控、设置页、聚合/闸门/审计）。P2 中群模式代码已具备但未开放产品入口；`/run` 等通用指令按决定不做。
 
 不含钉钉控制台等待审核的时间。
 
