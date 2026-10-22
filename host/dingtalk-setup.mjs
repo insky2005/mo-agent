@@ -205,5 +205,30 @@ export function createDingTalkSetup(options) {
     return status();
   }
 
-  return { start, status, cancel, saveManual };
+  /** 解绑并清除本机的钉钉应用配置，回到“未创建”。 */
+  function removeCredentials() {
+    const current = readChannels(notifyFile);
+    let next;
+    if (current.kind === "array") {
+      next = current.value.filter((item) => !item || item.type !== "dingtalk-bot");
+    } else {
+      const channels = (current.value.channels || []).filter((item) => !item || item.type !== "dingtalk-bot");
+      next = Object.assign({}, current.value, { channels });
+    }
+    fs.mkdirSync(path.dirname(notifyFile), { recursive: true });
+    const tmp = notifyFile + ".tmp." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, notifyFile);
+    try { fs.chmodSync(notifyFile, 0o600); } catch (error) { /* ignore */ }
+    generation += 1;
+    state = "idle";
+    registration = null;
+    error = null;
+    progress = "";
+    progressDetail = null;
+    lastStatusAt = 0;
+    return status();
+  }
+
+  return { start, status, cancel, saveManual, removeCredentials };
 }

@@ -98,6 +98,17 @@ test("setup：手动凭据写入并回调", async () => {
   assert.equal(dt.clientId, "manual-id");
   assert.equal(dt.robotCode, "robot-x");
 });
+test("setup：解绑会清除本机钉钉配置", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
+  const notifyFile = path.join(dir, "notify.json");
+  const setup = createDingTalkSetup({ notifyFile });
+  await setup.saveManual({ clientId: "id", clientSecret: "sec" });
+  assert.equal(JSON.parse(fs.readFileSync(notifyFile, "utf8")).channels.length, 1);
+  setup.removeCredentials();
+  const saved = JSON.parse(fs.readFileSync(notifyFile, "utf8"));
+  assert.equal(saved.channels.length, 0);
+  assert.equal(setup.status().state, "idle");
+});
 test("setup：cancel 后忽略迟到结果", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
   const setup = createDingTalkSetup({

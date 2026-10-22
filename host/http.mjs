@@ -98,6 +98,7 @@ export function createMoAgentServer(options) {
     ? options.getDingTalk
     : () => options.dingtalk || null;
   const dingtalkSetup = options.dingtalkSetup || null;
+  const onDingTalkReset = typeof options.onDingTalkReset === "function" ? options.onDingTalkReset : null;
 
   const deviceTokens = new Set();
 
@@ -248,6 +249,7 @@ export function createMoAgentServer(options) {
           hooksManager,
           dingtalk: getDingTalk(),
           dingtalkSetup,
+          onDingTalkReset,
           localToken,
           isLoopback: isLoopbackAddress(req.socket && req.socket.remoteAddress),
         });

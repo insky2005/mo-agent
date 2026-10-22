@@ -152,6 +152,20 @@ test("/setup/dingtalk 渲染钉钉通道页", async () => {
   assert.doesNotThrow(() => new Function(script[1]));
 });
 
+test("/setup/dingtalk/bind/reset 同时清绑定和配置", async () => {
+  const ws = workspace();
+  const calls = { unbind: 0, clear: 0, reset: 0 };
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "done" }), removeCredentials: () => { calls.clear += 1; } },
+    dingtalk: { unbind: () => { calls.unbind += 1; } },
+    onDingTalkReset: () => { calls.reset += 1; },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/reset?token=" + encodeURIComponent(ctx.localToken));
+  const res = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), res, url, ctx);
+  assert.equal(res.out.status, 200);
+  assert.deepEqual(calls, { unbind: 1, clear: 1, reset: 1 });
+});
 test("/setup/dingtalk/bind/start 需要本机头", async () => {
   const ws = workspace();
   const ctx = context(ws, {

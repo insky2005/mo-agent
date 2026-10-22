@@ -494,6 +494,12 @@ const moHost = createMoAgentServer({
   monitor,
   getDingTalk: () => dingtalkBot,
   dingtalkSetup,
+  onDingTalkReset: () => {
+    if (!dingtalkBot) return;
+    notifier.unregister(dingtalkBot);
+    dingtalkBot.stop();
+    dingtalkBot = null;
+  },
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
