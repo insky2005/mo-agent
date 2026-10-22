@@ -184,6 +184,7 @@ export function createDingTalkBot(options) {
   const seen = new Map();
   const shortIds = new Map();
   const sentTimes = [];
+  const aggregates = new Map();
 
   function audit(entry) {
     if (!config.audit) return;
@@ -385,21 +386,84 @@ export function createDingTalkBot(options) {
     }
   }
 
-  async function send(intent) {
-    if (!accepts(intent)) return false;
+  function buildSingle(intent) {
+    const title = intent.title || "mo-agent";
+    let text = "### " + title + "\n\n" + (intent.body || "");
+    let id = "";
+    const isAction = intent.kind === "approval" || intent.kind === "question";
+    if (isAction && intent.eventId) {
+      id = setShortId(intent.eventId, intent.kind);
+      if (id) text += "\n\n回复：批准 " + id + " / 拒绝 " + id;
+    }
+    return { title, text, id };
+  }
+
+  function enqueueAggregate(intent) {
+    const key = String(intent.sessionId || "global") + ":" + String(intent.kind || "attention");
+    let entry = aggregates.get(key);
+    if (!entry) {
+      entry = {
+        items: [],
+        timer: null,
+        kind: intent.kind,
+        severity: intent.severity,
+        requiresAction: intent.requiresAction,
+        sessionId: intent.sessionId || null,
+      };
+      entry.timer = setTimeout(() => { void flushAggregate(key); }, config.aggregateMs);
+      if (typeof entry.timer.unref === "function") entry.timer.unref();
+      aggregates.set(key, entry);
+    }
+    const built = buildSingle(intent);
+    entry.items.push({
+      title: intent.title || "mo-agent",
+      body: intent.body || "",
+      id: built.id,
+      sessionTitle: intent.sessionTitle || "",
+      eventId: intent.eventId || null,
+      kind: intent.kind,
+    });
+    entry.requiresAction = intent.requiresAction;
+    return true;
+  }
+
+  async function flushAggregate(key) {
+    const entry = aggregates.get(key);
+    if (!entry) return;
+    aggregates.delete(key);
+    if (entry.timer) clearTimeout(entry.timer);
+    const items = entry.items;
+    if (!items.length) return;
+
+    const base = items[0];
+    const title = items.length > 1 ? base.title + " · " + items.length + " 项" : base.title;
+    let text = "### " + title + "\n\n";
+    if (items.length > 1 && base.sessionTitle) text += base.sessionTitle + "\n";
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      text += (items.length > 1 ? (i + 1) + ". " : "") + (item.id ? "#" + item.id + " " : "") + (item.body || "") + "\n";
+    }
+    const ids = items.map((item) => item.id).filter(Boolean);
+    if (ids.length) {
+      text += "\n回复：批准 " + ids[0] + " / 拒绝 " + ids[0] + (ids.length > 1 ? "（按 ID）" : "");
+    }
+
+    const synthetic = {
+      kind: entry.kind,
+      severity: entry.severity,
+      requiresAction: entry.requiresAction,
+      sessionId: entry.sessionId,
+    };
+    if (!accepts(synthetic)) return;
+    await deliverText(synthetic, title, text);
+  }
+
+  async function deliverText(intent, title, text) {
     const nowAt = now();
     while (sentTimes.length && nowAt - sentTimes[0] > 60000) sentTimes.shift();
     if (sentTimes.length >= config.maxPerMinute) {
       log.warn("钉钉出站超过本地节流上限，丢弃: " + (intent.title || intent.kind));
       return false;
-    }
-
-    const title = intent.title || "mo-agent";
-    let text = "### " + title + "\n\n" + (intent.body || "");
-    const isAction = intent.kind === "approval" || intent.kind === "question";
-    if (isAction && intent.eventId) {
-      const id = setShortId(intent.eventId, intent.kind);
-      if (id) text += "\n\n回复：批准 " + id + " / 拒绝 " + id;
     }
 
     try {
@@ -418,12 +482,23 @@ export function createDingTalkBot(options) {
       }
       noteSendSuccess(intent.kind);
       sentTimes.push(nowAt);
+      audit({ action: "send", kind: intent.kind, title, ok: true });
       return true;
     } catch (error) {
       noteSendFailure(error);
+      audit({ action: "send", kind: intent.kind, title, ok: false, error: error && error.message ? error.message : String(error) });
       log.warn("钉钉发送失败: " + (error && error.message ? error.message : error));
       return false;
     }
+  }
+
+  async function send(intent) {
+    if (!accepts(intent)) return false;
+    if (config.aggregateMs > 0 && ACTION_KINDS.has(intent.kind) && intent.eventId) {
+      return enqueueAggregate(intent);
+    }
+    const built = buildSingle(intent);
+    return deliverText(intent, built.title, built.text);
   }
 
   function accepts(intent) {
@@ -654,6 +729,10 @@ export function createDingTalkBot(options) {
     },
 
     stop() {
+      for (const entry of aggregates.values()) {
+        if (entry.timer) clearTimeout(entry.timer);
+      }
+      aggregates.clear();
       if (stream) stream.stop();
       usage.flush();
     },

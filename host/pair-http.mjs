@@ -379,6 +379,10 @@ function handleDingTalkRoutes(req, res, url, ctx) {
     json(res, 405, { ok: false, error: "method not allowed" });
     return true;
   }
+  if (req.headers["x-mo-agent-local"] !== "1") {
+    json(res, 403, { ok: false, error: "missing local header" });
+    return true;
+  }
 
   (async () => {
     try {
@@ -419,7 +423,7 @@ function renderDingTalkPage(res) {
   const script = [
     "<script>(function(){",
     "function $(id){return document.getElementById(id)}",
-    "function post(path){return fetch(path,{method:'POST',cache:'no-store'}).then(function(r){return r.json()})}",
+    "function post(path){return fetch(path,{method:'POST',cache:'no-store',headers:{'x-mo-agent-local':'1'}}).then(function(r){return r.json()})}",
     "function render(s){",
     "  var on=s.onboarding||{}, bot=s.bot||{};",
     "  var st=on.state||'idle';",

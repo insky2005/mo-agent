@@ -81,6 +81,7 @@ function makeBot(opts) {
       target: { mode: "dm", userId: "u1" },
       events: { approval: true, question: true, error: true, completed: false },
       severityMin: "critical",
+      aggregateMs: 0,
       usage: { monthlyLimit: 100, warnAt: 0.8, confirmOnlyAt: 1, hardStopAt: 1.2 },
       binding: { requireConfirm: true },
       audit: false,
@@ -185,6 +186,28 @@ test("dedupe：同一个 msgId 只处理一次", async () => {
   await stream.onMessage(frame);
   await stream.onMessage(frame);
   assert.equal(brokerCalls.length, 1);
+});
+
+test("聚合：同会话同 kind 的多条合并成 1 次发送", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("oToMessages")) return jsonResponse({ processQueryKey: "p" });
+    return jsonResponse({});
+  });
+  const { bot, usage } = makeBot({ config: { aggregateMs: 40 }, fetchImpl });
+  await bot.start();
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行 A", eventId: "a3f2b7c1-0000", sessionId: "s1", sessionTitle: "proj-x" });
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行 B", eventId: "b7c1d2e3-0000", sessionId: "s1", sessionTitle: "proj-x" });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  assert.equal(usage.snapshot().billable.total, 1);
+  const calls = fetchImpl.calls.filter((item) => item.url.includes("oToMessages"));
+  assert.equal(calls.length, 1);
+  const body = JSON.parse(calls[0].init.body);
+  const text = JSON.parse(body.msgParam).text;
+  assert.match(text, /A3F2/);
+  assert.match(text, /B7C1/);
 });
 
 test("配额错误：标记 exhausted 并停止出站", async () => {
