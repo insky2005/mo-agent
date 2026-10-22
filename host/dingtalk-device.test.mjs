@@ -59,10 +59,42 @@ test("device-code：WAITING 后 SUCCESS 返回 clientId/clientSecret", async () 
     { deviceCode: "dc", expiresInSeconds: 60, intervalSeconds: 1 },
     { fetchImpl, baseUrl: "https://example.test", sleep: async () => {}, now: () => 0 },
   );
-  assert.deepEqual(result, { clientId: "ding-id", clientSecret: "secret" });
+  assert.equal(result.clientId, "ding-id");
+  assert.equal(result.clientSecret, "secret");
   assert.equal(poll, 2);
 });
 
+test("device-code：SCANNED/CREATING/APPROVING 都是中间态，凭据下发即成功", async () => {
+  let poll = 0;
+  const statuses = ["SCANNED", "CREATING", "PUBLISHING", "APPROVING"];
+  const fetchImpl = fakeFetch({
+    "/app/registration/poll": () => {
+      const status = statuses[Math.min(poll, statuses.length - 1)];
+      poll += 1;
+      if (status === "APPROVING") {
+        return jsonResponse({
+          errcode: 0,
+          status,
+          client_id: "id-approving",
+          client_secret: "sec-approving",
+          robot_code: "robot-1",
+          mode: "STREAM",
+        });
+      }
+      return jsonResponse({ errcode: 0, status });
+    },
+  });
+
+  const result = await waitForCredentials(
+    { deviceCode: "dc", expiresInSeconds: 60, intervalSeconds: 1 },
+    { fetchImpl, baseUrl: "https://example.test", sleep: async () => {}, now: () => 0 },
+  );
+  assert.equal(result.clientId, "id-approving");
+  assert.equal(result.clientSecret, "sec-approving");
+  assert.equal(result.robotCode, "robot-1");
+  assert.equal(result.status, "APPROVING");
+  assert.equal(poll, 4);
+});
 test("device-code：FAIL / EXPIRED 抛错", async () => {
   const failFetch = fakeFetch({
     "/app/registration/poll": () => jsonResponse({ errcode: 0, status: "FAIL", fail_reason: "denied" }),

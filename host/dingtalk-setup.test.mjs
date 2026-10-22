@@ -45,7 +45,8 @@ test("setup：扫码成功后写入 notify.json 并回调", async () => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   const status = setup.status();
   assert.equal(status.state, "done");
-  assert.deepEqual(provisioned, { clientId: "cid", clientSecret: "sec" });
+  assert.equal(provisioned.clientId, "cid");
+  assert.equal(provisioned.clientSecret, "sec");
 
   const saved = JSON.parse(fs.readFileSync(notifyFile, "utf8"));
   assert.equal(saved.channels.length, 2);

@@ -110,28 +110,34 @@ export async function waitForCredentials(registration, options) {
       throw error;
     }
 
-    const status = String((polled && polled.status) || "").trim().toUpperCase();
-    if (status === "WAITING") {
-      retryStart = 0;
-      continue;
-    }
-    if (status === "SUCCESS") {
-      const clientId = String(polled.client_id || "").trim();
-      const clientSecret = String(polled.client_secret || "").trim();
-      if (!clientId || !clientSecret) {
-        throw new Error("device-code: SUCCESS but missing client_id/client_secret");
-      }
-      return { clientId, clientSecret };
+    const clean = (value) => (typeof value === "string" ? value.trim() : "");
+    const status = clean(polled && polled.status).toUpperCase();
+    const clientId = clean(polled && polled.client_id);
+    const clientSecret = clean(polled && polled.client_secret);
+
+    // SCANNED / CREATING / PUBLISHING / APPROVING 都是中间态；
+    // 只要 client_id + client_secret 已下发，就算成功。
+    if (clientId && clientSecret) {
+      if (typeof opts.onStatus === "function") opts.onStatus(status || "SUCCESS");
+      return {
+        clientId,
+        clientSecret,
+        robotCode: clean(polled && polled.robot_code),
+        mode: clean(polled && polled.mode),
+        status: status || "SUCCESS",
+      };
     }
     if (status === "FAIL") {
-      throw new Error("device-code: authorization failed" + (polled.fail_reason ? ": " + polled.fail_reason : ""));
+      const reason = clean(polled && polled.fail_reason);
+      throw new Error("device-code: authorization failed" + (reason ? ": " + reason : ""));
     }
     if (status === "EXPIRED") {
       throw new Error("device-code: authorization expired, scan again");
     }
 
-    if (!retryStart) retryStart = now();
-    if (now() - retryStart < retryWindowMs) continue;
+    if (typeof opts.onStatus === "function" && status) opts.onStatus(status);
+    retryStart = 0;
+    continue;
     throw new Error("device-code: unknown poll status " + (status || "(empty)"));
   }
 

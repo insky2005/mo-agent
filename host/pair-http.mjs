@@ -477,6 +477,8 @@ function renderDingTalkPage(res) {
     "      if(left<=0&&on.state==='polling'){autoScan=false;startScan();}",
     "      else setText('hint','二维码有效期约 '+fmtLeft(left)+'；失效后会自动刷新。');",
     "    } else setText('hint','正在向钉钉申请二维码…');",
+    "    var pmap={SCANNED:'已扫码，请在钉钉里确认创建。',CREATING:'钉钉正在创建应用…',PUBLISHING:'钉钉正在发布机器人…',APPROVING:'应用已创建，等待管理员审批…'};",
+    "    if(pmap[on.progress])setText('hint',pmap[on.progress]);",
     "    show('retry',true);",
     "    if($('retry'))$('retry').textContent='重新生成二维码';",
     "  } else if(next==='starting'){",

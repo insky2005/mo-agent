@@ -35,6 +35,7 @@ function writeCredentials(file, credentials, source) {
     enabled: true,
     clientId: credentials.clientId,
     clientSecret: credentials.clientSecret,
+    ...(credentials.robotCode ? { robotCode: credentials.robotCode } : {}),
     source,
     target: { mode: "dm" },
     events: {
@@ -80,6 +81,7 @@ export function createDingTalkSetup(options) {
   let error = null;
   let startedAt = 0;
   let generation = 0;
+  let progress = "";
 
   function status() {
     return {
@@ -87,6 +89,7 @@ export function createDingTalkSetup(options) {
       state,
       error,
       startedAt: startedAt || null,
+      progress: progress || null,
       expiresAt: registration
         ? startedAt + (Number(registration.expiresInSeconds) || 0) * 1000
         : null,
@@ -109,6 +112,7 @@ export function createDingTalkSetup(options) {
     const current = generation;
     state = "qr_waiting";
     error = null;
+    progress = "";
     startedAt = now();
     registration = null;
 
@@ -124,7 +128,15 @@ export function createDingTalkSetup(options) {
 
     void (async () => {
       try {
-        const credentials = await waitForCredentials(registration, { fetchImpl, now, sleep });
+        const credentials = await waitForCredentials(registration, {
+          fetchImpl,
+          now,
+          sleep,
+          onStatus: (status) => {
+            progress = status;
+            log.info("钉钉扫码状态: " + status);
+          },
+        });
         if (generation !== current) return;
         writeCredentials(notifyFile, credentials, source);
         state = "done";
@@ -146,6 +158,7 @@ export function createDingTalkSetup(options) {
     state = "idle";
     registration = null;
     error = null;
+    progress = "";
     return status();
   }
 
