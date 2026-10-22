@@ -89,6 +89,7 @@ export async function waitForCredentials(registration, options) {
   const retryWindowMs = Number(opts.retryWindowMs) || DEFAULT_RETRY_WINDOW_MS;
   const now = opts.now || Date.now;
   const sleep = opts.sleep || ((ms) => delay(ms));
+  const shouldStop = typeof opts.shouldStop === "function" ? opts.shouldStop : null;
 
   if (!registration || !registration.deviceCode) {
     throw new Error("device-code: registration.deviceCode required");
@@ -99,7 +100,9 @@ export async function waitForCredentials(registration, options) {
   let retryStart = 0;
 
   while (now() < deadline) {
+    if (shouldStop && shouldStop()) throw new Error("device-code: canceled");
     await sleep(intervalMs);
+    if (shouldStop && shouldStop()) throw new Error("device-code: canceled");
 
     let polled;
     try {

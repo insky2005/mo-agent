@@ -82,8 +82,10 @@ export function createDingTalkSetup(options) {
   let startedAt = 0;
   let generation = 0;
   let progress = "";
+  let lastStatusAt = 0;
 
   function status() {
+    lastStatusAt = now();
     return {
       ok: true,
       state,
@@ -114,6 +116,7 @@ export function createDingTalkSetup(options) {
     error = null;
     progress = "";
     startedAt = now();
+    lastStatusAt = now();
     registration = null;
 
     try {
@@ -136,6 +139,7 @@ export function createDingTalkSetup(options) {
             progress = status;
             log.info("钉钉扫码状态: " + status);
           },
+          shouldStop: () => generation !== current || (lastStatusAt > 0 && now() - lastStatusAt > 15000),
         });
         if (generation !== current) return;
         writeCredentials(notifyFile, credentials, source);
@@ -144,6 +148,13 @@ export function createDingTalkSetup(options) {
         if (onProvisioned) await onProvisioned(credentials);
       } catch (err) {
         if (generation !== current) return;
+        if (/canceled/i.test(err && err.message ? err.message : "")) {
+          state = "idle";
+          registration = null;
+          progress = "";
+          lastStatusAt = 0;
+          return;
+        }
         state = "error";
         error = err && err.message ? err.message : String(err);
         log.warn("钉钉扫码创建未完成: " + error);
@@ -159,6 +170,7 @@ export function createDingTalkSetup(options) {
     registration = null;
     error = null;
     progress = "";
+    lastStatusAt = 0;
     return status();
   }
 

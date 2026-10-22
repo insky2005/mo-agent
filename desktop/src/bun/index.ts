@@ -352,7 +352,22 @@ function disposePanel(): void {
   if (!panel) return;
   const current = panel;
   panel = null;
+  void cancelDingTalkOnboard();
   try { current.close(); } catch (error) { /* 已经销毁 */ }
+}
+
+/** 关闭钉钉页时，通知 host 停止 device-code 轮询。 */
+async function cancelDingTalkOnboard(): Promise<void> {
+  try {
+    const token = readLocalToken();
+    if (!token) return;
+    await fetch(BASE + "/setup/dingtalk/onboard/cancel?token=" + encodeURIComponent(token), {
+      method: "POST",
+      headers: { "x-mo-agent-local": "1" },
+    });
+  } catch (error) {
+    /* host 可能已退出，忽略 */
+  }
 }
 
 /** 管理页需要本机令牌：桌面壳打开时自动附加，页面再换成 HttpOnly Cookie。 */
@@ -396,8 +411,8 @@ function createPanel(url: string = PANEL_URL): void {
       try { win.close(); } catch (error) { /* 已经关闭 */ }
     });
     win.on("close", () => {
-      if (panel !== win) return;
-      panel = null;
+      if (panel === win) panel = null;
+      if (url === DINGTALK_URL) void cancelDingTalkOnboard();
       // 设置窗口关闭后才显示常驻浮层，避免两个窗口同时挡住桌面。
       syncVoiceOverlay();
     });

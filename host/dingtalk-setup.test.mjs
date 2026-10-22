@@ -55,6 +55,32 @@ test("setup：扫码成功后写入 notify.json 并回调", async () => {
   assert.equal(dt.clientSecret, "sec");
 });
 
+test("setup：页面关闭后 15 秒无状态请求，自动停止轮询", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
+  let t = 1000;
+  const setup = createDingTalkSetup({
+    notifyFile: path.join(dir, "notify.json"),
+    now: () => t,
+    sleep: async () => { await new Promise((r) => setTimeout(r, 5)); },
+    fetchImpl: async (url) => {
+      const pathname = new URL(String(url)).pathname;
+      if (pathname.endsWith("/init")) return jsonResponse({ errcode: 0, nonce: "n1" });
+      if (pathname.endsWith("/begin")) return jsonResponse({
+        errcode: 0,
+        device_code: "dc1",
+        verification_uri_complete: "https://open-dev.example/registration?x=1",
+        expires_in: 600,
+        interval: 1,
+      });
+      return jsonResponse({ errcode: 0, status: "WAITING" });
+    },
+  });
+
+  await setup.start();
+  t = 20000;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(setup.status().state, "idle");
+});
 test("setup：cancel 后忽略迟到结果", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-dt-setup-"));
   const setup = createDingTalkSetup({
