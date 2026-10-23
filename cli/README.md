@@ -180,7 +180,7 @@ mo task dispatch <id>     # 派单，等回执
 对方只需要一条命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 ```
 
 脚本会按 `uname` 选产物、校验 sha256、装到 `~/.local/bin/mo`。
@@ -192,7 +192,7 @@ MO_VERSION=v0.2.0 bash scripts/install-remote.sh
 MO_CLI_BASE_URL=file://$PWD/cli/dist bash scripts/install-remote.sh
 ```
 
-**发布前要改一处**：`scripts/install-remote.sh` 里的 `REPO="CHANGE_ME/mo-agent"`，或让用户用 `MO_AGENT_REPO=you/mo-agent` 覆盖。
+仓库地址已写成 `insky2005/mo-agent`；fork 或换仓库时用 `MO_AGENT_REPO=you/mo-agent` 覆盖。
 
 **私有仓库注意**：Release 资产需要登录才能下载，`curl` 一行安装会 404。要么仓库公开，要么改用 npm 私有源（方式 B/C 仍可用）。
 
@@ -201,7 +201,7 @@ MO_CLI_BASE_URL=file://$PWD/cli/dist bash scripts/install-remote.sh
 对方有 Node 时，连 tarball 都不用传：
 
 ```bash
-npm i -g github:<org>/<repo>
+npm i -g github:insky2005/mo-agent
 ```
 
 npm 会自己拉仓库，并按 `package.json` 的 `files` 只装 `cli/` + `core/tasks/` + `core/errors.mjs`。
@@ -266,7 +266,7 @@ mo skill install --target /some/skills
 本仓库符合 skills 生态的布局（`skills/<name>/SKILL.md`），可以直接：
 
 ```bash
-npx skills add <org>/mo-agent       # 装到 ~/.agents/skills/mo
+npx skills add insky2005/mo-agent       # 装到 ~/.agents/skills/mo
 npx skills update mo                # 之后更新
 ```
 

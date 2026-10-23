@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 从 GitHub Releases 安装 mo（不需要源码、不需要 Node）。
-#   curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 #   MO_VERSION=v0.2.0 bash scripts/install-remote.sh      # 指定版本
 #   MO_CLI_BASE_URL=file:///path/to/dist bash scripts/install-remote.sh   # 本地验证
 set -euo pipefail
 
-REPO="${MO_AGENT_REPO:-CHANGE_ME/mo-agent}"
+REPO="${MO_AGENT_REPO:-insky2005/mo-agent}"
 BIN_DIR="${MO_BIN_DIR:-$HOME/.local/bin}"
 BASE="${MO_CLI_BASE_URL:-}"
 

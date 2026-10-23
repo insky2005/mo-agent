@@ -5,7 +5,7 @@ license: PolyForm-Noncommercial-1.0.0
 compatibility: 需要 mo CLI（单文件二进制或 npm 包）。安装见仓库 scripts/install-cli.sh 或 install-remote.sh。
 metadata:
   author: mo-agent
-  homepage: https://github.com/<org>/mo-agent
+  homepage: https://github.com/insky2005/mo-agent
 ---
 
 # mo
@@ -27,10 +27,10 @@ mo doctor             # 顺带确认当前目录属于某个项目
 
 ```bash
 # 方式一：Release 单文件二进制（不需要 Node，装完同时装技能）
-curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 
 # 方式二：源码（需要 git 与 Node 18+）
-git clone https://github.com/<org>/<repo>.git
+git clone https://github.com/insky2005/mo-agent.git
 cd mo-agent
 bash scripts/install-cli.sh
 ```
