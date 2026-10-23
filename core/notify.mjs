@@ -41,6 +41,11 @@ export class Notifier {
     return channel;
   }
 
+  unregister(channel) {
+    this.channels = this.channels.filter((item) => item !== channel);
+    return channel;
+  }
+
   start() {
     if (this.unsubscribe) return this.unsubscribe;
     this.unsubscribe = this.hub.store.subscribe((event) => this.handle(event));
@@ -67,6 +72,7 @@ export class Notifier {
     this.hub.emit(EVENT.NOTIFY, payload);
     for (const channel of this.channels) {
       try {
+        if (typeof channel.accepts === "function" && !channel.accepts(payload)) continue;
         const result = channel.send(payload);
         // webhook 等通道是异步的，失败只记日志，不能影响其它通道
         if (result && typeof result.then === "function") {

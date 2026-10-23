@@ -17,6 +17,7 @@ try {
 const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
 const PANEL_URL = BASE + "/setup";
+const DINGTALK_URL = BASE + "/setup/dingtalk";
 const AGENTS_URL = BASE + "/agents";
 const MONITOR_URL = BASE + "/monitor";
 // 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
@@ -351,7 +352,22 @@ function disposePanel(): void {
   if (!panel) return;
   const current = panel;
   panel = null;
+  void cancelDingTalkOnboard();
   try { current.close(); } catch (error) { /* 已经销毁 */ }
+}
+
+/** 关闭钉钉页时，通知 host 停止 device-code 轮询。 */
+async function cancelDingTalkOnboard(): Promise<void> {
+  try {
+    const token = readLocalToken();
+    if (!token) return;
+    await fetch(BASE + "/setup/dingtalk/onboard/cancel?token=" + encodeURIComponent(token), {
+      method: "POST",
+      headers: { "x-mo-agent-local": "1" },
+    });
+  } catch (error) {
+    /* host 可能已退出，忽略 */
+  }
 }
 
 /** 管理页需要本机令牌：桌面壳打开时自动附加，页面再换成 HttpOnly Cookie。 */
@@ -363,8 +379,14 @@ function adminUrl(url: string): string {
 
 function createPanel(url: string = PANEL_URL): void {
   const isAgents = url === AGENTS_URL;
+  const isDingTalk = url === DINGTALK_URL;
+  const title = isAgents
+    ? "mo-agent · 一键配置 Agent"
+    : isDingTalk
+      ? "mo-agent · 钉钉机器人绑定"
+      : "mo-agent · 设置";
   const win = new BrowserWindow({
-    title: isAgents ? "mo-agent · 一键配置 Agent" : "mo-agent · 设置（安装与配对）",
+    title,
     url: adminUrl(url),
     frame: { width: 760, height: 760 },
   });
@@ -389,29 +411,13 @@ function createPanel(url: string = PANEL_URL): void {
       try { win.close(); } catch (error) { /* 已经关闭 */ }
     });
     win.on("close", () => {
-      if (panel !== win) return;
-      panel = null;
+      if (panel === win) panel = null;
+      if (url === DINGTALK_URL) void cancelDingTalkOnboard();
       // 设置窗口关闭后才显示常驻浮层，避免两个窗口同时挡住桌面。
       syncVoiceOverlay();
     });
   } catch (error) {
     logLine("注册窗口关闭事件失败: " + error);
-  }
-}
-
-/** 第二次打开 .app 时，把已经存在的设置窗口直接拉到前台。 */
-function focusPanel(): boolean {
-  if (!panel) return false;
-  const current = panel;
-  try {
-    current.show();
-    current.activate();
-    focusPanelWebview(current);
-    return true;
-  } catch (error) {
-    logLine("聚焦设置窗口失败: " + error);
-    if (panel === current) panel = null;
-    return false;
   }
 }
 
@@ -625,7 +631,7 @@ function setupApplicationMenu(): void {
         submenu: [
           { role: "minimize" },
           { type: "divider" },
-          { label: "关闭设置", action: "close-settings-panel", accelerator: "Escape" },
+          { label: "关闭窗口", action: "close-settings-panel", accelerator: "Escape" },
         ],
       },
     ]);
@@ -651,7 +657,14 @@ function trayMenu(): any[] {
     { type: "normal", label: "语音测试", action: "voice-test" },
   ];
   return [
-    { type: "normal", label: "设置（安装与配对）", action: "panel" },
+    {
+      type: "normal",
+      label: "设置",
+      submenu: [
+        { type: "normal", label: "App 安装与配对", action: "panel" },
+        { type: "normal", label: "钉钉机器人绑定", action: "dingtalk" },
+      ],
+    },
     { type: "normal", label: "一键配置 Agent…", action: "agents" },
     {
       type: "normal",
@@ -1554,10 +1567,9 @@ const singleInstance = createSingleInstance({
   requestPath: SINGLE_INSTANCE_REQUEST,
   log: logLine,
   onLaunch: () => {
-    // 第二次双击 .app：把已有的设置窗口直接拉到前台；窗口已关就补开一个。
-    logLine("检测到再次启动，打开设置窗口");
-    if (focusPanel()) return;
-    void openPanel().catch((error) => logLine("再次启动时打开设置失败: " + error));
+    // 第二次双击 .app：把已有的监控屏直接拉到前台；窗口已关就补开一个。
+    logLine("检测到再次启动，打开监控屏");
+    void openMonitor().catch((error) => logLine("再次启动时打开监控屏失败: " + error));
   },
 });
 
@@ -1569,9 +1581,8 @@ async function startShell(): Promise<void> {
   // Electrobun 的 reopen 回调会强制把 Dock 图标显示出来，这里立刻收回去。
   app.on("reopen", () => {
     try { Utils.setDockIconVisible(false); } catch (error) { /* 非 macOS */ }
-    logLine("收到 reopen，打开设置窗口");
-    if (focusPanel()) return;
-    void openPanel().catch((error) => logLine("reopen 时打开设置失败: " + error));
+    logLine("收到 reopen，打开监控屏");
+    void openMonitor().catch((error) => logLine("reopen 时打开监控屏失败: " + error));
   });
   setupApplicationMenu();
   ensureCarbonHotkey();
@@ -1596,6 +1607,7 @@ async function startShell(): Promise<void> {
   created.on("tray-clicked", async (event: any) => {
     const action = event?.data?.action;
     if (action === "agents") await openPanel(AGENTS_URL);
+    else if (action === "dingtalk") await openPanel(DINGTALK_URL);
     else if (action === "panel") await openPanel();
     else if (action === "voice") await toggleVoice();
     else if (action === "voice-command") await runVoiceCommand();
@@ -1622,18 +1634,17 @@ async function startShell(): Promise<void> {
 
   const ready = await ensureHost();
   logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_DIR + "）");
-  // 启动后默认打开「设置（安装与配对）」面板。
-  // 如果启动过程中已经有第二次启动提前打开了窗口，就只聚焦，不重建。
+  // 启动后默认打开实时监控屏。openMonitor 会聚焦已有窗口，不会重复创建。
   if (ready) {
-    if (!focusPanel()) await openPanel();
-    // 启动时设置窗口在前；浮层等设置窗口关闭后由 close 事件显示。
+    await openMonitor();
+    // 监控屏在前时浮层收起；监控屏关闭后由 close 事件恢复。
     await syncVoiceOverlay();
   }
 }
 
 singleInstance.claim().then(async (primary) => {
   if (!primary) {
-    logLine("已有 mo-agent 实例在运行，已请求它打开设置窗口，本次启动退出");
+    logLine("已有 mo-agent 实例在运行，已请求它打开监控屏，本次启动退出");
     process.exit(0);
   }
   await startShell();

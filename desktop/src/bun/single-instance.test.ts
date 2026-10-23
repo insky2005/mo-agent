@@ -51,7 +51,7 @@ describe("createSingleInstance", () => {
     const info = JSON.parse(readFileSync(lockPath, "utf8"));
     expect(info.pid).toBe(process.pid);
     expect(info.token).not.toBe("dead");
-    // 启动本身就会打开设置，遗留的请求应立即清掉，避免多弹一次。
+    // 启动本身就会打开监控屏，遗留的请求应立即清掉，避免多弹一次。
     expect(existsSync(requestPath)).toBe(false);
     expect(launches).toBe(0);
 

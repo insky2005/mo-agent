@@ -15,7 +15,7 @@ type LockInfo = {
 export type SingleInstanceOptions = {
   /** 单实例锁文件：内容是本进程的 PID 与随机 token。 */
   lockPath: string;
-  /** 第二次启动时写入的请求文件；主实例轮询到它就打开设置。 */
+  /** 第二次启动时写入的请求文件；主实例轮询到它就打开监控屏。 */
   requestPath: string;
   /** 收到第二次启动请求时，在已经运行的实例里执行。 */
   onLaunch: () => void;
@@ -44,7 +44,7 @@ function processAlive(pid: number): boolean {
  * 用「硬链接原子创建锁文件 + 请求文件轮询」做单实例：
  * - 锁文件由 linkSync 原子创建，内容始终完整（不会读到半截 PID）；
  * - 锁里的 PID 已退出 = 上次崩溃遗留，清理后重试；
- * - 已有活实例 = 写一个请求文件后退出，由主实例轮询到并打开设置。
+ * - 已有活实例 = 写一个请求文件后退出，由主实例轮询到并打开监控屏。
  *
  * 不用 Unix socket 是因为打包后的 cottontail 运行时会在 bind 前清掉同路径的
  * 旧 socket，第二次启动会「绑定成功」，反而绕过单实例锁。
@@ -117,7 +117,7 @@ export function createSingleInstance(options: SingleInstanceOptions): SingleInst
     for (let attempt = 0; attempt < CLAIM_ATTEMPTS; attempt += 1) {
       if (tryCreateLock()) {
         ownsLock = true;
-        // 上次崩溃前留下的请求不再有意义：启动本身就会打开设置。
+        // 上次崩溃前留下的请求不再有意义：启动本身就会打开监控屏。
         try { unlinkSync(options.requestPath); } catch (error) { /* 没有遗留请求 */ }
         startPolling();
         return true;

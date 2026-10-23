@@ -6,6 +6,7 @@ node_modules/
 # ---- 临时目录 ----
 .cottontail-tmp/
 .build/
+.npm-cache/
 
 # ---- 运行数据 / 本地状态 ----
 data/

@@ -31,6 +31,8 @@ public class ApprovalActionReceiver extends BroadcastReceiver {
                 JSONObject body = new JSONObject();
                 body.put("id", id);
                 body.put("decision", decision == null ? "reject_once" : decision);
+                body.put("clientAt", System.currentTimeMillis());
+                body.put("source", "android-notification");
 
                 conn = (HttpURLConnection) new URL(base + "/api/approve").openConnection();
                 conn.setRequestMethod("POST");

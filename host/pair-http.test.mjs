@@ -136,6 +136,67 @@ async function get(pathname, ctx, options = {}) {
   return { handled, res };
 }
 
+test("/setup/dingtalk 渲染钉钉通道页", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "idle" }) },
+    dingtalk: null,
+  });
+  const { res } = await get("/setup/dingtalk", ctx);
+  assert.equal(res.out.status, 200);
+  assert.match(res.out.body, /钉钉机器人绑定/);
+  assert.match(res.out.body, /配对码/);
+  assert.match(res.out.body, /startScan/);
+  const script = String(res.out.body).match(/<script>([\s\S]*)<\/script>/);
+  assert.ok(script, "页面应包含内联脚本");
+  assert.doesNotThrow(() => new Function(script[1]));
+});
+
+test("/setup/dingtalk/bind/reset 同时清绑定和配置", async () => {
+  const ws = workspace();
+  const calls = { unbind: 0, clear: 0, reset: 0 };
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "done" }), removeCredentials: () => { calls.clear += 1; } },
+    dingtalk: { unbind: () => { calls.unbind += 1; } },
+    onDingTalkReset: () => { calls.reset += 1; },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/reset?token=" + encodeURIComponent(ctx.localToken));
+  const res = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), res, url, ctx);
+  assert.equal(res.out.status, 200);
+  assert.deepEqual(calls, { unbind: 1, clear: 1, reset: 1 });
+});
+test("/setup/dingtalk/bind/start 需要本机头", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: { status: () => ({ state: "idle" }) },
+    dingtalk: { startBinding: () => ({ ok: true, expiresAt: 1 }) },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/start?token=" + encodeURIComponent(ctx.localToken));
+  const denied = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: {} }), denied, url, ctx);
+  assert.equal(denied.out.status, 403);
+
+  const ok = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), ok, url, ctx);
+  assert.equal(ok.out.status, 200);
+  assert.match(ok.out.body, /"ok":true/);
+});
+
+test("/setup/dingtalk/bind/start 应用未创建时返回预生成配对码", async () => {
+  const ws = workspace();
+  const ctx = context(ws, {
+    dingtalkSetup: {
+      status: () => ({ state: "idle" }),
+      startPendingBinding: () => ({ ok: true, code: "123456", expiresAt: 1 }),
+    },
+  });
+  const url = new URL("http://x/setup/dingtalk/bind/start?token=" + encodeURIComponent(ctx.localToken));
+  const res = fakeResponse();
+  await handlePairRoutes(request("POST", "", { headers: { "x-mo-agent-local": "1" } }), res, url, ctx);
+  assert.equal(res.out.status, 200);
+  assert.match(res.out.body, /"code":"123456"/);
+});
 test("/agents 显示各 Agent 状态与一键配置入口", async () => {
   const ws = workspace();
   const ctx = context(ws);
@@ -164,6 +225,7 @@ test("/setup 只保留安装与配对，不再嵌入一键配置入口", async (
   assert.match(res.out.body, /配对码/);
   assert.doesNotMatch(res.out.body, /href='\/agents'/);
   assert.doesNotMatch(res.out.body, /一键配置 Agent/);
+  assert.doesNotMatch(res.out.body, /钉钉/);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 

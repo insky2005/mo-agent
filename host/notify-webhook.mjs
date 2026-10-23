@@ -190,14 +190,33 @@ export function loadWebhookChannels(options) {
     .map((config) => createWebhookChannel(config, { log: opts.log }));
 }
 
+/** 读取移动端路由：apk | dingtalk | both | none；未配置返回 auto（沿用现状）。 */
+export function loadMobileMode(options) {
+  const opts = options || {};
+  const env = opts.env || process.env;
+  const allowed = new Set(["apk", "dingtalk", "both", "none"]);
+  if (env.MO_AGENT_MOBILE_MODE && allowed.has(env.MO_AGENT_MOBILE_MODE)) return env.MO_AGENT_MOBILE_MODE;
+  const file = opts.file || path.join(os.homedir(), ".mo-agent", "notify.json");
+  try {
+    if (!fs.existsSync(file)) return "auto";
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    const mode = parsed && parsed.mobile && parsed.mobile.mode;
+    return allowed.has(mode) ? mode : "auto";
+  } catch (error) {
+    return "auto";
+  }
+}
+
 /** 全部通道，包括 HMS。 */
 export function loadNotifyChannels(options) {
   const opts = options || {};
   const log = opts.log || (() => {});
   const getPushTokens = opts.getPushTokens || (() => []);
+  const mode = opts.mobileMode || loadMobileMode(opts);
   const result = [];
   for (const config of loadChannelConfigs(opts)) {
     if (config.type === "hms") {
+      if (mode === "dingtalk" || mode === "none") continue;
       if (!config.appId || !config.appSecret) {
         log.warn("HMS 通道缺少 appId/appSecret，已跳过");
         continue;

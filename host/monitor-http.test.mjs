@@ -120,6 +120,17 @@ test("buildMonitorSnapshot 汇总会话、待办、进程与数据源错误", ()
   assert.equal(snapshot.monitor.pollMs, 1500);
 });
 
+test("buildMonitorSnapshot 带钉钉通道状态", () => {
+  const snapshot = buildMonitorSnapshot(ctxFor(makeHub([]), {
+    dingtalk: {
+      getState: () => ({ configured: true, connected: true, binding: { state: "bound" }, usage: { local: { total: 3 } } }),
+    },
+  }), 1000);
+  assert.equal(snapshot.dingtalk.configured, true);
+  assert.equal(snapshot.dingtalk.binding.state, "bound");
+  assert.equal(snapshot.dingtalk.usage.local.total, 3);
+});
+
 test("handleMonitorRoutes 对非监控路径返回 false", async () => {
   const res = fakeRes();
   const handled = await handleMonitorRoutes(fakeReq(), res, new URL("http://x/api/health"), ctxFor(makeHub([])));

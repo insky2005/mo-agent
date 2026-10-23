@@ -158,6 +158,7 @@ export const NOTIFY_POLICY = Object.freeze({
           ? describeQuestion({ questions: p.questions })
           : (p.title || p.toolName || "该操作需要你的授权才能继续")
       ),
+      requiresAction: true,
       eventId: p.id || null,
       sessionId: p.sessionId || null,
       agent: p.agent || null,
@@ -174,6 +175,7 @@ export const NOTIFY_POLICY = Object.freeze({
       kind: isApproval ? "approval" : "question",
       title: titleWithAgent(isApproval ? "授权请求" : "等待回答", p.agentLabel),
       body: withPrefix(p.sessionTitle, describeQuestion(p.question)),
+      requiresAction: true,
       eventId: p.eventId || null,
       sessionId: p.sessionId || null,
       agent: null,
@@ -197,6 +199,7 @@ export const NOTIFY_POLICY = Object.freeze({
     agentLabel: p.agentLabel || null,
     sessionTitle: p.sessionTitle || null,
     notificationType: p.notificationType || null,
+    requiresAction: p.requiresAction === true || p.kind === "approval" || p.kind === "question",
     toolName: null,
   }),
 
@@ -210,6 +213,7 @@ export const NOTIFY_POLICY = Object.freeze({
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
     sessionTitle: p.sessionTitle || null,
+    requiresAction: false,
     toolName: null,
     runId: p.runId || null,
   }),
@@ -224,6 +228,7 @@ export const NOTIFY_POLICY = Object.freeze({
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
     sessionTitle: p.sessionTitle || null,
+    requiresAction: true,
     toolName: null,
     runId: p.runId || null,
   }),
@@ -238,6 +243,7 @@ export const NOTIFY_POLICY = Object.freeze({
     agent: p.agent || null,
     agentLabel: p.agentLabel || null,
     sessionTitle: p.sessionTitle || null,
+    requiresAction: false,
     toolName: null,
     runId: p.runId || null,
   }),

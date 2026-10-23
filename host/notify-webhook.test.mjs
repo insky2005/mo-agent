@@ -13,6 +13,7 @@ import {
   createWebhookChannel,
   loadWebhookChannels,
   loadNotifyChannels,
+  loadMobileMode,
 } from "./notify-webhook.mjs";
 
 const critical = { severity: "critical", kind: "approval", title: "需要授权", body: "运行 rm -rf" };
@@ -101,6 +102,30 @@ test("loadWebhookChannels 读配置文件与环境变量，过滤掉没有 url �
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("mobile.mode=dingtalk 时不加载 HMS；apk 时保留", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-notify-mode-"));
+  const file = path.join(dir, "notify.json");
+  fs.writeFileSync(file, JSON.stringify({
+    mobile: { mode: "dingtalk" },
+    channels: [{ type: "hms", appId: "a", appSecret: "b" }],
+  }));
+  assert.equal(loadMobileMode({ file, env: {} }), "dingtalk");
+  const dingtalkOnly = loadNotifyChannels({
+    file, env: {}, log: { warn() {}, info() {} }, getPushTokens: () => ["tok"],
+  });
+  assert.equal(dingtalkOnly.length, 0);
+
+  fs.writeFileSync(file, JSON.stringify({
+    mobile: { mode: "apk" },
+    channels: [{ type: "hms", appId: "a", appSecret: "b" }],
+  }));
+  const apk = loadNotifyChannels({
+    file, env: {}, log: { warn() {}, info() {} }, getPushTokens: () => ["tok"], fetchImpl: async () => ({ ok: true, json: async () => ({}) }),
+  });
+  assert.equal(apk.length, 1);
+  assert.equal(apk[0].name, "hms");
+  assert.equal(loadMobileMode({ file, env: { MO_AGENT_MOBILE_MODE: "both" } }), "both");
+});
 test("loadNotifyChannels 会把 push token 交给 HMS 通道", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-hms-"));
   const file = path.join(dir, "notify.json");

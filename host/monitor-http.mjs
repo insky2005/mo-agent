@@ -130,6 +130,7 @@ export function buildMonitorSnapshot(ctx, now) {
     pending: { approvals, questions },
     processes,
     monitor,
+    dingtalk: ctx.dingtalk && typeof ctx.dingtalk.getState === "function" ? ctx.dingtalk.getState() : null,
     clients: ctx.runtime && typeof ctx.runtime.clientCount === "function" ? ctx.runtime.clientCount() : 0,
   };
 }

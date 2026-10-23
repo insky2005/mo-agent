@@ -42,6 +42,6 @@
   "approval": {
     "capability": "allow",
     "mechanism": "PermissionRequest hook（decision.behavior，与 Claude Code 同格式）",
-    "note": "桌面端会先弹自己的框；hook 不返回决定即 defer"
+    "note": "桌面端会同时弹自己的授权框，和 hook 是竞速：桌面框先被处理/超时，手机上的允许就不会再生效。常用工具建议在手机选「总是允许」，后续请求由 hook 立即放行；或改用 CLI/TUI。"
   }
 }

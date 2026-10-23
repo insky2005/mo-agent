@@ -8,12 +8,15 @@ import { createLogger } from "./log.mjs";
 import { createRotatingSink } from "./log-file.mjs";
 import { Hub } from "../core/hub.mjs";
 import { Notifier } from "../core/notify.mjs";
-import { loadNotifyChannels } from "./notify-webhook.mjs";
+import { loadMobileMode, loadNotifyChannels } from "./notify-webhook.mjs";
+import { createDingTalkBot, loadDingTalkBotConfig } from "./dingtalk-bot.mjs";
+import { createDingTalkSetup } from "./dingtalk-setup.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
 import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
+import { createDecisionRouter } from "./decisions.mjs";
 import { checkVoiceReady, createVoiceChannel, decisionForOutcome } from "./voice/channel.mjs";
 import { createScriptedListener } from "./voice/io.mjs";
 import { makeNonce } from "./voice/text.mjs";
@@ -56,7 +59,7 @@ const notifyDefaults = process.env.MO_AGENT_NOTIFY_DEFAULTS
     ? path.join(root, "host", "notify-defaults.json")
     : path.join(root, "notify-defaults.json"));
 ensureNotifyConfig({ log, defaults: notifyDefaults });
-for (const channel of loadNotifyChannels({ log, getPushTokens: () => pushTokens.list() })) {
+for (const channel of loadNotifyChannels({ log, mobileMode: loadMobileMode({ log }), getPushTokens: () => pushTokens.list() })) {
   notifier.register(channel);
   log.info("已注册通知通道: " + channel.name);
 }
@@ -226,7 +229,14 @@ async function testVoice() {
 
 // 远程批准中枢（语音只是另一个决策端）
 const runtime = {};
+let dingtalkBot = null;
 const pairing = new PairingManager({ log, ttlMs: config.qrTtlMs || 5 * 60 * 1000 });
+
+// 手机/钉钉/语音发来的决定统一走这里：先 broker，再 DSH 原生待办。
+let decisionRouter = null;
+const routeDecision = (id, decision, extra) => (decisionRouter
+  ? decisionRouter.decide(id, decision, extra)
+  : broker.decide(id, decision, extra));
 
 const broker = new ApprovalBroker({
   hub,
@@ -234,10 +244,11 @@ const broker = new ApprovalBroker({
   timeoutMs: config.approvalTimeoutMs,
   // 静音时语音不再算作「在线决策端」：没有手机就直接交回终端，不白等。
   isClientConnected: () => (runtime.clientCount ? runtime.clientCount() > 0 : false)
+    || (!!dingtalkBot && dingtalkBot.isAvailable())
     || (!!voice && !(voiceCommands && voiceCommands.isMuted())),
   // 有配对过推送设备时，App 可能正被通知叫醒：先等一小段时间再决定是否交回终端。
   noClientGraceMs: config.approvalNoClientGraceMs,
-  hasRemoteClient: () => pushTokens.size() > 0,
+  hasRemoteClient: () => pushTokens.size() > 0 || !!(dingtalkBot && dingtalkBot.isBound()),
   onPending: (item) => {
     if (!voice) return;
     // 静音期间审批仍进 pending，只是不念、不接语音决策。
@@ -251,6 +262,39 @@ const broker = new ApprovalBroker({
       log.warn("语音确认失败: " + (error && error.message ? error.message : String(error)));
     });
   },
+});
+
+// 钉钉单应用机器人（可选）：Stream 入站 + 固定文本审批 + 主动推送。
+async function ensureDingTalkBot() {
+  const mode = loadMobileMode({ log });
+  if (mode === "apk" || mode === "none") return null;
+  const cfg = loadDingTalkBotConfig({ log });
+  if (!cfg) return null;
+  if (dingtalkBot) {
+    notifier.unregister(dingtalkBot);
+    dingtalkBot.stop();
+  }
+  dingtalkBot = createDingTalkBot({ config: cfg, log, broker, decide: routeDecision });
+  notifier.register(dingtalkBot);
+  await dingtalkBot.start();
+  const pending = dingtalkSetup && typeof dingtalkSetup.status === "function"
+    ? dingtalkSetup.status().pendingBinding
+    : null;
+  if (pending && pending.code) {
+    dingtalkBot.startBinding({ code: pending.code, expiresAt: pending.expiresAt });
+    dingtalkSetup.clearPendingBinding();
+  }
+  log.info("钉钉通道已启用（Stream）");
+  return dingtalkBot;
+}
+
+const dingtalkSetup = createDingTalkSetup({
+  log,
+  onProvisioned: () => ensureDingTalkBot(),
+});
+
+void ensureDingTalkBot().catch((error) => {
+  log.warn("启动钉钉通道失败: " + (error && error.message ? error.message : error));
 });
 
 // P1 语音命令：状态查询 / 暂停继续 / 切换关注会话。
@@ -366,6 +410,7 @@ const created = await createAdapters({
   dsh,
 });
 const monitor = created.adapters.find((a) => a.name === "dsh") || null;
+decisionRouter = createDecisionRouter({ broker, monitor, dsh, log });
 for (const adapter of created.adapters) hub.register(adapter);
 
 // P2 语音口述任务：沿用 P1 的「当前关注会话」，先成草稿，严格确认后只发送一次。
@@ -455,6 +500,7 @@ const moHost = createMoAgentServer({
   config,
   hub,
   broker,
+  decide: routeDecision,
   dsh,
   processes,
   runtime,
@@ -462,6 +508,14 @@ const moHost = createMoAgentServer({
   webDir,
   localToken,
   monitor,
+  getDingTalk: () => dingtalkBot,
+  dingtalkSetup,
+  onDingTalkReset: () => {
+    if (!dingtalkBot) return;
+    notifier.unregister(dingtalkBot);
+    dingtalkBot.stop();
+    dingtalkBot = null;
+  },
   pairing,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
@@ -561,6 +615,7 @@ async function main() {
       }
     }
     if (voice) voice.stop();
+    if (dingtalkBot) dingtalkBot.stop();
     broker.cancelAll("shutdown");
     if (dsh) dsh.close();
     moHost.server.close(() => process.exit(0));

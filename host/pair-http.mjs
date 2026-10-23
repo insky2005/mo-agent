@@ -27,7 +27,7 @@ function deniedPage(res, status, title, detail) {
     + "<h1>" + escapeHtml(title) + "</h1>"
     + "<div class='sub'>" + escapeHtml(detail) + "</div>"
     + "<div class='warn'>这些页面只允许在电脑本机、并且通过 mo-agent 的菜单打开。"
-    + "请从菜单栏打开「设置（安装与配对）」或「一键配置 Agent…」。</div>"
+    + "请从菜单栏打开「设置 → App 安装与配对」或「一键配置 Agent…」。</div>"
     + "</body></html>");
 }
 
@@ -71,6 +71,25 @@ function readForm(req) {
   });
 }
 
+function readJson(req) {
+  return new Promise((resolve) => {
+    let data = "";
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        req.destroy();
+        return;
+      }
+      data += chunk;
+    });
+    req.on("end", () => {
+      try { resolve(JSON.parse(data || "{}")); } catch (error) { resolve({}); }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
+
 function svg(res, payload) {
   return QRCode.toString(payload, { type: "svg", margin: 1, width: 420 }).then((markup) => {
     res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "no-store" });
@@ -98,11 +117,18 @@ const STYLE = [
   "h1{font-size:20px;margin:0 0 2px}",
   ".sub{color:#8b97bd;font-size:13px;margin-bottom:22px;text-align:center}",
   ".grid{display:flex;gap:22px;flex-wrap:wrap;justify-content:center}",
-  ".card{background:#141b32;border:1px solid #263054;border-radius:16px;padding:18px;width:320px;text-align:center}",
+  ".card{background:#141b32;border:1px solid #263054;border-radius:16px;padding:18px;width:320px;height:500px;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:auto}",
+  ".card.done{justify-content:center}",
+  ".card.done h2{font-size:20px}",
+  ".bigStatus{font-size:22px!important;color:#35d39a!important;font-weight:700;margin:22px 0!important;text-align:center;min-height:0!important}",
+  ".status-card{width:662px;max-width:100%;height:500px;justify-content:center;text-align:center;overflow:hidden}",
+  ".card.status-card h2{font-size:24px;margin:0 0 14px}",
+  ".card.status-card p{font-size:13px;min-height:0;margin:5px 0}",
+  ".card.status-card .ip{margin-top:20px}",
   ".card h2{font-size:15px;margin:0 0 4px;color:#e7ecff}",
   ".card p{color:#8b97bd;font-size:12.5px;line-height:1.6;margin:6px 0 14px;min-height:52px}",
   ".qr{background:#fff;padding:12px;border-radius:12px;line-height:0;display:inline-block}",
-  ".qr svg,.qr img{width:240px;height:240px;display:block}",
+  ".qr svg,.qr img{width:200px;height:200px;display:block}",
   ".step{display:inline-block;font-size:11px;color:#0b1020;background:#4f8cff;border-radius:999px;padding:2px 9px;margin-bottom:8px;font-weight:700}",
   ".step.b{background:#35d39a}",
   ".meta{margin-top:26px;color:#8b97bd;font-size:12.5px;text-align:center;line-height:1.9}",
@@ -127,6 +153,17 @@ const STYLE = [
   ".agent-events{color:#8b97bd;font-size:12px;margin-top:6px;line-height:1.8}",
   ".agent-error{color:#ffb3ba;font-size:12px;margin-top:6px;line-height:1.7}",
   ".badge{font-size:11px;border-radius:999px;padding:2px 9px;border:1px solid transparent;white-space:nowrap}",
+  ".dim{opacity:.55}",
+  ".sideStep{color:#8b97bd;font-size:12.5px;line-height:1.7;margin:6px 0 14px;min-height:0}",
+  ".guideStep{display:flex;gap:9px;align-items:flex-start;color:#8b97bd;font-size:12.5px;line-height:1.55;margin:10px 0}",
+  ".guideStep b{display:inline-flex;width:20px;height:20px;border-radius:50%;background:#1b2440;border:1px solid #2b3558;color:#8b97bd;align-items:center;justify-content:center;font-size:11px;flex:none}",
+  ".guideStep.on{color:#e7ecff}",
+  ".guideStep.on b{background:#4f8cff;border-color:#4f8cff;color:#0b1020}",
+  ".guideStep.done{color:#a9b8d8}",
+  ".guideStep.done b{background:#35d39a;border-color:#35d39a;color:#0b1020}",
+  ".guideStep.dim{opacity:.45}",
+  "@media (max-width:700px){#stepGrid{grid-template-columns:1fr !important}}",
+  ".card .ip{background:transparent;cursor:pointer;font:inherit}",
   ".badge.ok{background:rgba(53,211,154,.14);color:#35d39a;border-color:rgba(53,211,154,.4)}",
   ".badge.warn{background:rgba(245,185,66,.14);color:#f5b942;border-color:rgba(245,185,66,.4)}",
   ".badge.off{background:rgba(139,151,189,.12);color:#8b97bd;border-color:#263054}",
@@ -160,7 +197,9 @@ const STYLE = [
 export async function handlePairRoutes(req, res, url, ctx) {
   const pathname = url.pathname;
   const applyPath = pathname === "/setup/hooks/apply";
+  const dingtalkPath = pathname === "/setup/dingtalk" || pathname.startsWith("/setup/dingtalk/");
   const known = applyPath
+    || dingtalkPath
     || pathname === "/pair"
     || pathname === "/setup"
     || pathname === "/agents"
@@ -224,6 +263,10 @@ export async function handlePairRoutes(req, res, url, ctx) {
     }
     renderAgentsPage(res, url, ctx);
     return true;
+  }
+
+  if (dingtalkPath) {
+    return handleDingTalkRoutes(req, res, url, ctx);
   }
 
   if (req.method !== "GET") {
@@ -329,6 +372,275 @@ export async function handlePairRoutes(req, res, url, ctx) {
 
   html(res, 200, page);
   return true;
+}
+
+function handleDingTalkRoutes(req, res, url, ctx) {
+  const pathname = url.pathname;
+  if (pathname === "/setup/dingtalk") {
+    if (req.method !== "GET") {
+      html(res, 405, "method not allowed");
+      return true;
+    }
+    renderDingTalkPage(res);
+    return true;
+  }
+
+  if (pathname === "/setup/dingtalk/qr.svg") {
+    const status = ctx.dingtalkSetup ? ctx.dingtalkSetup.status() : null;
+    if (!status || !status.verificationUriComplete) {
+      json(res, 404, { ok: false, error: "no-qr" });
+      return true;
+    }
+    return svg(res, status.verificationUriComplete).then(() => true);
+  }
+
+  if (pathname === "/setup/dingtalk/status") {
+    if (req.method !== "GET") {
+      json(res, 405, { ok: false, error: "method not allowed" });
+      return true;
+    }
+    const bot = ctx.dingtalk || null;
+    json(res, 200, {
+      ok: true,
+      onboarding: ctx.dingtalkSetup ? ctx.dingtalkSetup.status() : { state: "unavailable" },
+      bot: bot && typeof bot.getState === "function" ? bot.getState() : null,
+    });
+    return true;
+  }
+
+  if (req.method !== "POST") {
+    json(res, 405, { ok: false, error: "method not allowed" });
+    return true;
+  }
+  if (req.headers["x-mo-agent-local"] !== "1") {
+    json(res, 403, { ok: false, error: "missing local header" });
+    return true;
+  }
+
+  (async () => {
+    try {
+      if (pathname === "/setup/dingtalk/onboard/start") {
+        if (!ctx.dingtalkSetup) throw new Error("钉钉扫码创建不可用");
+        json(res, 200, await ctx.dingtalkSetup.start());
+        return;
+      }
+      if (pathname === "/setup/dingtalk/onboard/cancel") {
+        if (ctx.dingtalkSetup) ctx.dingtalkSetup.cancel();
+        json(res, 200, { ok: true });
+        return;
+      }
+      if (pathname === "/setup/dingtalk/manual") {
+        if (!ctx.dingtalkSetup) throw new Error("钉钉配置不可用");
+        const body = await readJson(req);
+        json(res, 200, await ctx.dingtalkSetup.saveManual(body));
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/start") {
+        if (ctx.dingtalk) {
+          json(res, 200, ctx.dingtalk.startBinding());
+        } else if (ctx.dingtalkSetup) {
+          json(res, 200, ctx.dingtalkSetup.startPendingBinding());
+        } else {
+          throw new Error("钉钉通道未配置");
+        }
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/confirm") {
+        if (!ctx.dingtalk) throw new Error("钉钉通道未配置");
+        json(res, 200, { ok: await ctx.dingtalk.confirmBinding() });
+        return;
+      }
+      if (pathname === "/setup/dingtalk/bind/reset") {
+        if (ctx.dingtalk) ctx.dingtalk.unbind();
+        if (ctx.dingtalkSetup && typeof ctx.dingtalkSetup.removeCredentials === "function") {
+          ctx.dingtalkSetup.removeCredentials();
+        }
+        if (typeof ctx.onDingTalkReset === "function") ctx.onDingTalkReset();
+        json(res, 200, { ok: true });
+        return;
+      }
+      json(res, 404, { ok: false, error: "not found" });
+    } catch (error) {
+      json(res, 400, { ok: false, error: error && error.message ? error.message : String(error) });
+    }
+  })();
+  return true;
+}
+
+function renderDingTalkPage(res) {
+  const script = [
+    "<script>(function(){",
+    "function $(id){return document.getElementById(id)}",
+    "function setText(id,text){var el=$(id);if(el)el.textContent=text;}",
+    "function show(id,on){var el=$(id);if(el)el.style.display=on?'inline-block':'none';}",
+    "function showBlock(id,on){var el=$(id);if(el)el.style.display=on?'block':'none';}",
+    "function post(path,body){var opt={method:'POST',cache:'no-store',headers:{'x-mo-agent-local':'1'}};if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body);}return fetch(path,opt).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j;})})}",
+    "var autoScan=false, autoBind=false, scanRetry=null;",
+    "function fmtLeft(ms){var sec=Math.max(0,Math.round(ms/1000));var m=Math.floor(sec/60);var s=sec%60;return m+':'+(s<10?'0':'')+s;}",
+    "function scheduleScan(delay){if(scanRetry||autoScan)return;scanRetry=setTimeout(function(){scanRetry=null;autoScan=false;startScan();},delay);}",
+    "function startScan(){if(autoScan)return;autoScan=true;post('/setup/dingtalk/onboard/start').then(function(){scanRetry=null;refresh()}).catch(function(err){autoScan=false;setText('createHint','二维码生成失败：'+(err&&err.message||'未知错误')+'；3 秒后重试。');scheduleScan(3000);});}",
+    "function startBind(){if(autoBind)return;autoBind=true;post('/setup/dingtalk/bind/start').then(function(){refresh()}).catch(function(err){autoBind=false;setText('pairHint','配对码生成失败：'+(err&&err.message||'未知错误'));});}",
+    "function renderCreate(on,bot){",
+    "  if(bot.configured){",
+    "    if($('createCard'))$('createCard').className='card done';",
+    "    setText('createTitle','机器人已创建');",
+    "    setText('createDesc','应用和机器人已经就绪，请在右侧完成配对。');",
+    "    setText('createHint','✅ 已创建');",
+    "    if($('createHint'))$('createHint').className='bigStatus';",
+    "    if($('manualDetails'))$('manualDetails').style.display='none';",
+    "    setText('diag','');",
+    "    showBlock('qrWrap',false);show('retry',false);",
+    "    return;",
+    "  }",
+    "  if($('createCard'))$('createCard').className='card';",
+    "  if($('createHint'))$('createHint').className='';",
+    "  if($('manualDetails'))$('manualDetails').style.display='';",
+    "  setText('createTitle','创建机器人');",
+    "  setText('createDesc','用手机钉钉扫码，自动创建应用和机器人。');",
+    "  show('retry',true);",
+    "  if($('retry'))$('retry').textContent='重新生成二维码';",
+    "  if(on.verificationUriComplete){showBlock('qrWrap',true);$('qr').src='/setup/dingtalk/qr.svg?ts='+Date.now();}else{showBlock('qrWrap',false);}",
+    "  var hint='正在向钉钉申请二维码…';",
+    "  if(on.expiresAt){var left=on.expiresAt-Date.now();if(left<=0&&on.state==='polling'){autoScan=false;startScan();}else hint='二维码有效期约 '+fmtLeft(left)+'；失效后会自动刷新。';}",
+    "  var pmap={SCANNED:'已扫码，请在钉钉里确认创建。',CREATING:'钉钉正在创建应用…',PUBLISHING:'钉钉正在发布机器人…',APPROVING:'应用已创建，等待管理员审批…'};",
+    "  if(pmap[on.progress])hint=pmap[on.progress];",
+    "  if(on.state==='done')hint='应用已创建，正在启动机器人…';",
+    "  if(on.state==='error'){setText('createTitle','创建失败');setText('createDesc',on.error||'未知错误');hint='3 秒后自动重试；也可以点「重新生成二维码」。';scheduleScan(3000);}",
+    "  setText('createHint',hint);",
+    "  var d=on.progressDetail||{};var diag='';",
+    "  if(on.state==='error'||d.failReason||(d.errcode&&d.errcode!==0)){diag=[on.progress,d.status,d.failReason,d.errmsg].filter(Boolean).join(' · ');}",
+    "  setText('diag',diag?'诊断：'+diag:'');",
+    "}",
+    "function renderPair(on,bot,b){",
+    "  var pending=on.pendingBinding||{};",
+    "  var code=b.code||pending.code||'';",
+    "  var expires=b.expiresAt||pending.expiresAt||0;",
+    "  if(!bot.configured){",
+    "    setText('pairTitle','配对');",
+    "    setText('pairDesc','创建完成后，直接发送下面的 6 位配对码。');",
+    "    showBlock('codeWrap',true);showBlock('bindInfo',false);",
+    "    if(!code){startBind();}",
+    "    setText('codeBox',code||'------');",
+    "    var left0=expires?expires-Date.now():0;",
+    "    if(code&&left0<=0){autoBind=false;startBind();}",
+    "    setText('pairHint',code?'等待左侧创建完成；配对码 '+(left0>0?'剩余 '+fmtLeft(left0):'已过期，正在刷新'):'正在生成配对码…');",
+    "    show('regenPair',true);show('reset',false);",
+    "    return;",
+    "  }",
+    "  if(b.state==='bound'){",
+    "    setText('pairTitle','已绑定');",
+    "    setText('pairDesc','审批会推送到这个钉钉会话。');",
+    "    setText('pairHint','');",
+    "    showBlock('codeWrap',false);showBlock('bindInfo',true);",
+    "    setText('bindAccount','绑定账号：'+(b.userId||'—'));",
+    "    setText('bindConn','钉钉连接：'+(bot.connected?'已连接':(bot.status==='reconnecting'?'重连中':'未连接')));",
+    "    show('regenPair',false);show('reset',true);",
+    "    return;",
+    "  }",
+    "  setText('pairTitle','配对');",
+    "  setText('pairDesc','打开钉钉，找到机器人，直接发送下面的 6 位配对码。');",
+    "  showBlock('codeWrap',true);showBlock('bindInfo',false);",
+    "  if(!code){startBind();}",
+    "  setText('codeBox',code||'------');",
+    "  var left=expires?expires-Date.now():0;",
+    "  if(left<=0&&code){autoBind=false;startBind();}",
+    "  if(!bot.connected)setText('pairHint','钉钉连接还没建立，请稍等几秒再发送。');",
+    "  else setText('pairHint',code?'配对码 '+(left>0?'剩余 '+fmtLeft(left):'已过期，正在刷新')+'；发错 5 次会失效。':'正在生成配对码…');",
+    "  show('regenPair',true);show('reset',false);",
+    "}",
+    "function render(s){",
+    "  var on=s.onboarding||{},bot=s.bot||{},b=bot.binding||{};",
+    "  if(b.state==='bound'){",
+    "    if($('stepGrid'))$('stepGrid').style.display='none';if($('boundView'))$('boundView').style.display='flex';",
+    "    setText('boundAccount',b.userId||'—');",
+    "    setText('boundConn',bot.connected?'已连接':(bot.status==='reconnecting'?'重连中':'未连接'));",
+    "    return;",
+    "  }",
+    "  if($('stepGrid'))$('stepGrid').style.display='';if($('boundView'))$('boundView').style.display='none';",
+    "  renderCreate(on,bot);",
+    "  renderPair(on,bot,b);",
+    "}",
+    "function refresh(){return fetch('/setup/dingtalk/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(s){render(s);return s;}).catch(function(){})}",
+    "$('retry').onclick=function(){autoScan=false;startScan();};",
+    "$('regenPair').onclick=function(){autoBind=false;startBind();};",
+    "var unbindArmed=false,unbindTimer=null;",
+    "$('unbind').onclick=function(){",
+    "  var btn=$('unbind');",
+    "  if(!unbindArmed){",
+    "    unbindArmed=true;btn.textContent='再次点击确认清除';",
+    "    unbindTimer=setTimeout(function(){unbindArmed=false;btn.textContent='解绑并清除配置';},4000);",
+    "    return;",
+    "  }",
+    "  clearTimeout(unbindTimer);unbindArmed=false;btn.disabled=true;btn.textContent='正在清除…';",
+    "  post('/setup/dingtalk/bind/reset').then(function(){return refresh();}).catch(function(err){setText('unbindHint','解绑失败：'+(err&&err.message||'未知错误'));btn.disabled=false;btn.textContent='解绑并清除配置';});",
+    "};",
+    "$('manualSave').onclick=function(){post('/setup/dingtalk/manual',{clientId:$('manualId').value.trim(),clientSecret:$('manualSecret').value.trim(),robotCode:$('manualRobot').value.trim()}).then(function(){refresh()}).catch(function(err){setText('diag','保存失败：'+(err&&err.message||'未知错误'));});};",
+    "refresh().then(function(s){var bot=(s&&s.bot)||{},on=(s&&s.onboarding)||{};if(!bot.configured&&on.state==='idle'){startScan();}});",
+    "setInterval(refresh,2000);",
+    "})();</script>",
+  ].join("");
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent · 钉钉机器人绑定</title><style>" + STYLE + "</style></head><body>",
+    "<h1>钉钉机器人绑定</h1><div class='sub'>不安装 App，也能在钉钉里接收审批、回复批准或拒绝。</div>",
+    "<div class='grid' id='stepGrid'>",
+    "<div class='card' id='createCard'>",
+    "<div class='step'>第 1 步 · 创建机器人</div>",
+    "<h2 id='createTitle'>创建机器人</h2>",
+    "<p id='createDesc'>用手机钉钉扫码，自动创建应用和机器人。</p>",
+    "<div id='qrWrap' style='display:none;text-align:center'><div class='qr'><img id='qr' alt='dingtalk qr' width='240' height='240' /></div></div>",
+    "<p id='createHint' style='min-height:0;color:#8b97bd'></p>",
+    "<p id='diag' style='min-height:0;color:#6f7ca0;font-size:11px;word-break:break-all'></p>",
+    "<div class='ips'><button class='ip' id='retry' type='button' style='display:none'>重新生成二维码</button></div>",
+    "<details id='manualDetails' style='margin-top:14px;width:100%'>",
+    "<summary style='cursor:pointer;color:#8b97bd;font-size:12px'>扫码创建失败？手动填写已有应用</summary>",
+    "<p style='font-size:12px;color:#8b97bd;text-align:left'>在开发者后台创建应用 + 机器人(Stream) 并发布后，把 Client ID / Client Secret 填到这里。</p>",
+    "<input id='manualId' placeholder='Client ID' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<input id='manualSecret' placeholder='Client Secret' type='password' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<input id='manualRobot' placeholder='robotCode（可选）' style='width:100%;box-sizing:border-box;margin:4px 0;padding:8px;border-radius:8px;border:1px solid #263054;background:#0d1326;color:#e7ecff;font:inherit' />",
+    "<button class='ip' id='manualSave' type='button' style='margin-top:6px'>保存并连接</button>",
+    "</details>",
+    "</div>",
+    "<div class='card'>",
+    "<div class='step b'>第 2 步 · 配对</div>",
+    "<h2 id='pairTitle'>配对</h2>",
+    "<p id='pairDesc'>先完成左侧的「创建机器人」。</p>",
+    "<div id='codeWrap' style='display:none;text-align:center'>",
+    "<div id='codeBox' style='font:700 34px/1.2 ui-monospace,Menlo,monospace;letter-spacing:8px;color:#e7ecff;background:#0d1326;border:1px solid #263054;border-radius:12px;padding:14px 10px;margin:10px 0'>------</div>",
+    "</div>",
+    "<div id='bindInfo' style='display:none'>",
+    "<p id='bindAccount' style='min-height:0;color:#c7d4f4'></p>",
+    "<p id='bindConn' style='min-height:0;color:#8b97bd'></p>",
+    "</div>",
+    "<p id='pairHint' style='min-height:0;color:#8b97bd'></p>",
+    "<div class='ips'>",
+    "<button class='ip' id='regenPair' type='button' style='display:none'>重新生成配对码</button>",
+    "</div>",
+    "</div>",
+    "</div>",
+    "<div class='card status-card' id='boundView' style='display:none'>",
+    "<h2>✅ 已绑定</h2>",
+    "<p style='color:#8b97bd;line-height:1.8'>审批会推送到这个钉钉会话。</p>",
+    "<p style='color:#c7d4f4'>应用：<b>已创建</b></p>",
+    "<p style='color:#c7d4f4'>绑定账号：<b id='boundAccount'>—</b></p>",
+    "<p style='color:#c7d4f4'>钉钉连接：<b id='boundConn'>—</b></p>",
+    "<button class='ip' id='unbind' type='button'>解绑并清除配置</button>",
+    "<p id='unbindHint' style='color:#8b97bd;font-size:11px'>解绑会同时清除本机的 Client ID/Secret，之后需要重新扫码创建。</p>",
+    "</div>",
+    "<div class='panel' style='max-width:840px;width:100%;text-align:left'>",
+    "<h2 style='margin-top:0'>操作说明</h2>",
+    "<h3 style='font-size:13px;color:#e7ecff'>创建机器人</h3>",
+    "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>在钉钉里创建一个企业内部应用和机器人，用来接收审批消息。用手机钉钉扫码，按提示确认创建即可。若一直失败，可展开左侧「手动填写已有应用」，粘贴 Client ID / Client Secret。</p>",
+    "<h3 style='font-size:13px;color:#e7ecff'>配对</h3>",
+    "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>打开钉钉，找到机器人，直接发送左侧显示的 6 位配对码。配对码 5 分钟内有效，连续发错 5 次会失效；只绑定第一个发送正确配对码的账号。</p>",
+    "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收到审批时：回复「A A3F2」表示同意，回复「D A3F2」表示拒绝（A3F2 是审批消息里的短码）。</p>",
+    "<h3 style='font-size:13px;color:#e7ecff'>常见问题</h3>",
+    "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收不到审批：检查电脑是否开机、mo-agent 是否运行、钉钉是否免打扰、绑定账号是否当前登录账号。解绑后需要重新配对。</p>",
+    "</div>",
+    script,
+  ].join("");
+  html(res, 200, page);
 }
 
 function summarize(results, action, thrown) {
