@@ -6,7 +6,7 @@ import path from "node:path";
 import { skillCommand } from "./commands/skill.mjs";
 import { SKILL_MD, SKILL_NAME } from "./lib/skill-content.mjs";
 
-function run(args, options = {}) {
+async function run(args, options = {}) {
   const lines = [];
   const original = process.stdout.write.bind(process.stdout);
   process.stdout.write = (chunk) => {
@@ -14,7 +14,8 @@ function run(args, options = {}) {
     return true;
   };
   try {
-    return { code: skillCommand({ cwd: process.cwd() }, { positional: args, options }), out: lines.join("") };
+    const code = await skillCommand({ cwd: process.cwd() }, { positional: args, options });
+    return { code, out: lines.join("") };
   } finally {
     process.stdout.write = original;
   }
@@ -24,50 +25,50 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mo-skill-"));
 }
 
-test("安装到指定目录并写入 SKILL.md", () => {
+test("安装到指定目录并写入 SKILL.md", async () => {
   const dir = tmpDir();
-  const result = run(["install"], { target: [dir] });
+  const result = await run(["install"], { target: [dir] });
   assert.equal(result.code, 0);
   const file = path.join(dir, SKILL_NAME, "SKILL.md");
   assert.equal(fs.readFileSync(file, "utf8"), SKILL_MD);
 });
 
-test("重复安装是幂等的", () => {
+test("重复安装是幂等的", async () => {
   const dir = tmpDir();
-  run(["install"], { target: [dir] });
-  run(["install"], { target: [dir] });
+  await run(["install"], { target: [dir] });
+  await run(["install"], { target: [dir] });
   const files = fs.readdirSync(path.join(dir, SKILL_NAME));
   assert.deepEqual(files, ["SKILL.md"]);
 });
 
-test("卸载只删自己的目录", () => {
+test("卸载只删自己的目录", async () => {
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, "other-skill"), { recursive: true });
-  run(["install"], { target: [dir] });
-  run(["uninstall"], { target: [dir] });
+  await run(["install"], { target: [dir] });
+  await run(["uninstall"], { target: [dir] });
   assert.equal(fs.existsSync(path.join(dir, SKILL_NAME)), false);
   assert.equal(fs.existsSync(path.join(dir, "other-skill")), true);
 });
 
-test("未知目标报 E_USAGE", () => {
-  assert.throws(
+test("未知目标报 E_USAGE", async () => {
+  await assert.rejects(
     () => run(["install"], { target: ["not-a-target"] }),
     (error) => error.code === "E_USAGE",
   );
 });
 
-test("内置内容包含技能名与铁律", () => {
+test("内置内容包含技能名与铁律", async () => {
   assert.match(SKILL_MD, /^---\nname: mo/);
   assert.match(SKILL_MD, /没确认不派单/);
 });
-test("默认目标包含 ~/.agents，且只加已存在的 Agent 目录", () => {
+test("默认目标包含 ~/.agents，且只加已存在的 Agent 目录", async () => {
   const fakeHome = tmpDir();
   fs.mkdirSync(path.join(fakeHome, ".claude"), { recursive: true });
   const before = { home: process.env.HOME, dsh: process.env.DSH_HOME };
   process.env.HOME = fakeHome;
   delete process.env.DSH_HOME;
   try {
-    const result = run(["list"]);
+    const result = await run(["list"]);
     assert.match(result.out, /agents/);
     assert.match(result.out, /\.claude/);
     assert.doesNotMatch(result.out, /\.dsh/);

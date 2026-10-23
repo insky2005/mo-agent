@@ -15,8 +15,8 @@ UNINSTALL=0
 
 TARGETS=()
 [ -n "${MO_SKILL_DIR:-}" ] && TARGETS+=("$MO_SKILL_DIR")
-TARGETS+=("$HOME/.agents/skills")                        # 通用位置，总是装
-TARGETS+=("${DSH_HOME:-$HOME/.dsh}/skills" "$HOME/.claude/skills")  # 已装的 Agent
+TARGETS+=("$HOME/.agents/skills")   # 通用位置，总是装
+TARGETS+=("$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.qoder/skills" "$HOME/.qoder-cn/skills" "$HOME/.qwen/skills")
 
 [ -d "$SRC" ] || { echo "找不到技能源目录：$SRC" >&2; exit 1; }
 

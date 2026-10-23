@@ -218,19 +218,39 @@ npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（�
 把技能装到主 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
 
 ```bash
-mo skill install                 # ~/.agents/skills + 已安装 Agent 的目录
+mo skill install                 # 交互选择装到哪些 Agent
+mo skill install --yes           # 不问，直接用默认（通用位置 + 已装的 Agent）
 mo skill list                    # 看每个目标装没装
 mo skill uninstall
-mo skill install --target agents # 只装通用位置
-mo skill install --target claude # 只装某个 Agent
+mo skill install --target claude # 只装某个 Agent，不提问
 mo skill install --target /some/skills
 ```
 
+交互长这样：
+
+```text
+为哪些 Agent 安装 mo 技能？
+
+  1) [x] agents      ~/.agents/skills
+  2) [x] claude      ~/.claude/skills
+  3) [ ] codex       ~/.codex/skills（未安装）
+  4) [x] qwen        ~/.qwen/skills
+
+选择：1,3 收尾 | a 全选可用 | 回车 用默认 | q 取消
+```
+
+非交互环境（管道、CI）会自动走默认，不会卡住。
+
 | 目标 | 路径 | 默认 |
 |---|---|---|
-| `agents` | `~/.agents/skills/mo` | 总是装 |
-| `dsh` | `~/.dsh/skills/mo` | 仅当 `~/.dsh` 存在 |
-| `claude` | `~/.claude/skills/mo` | 仅当 `~/.claude` 存在 |
+| `agents` | `~/.agents/skills/mo` | 总是装（通用位置） |
+| `claude` | `~/.claude/skills/mo` | 目录存在时 |
+| `codex` | `~/.codex/skills/mo` | 目录存在时 |
+| `qodercli` | `~/.qoder/skills/mo` | 目录存在时 |
+| `qoderclicn` | `~/.qoder-cn/skills/mo` | 目录存在时 |
+| `qwen` | `~/.qwen/skills/mo` | 目录存在时 |
+
+`pi` 没有固定的 skills 目录，用 `pi --skill ~/.agents/skills/mo` 指过来即可。
 
 技能内容内联在 CLI 里，所以单文件二进制也能装。还没有 `mo` 时用脚本引导：
 
