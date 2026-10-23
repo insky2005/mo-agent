@@ -43,7 +43,6 @@ docs/
 | [event-contract.md](spec/event-contract.md) | ✅ 生效（M1–M4 已落地） | 事件词汇表、状态语义、映射责任、接入清单 |
 | [dingtalk-bot.md](spec/dingtalk-bot.md) | ✅ 生效 | 钉钉 Stream 通道、消息形态、配置 |
 | [workbench-flow.md](spec/workbench-flow.md) | 🟡 P0 已落地（CLI） | 个人工作台：任务流转、分支、安装 |
-| [cli-cross-platform.md](spec/cli-cross-platform.md) | ⏳ 未实现（方案） | CLI 在 Windows / Linux 上的差距与改造计划 |
 
 ### guides/ — 操作手册
 
@@ -72,6 +71,7 @@ docs/
 | [cleanup-plan.md](plans/cleanup-plan.md) | 已完成（0.2.0 清理） |
 | [desktop-cross-platform.md](plans/desktop-cross-platform.md) | 进行中（Linux / Windows） |
 | [settings-center.md](plans/settings-center.md) | 已实现（设置中心） |
+| [cli-cross-platform.md](plans/cli-cross-platform.md) | ⏳ 未实现：Windows/Linux 差距与改造计划 |
 
 ### research/ — 预研
 

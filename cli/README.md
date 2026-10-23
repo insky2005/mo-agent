@@ -7,7 +7,7 @@
 ## 安装
 
 > **平台**：当前只支持 macOS 与 Linux（POSIX shell）。Windows 的差距与改造计划见
-> [docs/spec/cli-cross-platform.md](../docs/spec/cli-cross-platform.md)，**暂不实现**。
+> [docs/plans/cli-cross-platform.md](../docs/plans/cli-cross-platform.md)，**暂不实现**。
 
 只需要 Node 18+，没有任何第三方依赖。
 

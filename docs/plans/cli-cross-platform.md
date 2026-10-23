@@ -1,6 +1,6 @@
 # CLI 跨平台（Windows / Linux）
 
-状态：**未实现（先落审计与方案）**　日期：2026-10-23　关联：[桌面端跨平台方案](../plans/desktop-cross-platform.md)
+状态：**未实现（先落审计与方案）**　日期：2026-10-23　关联：[桌面端跨平台方案](desktop-cross-platform.md)
 
 ## 0. 结论先行
 
