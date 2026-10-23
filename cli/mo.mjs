@@ -15,6 +15,7 @@ import { runCommand } from "./commands/run.mjs";
 import { doctorCommand } from "./commands/doctor.mjs";
 import { completionCommand, completeCommand } from "./commands/completion.mjs";
 import { agentsCommand } from "./commands/agents.mjs";
+import { skillCommand } from "./commands/skill.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -36,6 +37,7 @@ const HELP = [
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "  mo doctor                            自检",
   "  mo agents                            列出内置执行者模板（--agent claude 等）",
+  "  mo skill install|uninstall|list      给主 Agent 安装 mo 技能",
   "  mo completion bash|zsh               输出补全脚本（eval 即可）",
   "",
   "全局选项：--project <名称|路径>  --json  --help",
@@ -52,6 +54,7 @@ const ROUTES = {
   doctor: doctorCommand,
   completion: completionCommand,
   agents: agentsCommand,
+  skill: skillCommand,
 };
 
 async function main(argv) {

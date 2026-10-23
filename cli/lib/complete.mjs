@@ -21,15 +21,16 @@ const SPEC = {
   run: { subs: [], flags: ["--agent", "--exec", "--timeout"] },
   doctor: { subs: [], flags: ["--json"] },
   agents: { subs: [], flags: ["--json"] },
+  skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "agents", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "agents", "skill", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--agent", "--type", "--days", "--limit",
+  "--background", "--assignee", "--agent", "--type", "--days", "--limit", "--target",
 ]);
 
 function startsWith(prefix) {

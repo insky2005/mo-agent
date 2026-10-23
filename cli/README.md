@@ -218,9 +218,17 @@ npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（�
 把技能装到主 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
 
 ```bash
-bash scripts/install-skill.sh            # ~/.dsh/skills 与 ~/.claude/skills
-bash scripts/install-skill.sh --uninstall
-MO_SKILL_DIR=/some/skills bash scripts/install-skill.sh
+mo skill install                 # 装到 ~/.dsh/skills 与 ~/.claude/skills
+mo skill list                    # 看装没装
+mo skill uninstall
+mo skill install --target dsh    # 只装某一个
+mo skill install --target /some/skills
+```
+
+技能内容内联在 CLI 里，所以单文件二进制也能装。还没有 `mo` 时用脚本引导：
+
+```bash
+bash scripts/install-skill.sh [--uninstall]
 ```
 
 技能内容见 [skills/mo/SKILL.md](../skills/mo/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、六条铁律。
