@@ -63,10 +63,10 @@ alias mo='node /绝对路径/mo-agent/cli/mo.mjs'
 **先看效果（不花钱、不调模型）**
 
 ```bash
-bash cli/demo.sh
+bash cli/demo/run.sh
 ```
 
-在临时目录里自动跑四个场景。想在自己的目录里一步步做，按 [DEMO.md](DEMO.md) —— 那是一份带预期输出和通过标准的手动测试用例。
+在临时目录里自动跑四个场景。想在自己的目录里一步步做，按 [demo/README.md](demo/README.md) —— 那是一份带预期输出和通过标准的手动测试用例。
 
 四个场景，全部本地、不联网、不花钱：
 
@@ -95,7 +95,7 @@ mo project add .          # 认领项目，写 .mo-agent/project.json
 | Codex | `codex exec -s workspace-write -` | 需先登录；`-s` 决定能不能写文件 |
 | 自己的脚本 | `node scripts/run-task.mjs` | 最可控 |
 | 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
-| 先演示 | `node executor.mjs`（见 `cli/demo.sh`） | 不花钱 |
+| 先演示 | `node /…/cli/demo/executor.mjs` | 仓库自带的假执行者，不花钱 |
 
 **执行者能不能用，先手动验一次**：
 

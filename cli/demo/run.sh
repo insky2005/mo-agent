@@ -9,7 +9,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
 MO="$ROOT/cli/mo.mjs"
 TMP="$(mktemp -d)"
 export MO_AGENT_HOME="$TMP/home"

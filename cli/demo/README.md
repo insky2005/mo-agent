@@ -62,7 +62,7 @@ mo task create \
   --title "生成 demo-output.txt" \
   --deliverable "demo-output.txt 存在且非空" \
   --verify "check:demo-output.txt 存在" \
-  --exec "node $REPO/cli/demo-executor.mjs"
+  --exec "node $REPO/cli/demo/executor.mjs"
 ```
 
 **预期**：状态 `draft`，给出任务卡路径。
@@ -72,7 +72,7 @@ mo task create \
 ```bash
 grep -E '^(status|exec):' .mo-agent/tasks/*.md
 # status: draft
-# exec: node /…/cli/demo-executor.mjs
+# exec: node /…/cli/demo/executor.mjs
 ```
 
 ## 3. 确认
@@ -102,7 +102,7 @@ mo task dispatch "$TASK"
 
 ```
 t_01M5… → done
-执行者: node /…/cli/demo-executor.mjs
+执行者: node /…/cli/demo/executor.mjs
 验收: unverified
 结论: 演示执行者：已按卡交付
 回执: /tmp/mo-case/.mo-agent/receipts/t_01M5….json
@@ -160,7 +160,7 @@ mo task dispatch "$TASK3"
 ## 8. 重试：换一个执行者
 
 ```bash
-mo task dispatch "$TASK2" --exec "node $REPO/cli/demo-executor.mjs"
+mo task dispatch "$TASK2" --exec "node $REPO/cli/demo/executor.mjs"
 ```
 
 **预期**：`→ done`，账本里 TASK2 的时间线变成：
@@ -206,4 +206,4 @@ cd /tmp && rm -rf /tmp/mo-case
 
 八条全过，说明 CLI 的闭环是通的。
 
-> 想一键看同样的流程：`bash cli/demo.sh`。它会自建临时目录、自动跑完四个场景。
+> 想一键看同样的流程：`bash cli/demo/run.sh`。它会自建临时目录、自动跑完四个场景。
