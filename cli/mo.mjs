@@ -51,14 +51,14 @@ async function main(argv) {
   const args = parseArgs(argv);
   const group = args.positional[0];
 
-  if (!group || group === "help" || group === "--help" || args.options.help) {
-    process.stdout.write(HELP + "\n");
-    return 0;
-  }
-  if (group === "--version" || group === "version") {
+  if (args.options.version || group === "version" || group === "--version") {
     const { createRequire } = await import("node:module");
     const require = createRequire(import.meta.url);
-    process.stdout.write(require("../../package.json").version + "\n");
+    process.stdout.write(require("../package.json").version + "\n");
+    return 0;
+  }
+  if (!group || group === "help" || group === "--help" || args.options.help) {
+    process.stdout.write(HELP + "\n");
     return 0;
   }
 

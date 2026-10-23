@@ -6,11 +6,71 @@
 
 ## 安装
 
+只需要 Node 18+，没有任何第三方依赖。
+
+**方式一：安装脚本（推荐）**
+
 ```bash
-npm link          # 之后可以直接用 mo
-# 或
-node cli/mo.mjs --help
+bash cli/install.sh              # 软链到 ~/.local/bin（无权限则 /usr/local/bin）
+bash cli/install.sh --uninstall  # 卸载
+MO_BIN_DIR=/opt/bin bash cli/install.sh   # 指定目录
 ```
+
+脚本只做一件事：把 `cli/mo.mjs` 软链成 PATH 里的 `mo`，然后跑一次 `mo doctor`。
+
+**方式二：npm link**
+
+```bash
+npm link            # 全局命令 mo
+npm unlink -g mo-agent
+```
+
+**方式三：不安装，用别名**
+
+```bash
+alias mo='node /绝对路径/mo-agent/cli/mo.mjs'
+```
+
+**先看效果（不花钱、不调模型）**
+
+```bash
+bash cli/demo.sh
+```
+
+在临时目录里跑完 建卡 → 确认 → 派单 → done → 账本，用假执行者。
+
+## 第一次使用
+
+```bash
+mo doctor                 # 自检：node / home / 项目
+cd ~/c/work/your-project
+mo project add .          # 认领项目，写 .mo-agent/project.json
+```
+
+然后建第一张卡。`--exec` 是执行者命令，**它从 stdin 读任务卡**：
+
+| 执行者 | `--exec` 写法 |
+|---|---|
+| Claude Code | `claude -p "$(cat)"` |
+| Codex | `codex exec -` |
+| 自己的脚本 | `node scripts/run-task.mjs` |
+| 先演示 | `node executor.mjs`（见 `cli/demo.sh`） |
+
+```bash
+mo task create \
+  --title "给面板加筛选" \
+  --deliverable "app/web/tasks.html 有筛选栏" \
+  --verify "run:npm test -- --filter tasks" \
+  --verify "human:视觉确认" \
+  --exec 'claude -p "$(cat)"'
+```
+
+```bash
+mo task confirm <id>      # 人确认
+mo task dispatch <id>     # 派单，等回执
+```
+
+注意：Claude / Codex 默认可能需要确认文件写入权限，按各家方式开启（例如 Claude 的 `--permission-mode`）。**权限由你决定，mo 不替你放行。**
 
 ## 命令
 
