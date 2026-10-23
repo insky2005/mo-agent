@@ -35,7 +35,7 @@ MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 
 写 rc 前会备份为 `*.mo-agent.bak-<时间>`；最后跑一次 `mo doctor`。
 
-装完会打印一行**当前终端立刻生效**的命令，复制执行即可，不用重开终端：
+装完会打印一段**当前终端执行即可启用补全**的脚本（不用重开终端）：
 
 ```bash
 hash -r 2>/dev/null; eval "$(mo completion zsh)"

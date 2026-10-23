@@ -225,7 +225,7 @@ if [ "$IN_PATH" = "0" ]; then
 fi
 
 if [ -n "$SHELL_NAME" ]; then
-  printf '当前终端立刻启用补全（无需重开）：\n  hash -r 2>/dev/null; eval "$(%s completion %s)"\n\n' "$INSTALLED" "$SHELL_NAME"
+  printf '当前终端执行以下脚本启用补全：\n  hash -r 2>/dev/null; eval "$(%s completion %s)"\n\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
 echo "下一步：cd 到你的项目，执行 mo project add ."
