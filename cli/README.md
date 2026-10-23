@@ -256,13 +256,14 @@ mo skill install --target /some/skills
 | 目标 | 路径 | 默认 |
 |---|---|---|
 | `agents` | `~/.agents/skills/mo` | 总是装（通用位置） |
+| `pi` | `~/.agents/skills/mo` | 同上；pi 用 `--skill` 指向它 |
 | `claude` | `~/.claude/skills/mo` | 目录存在时 |
 | `codex` | `~/.codex/skills/mo` | 目录存在时 |
 | `qodercli` | `~/.qoder/skills/mo` | 目录存在时 |
 | `qoderclicn` | `~/.qoder-cn/skills/mo` | 目录存在时 |
 | `qwen` | `~/.qwen/skills/mo` | 目录存在时 |
 
-`pi` 没有固定的 skills 目录，用 `pi --skill ~/.agents/skills/mo` 指过来即可。
+`pi` 没有固定的 skills 目录，所以和 `agents` 共用同一个位置；`pi --skill ~/.agents/skills/mo` 指过来即可。
 
 ### 用 skills CLI 安装
 

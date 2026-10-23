@@ -33,18 +33,19 @@ function home() {
  * pi 没有固定的 skills 目录，用 `pi --skill <path>` 指过来。
  */
 export const AGENT_TARGETS = {
-  agents: ".agents/skills",
-  claude: ".claude/skills",
-  codex: ".codex/skills",
-  qodercli: ".qoder/skills",
-  qoderclicn: ".qoder-cn/skills",
-  qwen: ".qwen/skills",
+  agents: { path: ".agents/skills", note: "通用位置" },
+  pi: { path: ".agents/skills", note: "pi 没有固定目录，用 --skill 指向这里" },
+  claude: { path: ".claude/skills" },
+  codex: { path: ".codex/skills" },
+  qodercli: { path: ".qoder/skills" },
+  qoderclicn: { path: ".qoder-cn/skills" },
+  qwen: { path: ".qwen/skills" },
 };
 
 export function resolveTargets(names) {
   const defaults = {};
-  for (const [name, relative] of Object.entries(AGENT_TARGETS)) {
-    defaults[name] = path.join(home(), relative);
+  for (const [name, target] of Object.entries(AGENT_TARGETS)) {
+    defaults[name] = { dir: path.join(home(), target.path), note: target.note || "" };
   }
 
   let requested = names;
@@ -52,14 +53,19 @@ export function resolveTargets(names) {
     // 默认：通用位置 + 已经装了配置目录的 Agent
     requested = Object.keys(defaults).filter((name) => {
       if (name === "agents") return true;
-      return isDir(path.dirname(defaults[name]));
+      if (name === "pi") return false; // 与 agents 同一目录，默认不重复
+      return isDir(path.dirname(defaults[name].dir));
     });
   }
 
   const out = [];
+  const seen = new Set();
   for (const name of requested) {
     if (defaults[name]) {
-      out.push({ name, dir: defaults[name] });
+      const { dir, note } = defaults[name];
+      if (seen.has(dir)) continue; // 同一目录（agents / pi）只装一次
+      seen.add(dir);
+      out.push({ name, dir, note });
     } else if (path.isAbsolute(name) || name.startsWith(".")) {
       out.push({ name, dir: path.resolve(process.cwd(), name) });
     } else {
@@ -72,12 +78,13 @@ export function resolveTargets(names) {
 }
 
 export function allTargets() {
-  return Object.entries(AGENT_TARGETS).map(([name, relative]) => {
-    const dir = path.join(home(), relative);
+  return Object.entries(AGENT_TARGETS).map(([name, target]) => {
+    const dir = path.join(home(), target.path);
     return {
       name,
       dir,
-      available: name === "agents" || isDir(path.dirname(dir)),
+      note: target.note || "",
+      available: name === "agents" || name === "pi" || isDir(path.dirname(dir)),
       installed: fs.existsSync(path.join(dir, SKILL_NAME, "SKILL.md")),
     };
   });
@@ -120,12 +127,23 @@ export async function skillCommand(ctx, args) {
   const targets = resolveTargets(all(args.options, "target"));
 
   if (sub === "list") {
-    const rows = targets.map(({ name, dir }) => {
-      const installed = fs.existsSync(path.join(dir, SKILL_NAME, "SKILL.md"));
-      return [name, installed ? "✓" : "✗", path.join(dir, SKILL_NAME)];
+    const listed = all(args.options, "target").length ? targets : allTargets();
+    const rows = listed.map((target) => {
+      const installed = fs.existsSync(path.join(target.dir, SKILL_NAME, "SKILL.md"));
+      return [target.name, installed ? "✓" : "✗", path.join(target.dir, SKILL_NAME), target.note || ""];
     });
-    emit(args.options, { targets: targets.map((t) => ({ ...t, installed: fs.existsSync(path.join(t.dir, SKILL_NAME, "SKILL.md")) })) },
-      () => table(rows, ["目标", "已装", "路径"]) + "\n\n安装：mo skill install（交互选择）或 --target <名称|目录> --yes");
+    emit(
+      args.options,
+      {
+        targets: listed.map((target) => ({
+          ...target,
+          installed: fs.existsSync(path.join(target.dir, SKILL_NAME, "SKILL.md")),
+        })),
+      },
+      () =>
+        table(rows, ["目标", "已装", "路径", "说明"]).replace(/[ \t]+$/gm, "")
+        + "\n\n安装：mo skill install（交互选择）或 --target <名称|目录> --yes",
+    );
     return 0;
   }
 
@@ -139,7 +157,10 @@ export async function skillCommand(ctx, args) {
       }
     }
     const written = [];
+    const done = new Set();
     for (const { name, dir } of chosen) {
+      if (done.has(dir)) continue; // agents 与 pi 共用同一目录
+      done.add(dir);
       const dest = path.join(dir, SKILL_NAME, "SKILL.md");
       try {
         fs.mkdirSync(path.dirname(dest), { recursive: true });

@@ -70,6 +70,7 @@ test("默认目标包含 ~/.agents，且只加已存在的 Agent 目录", async 
   try {
     const result = await run(["list"]);
     assert.match(result.out, /agents/);
+    assert.match(result.out, /pi/); // 与 agents 共用目录，但要在列表里可见
     assert.match(result.out, /\.claude/);
     assert.doesNotMatch(result.out, /\.dsh/);
   } finally {
