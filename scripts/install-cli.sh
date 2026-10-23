@@ -80,14 +80,14 @@ install_block() {
   local rc
   rc="$(rc_for "$shell")"
   if [ -z "$rc" ]; then
-    echo "未识别的 shell：$shell（跳过补全；可用 --completion zsh|bash 指定）"
+    echo "未识别的 shell：${shell}（跳过补全；可用 --completion zsh|bash 指定）"
     return 0
   fi
   [ -f "$rc" ] || touch "$rc"
   cp "$rc" "$rc.mo-agent.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
   strip_block "$rc"
   block_body "$bin" "$shell" >> "$rc"
-  echo "补全已写入：$rc（$shell）"
+  echo "补全已写入：${rc}（${shell}）"
 }
 
 uninstall_all() {

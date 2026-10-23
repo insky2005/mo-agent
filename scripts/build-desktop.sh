@@ -78,7 +78,7 @@ if [ -f "$APK" ]; then
     cp "app/android/app/build/outputs/apk/debug/version.json" "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug/version.json"
   fi
 else
-  echo "[build] 警告：未找到 $APK，分发包将无法扫码安装；先跑 ./scripts/build-android.sh" >&2
+  echo "[build] 警告：未找到 ${APK}，分发包将无法扫码安装；先跑 ./scripts/build-android.sh" >&2
 fi
 
 # ---- 语音资源：录音器 + 静态 whisper + 模型，直接进包 ----
