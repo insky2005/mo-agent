@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 安装 mo CLI：把一个 mo 软链放到 PATH 里的目录。
-#   bash cli/install.sh                  # 自动选 ~/.local/bin 或 /usr/local/bin
-#   bash cli/install.sh --uninstall      # 移除
-#   MO_BIN_DIR=/some/dir bash cli/install.sh
+#   bash scripts/install-cli.sh                  # 自动选 ~/.local/bin 或 /usr/local/bin
+#   bash scripts/install-cli.sh --uninstall      # 移除
+#   MO_BIN_DIR=/some/dir bash scripts/install-cli.sh
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

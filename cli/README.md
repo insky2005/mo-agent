@@ -11,9 +11,9 @@
 **方式一：安装脚本（推荐）**
 
 ```bash
-bash cli/install.sh              # 软链到 ~/.local/bin（无权限则 /usr/local/bin）
-bash cli/install.sh --uninstall  # 卸载
-MO_BIN_DIR=/opt/bin bash cli/install.sh   # 指定目录
+bash scripts/install-cli.sh              # 软链到 ~/.local/bin（无权限则 /usr/local/bin）
+bash scripts/install-cli.sh --uninstall  # 卸载
+MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定目录
 ```
 
 脚本只做一件事：把 `cli/mo.mjs` 软链成 PATH 里的 `mo`，然后跑一次 `mo doctor`。
@@ -34,7 +34,7 @@ alias mo='node /绝对路径/mo-agent/cli/mo.mjs'
 **先看效果（不花钱、不调模型）**
 
 ```bash
-bash cli/demo.sh
+bash scripts/demo-cli.sh
 ```
 
 在临时目录里跑完 建卡 → 确认 → 派单 → done → 账本，用假执行者。
@@ -54,7 +54,7 @@ mo project add .          # 认领项目，写 .mo-agent/project.json
 | Claude Code | `claude -p "$(cat)"` |
 | Codex | `codex exec -` |
 | 自己的脚本 | `node scripts/run-task.mjs` |
-| 先演示 | `node executor.mjs`（见 `cli/demo.sh`） |
+| 先演示 | `node executor.mjs`（见 `scripts/demo-cli.sh`） |
 
 ```bash
 mo task create \
