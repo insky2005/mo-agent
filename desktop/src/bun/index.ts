@@ -421,22 +421,6 @@ function createPanel(url: string = PANEL_URL): void {
   }
 }
 
-/** 第二次打开 .app 时，把已经存在的设置窗口直接拉到前台。 */
-function focusPanel(): boolean {
-  if (!panel) return false;
-  const current = panel;
-  try {
-    current.show();
-    current.activate();
-    focusPanelWebview(current);
-    return true;
-  } catch (error) {
-    logLine("聚焦设置窗口失败: " + error);
-    if (panel === current) panel = null;
-    return false;
-  }
-}
-
 async function openPanel(url: string = PANEL_URL): Promise<void> {
   const ready = await ensureHost();
   if (!ready) {
@@ -1583,10 +1567,9 @@ const singleInstance = createSingleInstance({
   requestPath: SINGLE_INSTANCE_REQUEST,
   log: logLine,
   onLaunch: () => {
-    // 第二次双击 .app：把已有的设置窗口直接拉到前台；窗口已关就补开一个。
-    logLine("检测到再次启动，打开设置窗口");
-    if (focusPanel()) return;
-    void openPanel().catch((error) => logLine("再次启动时打开设置失败: " + error));
+    // 第二次双击 .app：把已有的监控屏直接拉到前台；窗口已关就补开一个。
+    logLine("检测到再次启动，打开监控屏");
+    void openMonitor().catch((error) => logLine("再次启动时打开监控屏失败: " + error));
   },
 });
 
@@ -1598,9 +1581,8 @@ async function startShell(): Promise<void> {
   // Electrobun 的 reopen 回调会强制把 Dock 图标显示出来，这里立刻收回去。
   app.on("reopen", () => {
     try { Utils.setDockIconVisible(false); } catch (error) { /* 非 macOS */ }
-    logLine("收到 reopen，打开设置窗口");
-    if (focusPanel()) return;
-    void openPanel().catch((error) => logLine("reopen 时打开设置失败: " + error));
+    logLine("收到 reopen，打开监控屏");
+    void openMonitor().catch((error) => logLine("reopen 时打开监控屏失败: " + error));
   });
   setupApplicationMenu();
   ensureCarbonHotkey();
@@ -1652,18 +1634,17 @@ async function startShell(): Promise<void> {
 
   const ready = await ensureHost();
   logLine(ready ? "服务已就绪: " + PANEL_URL : "服务启动失败（详见 " + LOG_DIR + "）");
-  // 启动后默认打开「设置（安装与配对）」面板。
-  // 如果启动过程中已经有第二次启动提前打开了窗口，就只聚焦，不重建。
+  // 启动后默认打开实时监控屏。openMonitor 会聚焦已有窗口，不会重复创建。
   if (ready) {
-    if (!focusPanel()) await openPanel();
-    // 启动时设置窗口在前；浮层等设置窗口关闭后由 close 事件显示。
+    await openMonitor();
+    // 监控屏在前时浮层收起；监控屏关闭后由 close 事件恢复。
     await syncVoiceOverlay();
   }
 }
 
 singleInstance.claim().then(async (primary) => {
   if (!primary) {
-    logLine("已有 mo-agent 实例在运行，已请求它打开设置窗口，本次启动退出");
+    logLine("已有 mo-agent 实例在运行，已请求它打开监控屏，本次启动退出");
     process.exit(0);
   }
   await startShell();

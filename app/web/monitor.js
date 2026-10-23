@@ -97,7 +97,11 @@
     dtFail: $("dtFail"),
     dtDir: $("dtDir"),
     dtTop: $("dtTop"),
-    dtRecent: $("dtRecent"),
+    dtDetailBtn: $("dtDetailBtn"),
+    dtScrim: $("dtScrim"),
+    dtDrawer: $("dtDrawer"),
+    dtDrawerBody: $("dtDrawerBody"),
+    btnDtDrawerClose: $("btnDtDrawerClose"),
     scrim: $("scrim"),
     drawer: $("drawer"),
     drawerTitle: $("drawerTitle"),
@@ -394,6 +398,25 @@
     if (!state.paused) renderAll();
   }
 
+  /**
+   * 轻量刷新：SSE 正常时只更新钉钉、进程、数据源这类快照字段，
+   * 不动会话列表/事件列表，避免定时轮询把用户的滚动位置顶回顶部。
+   */
+  function applyLightSnapshot(data) {
+    if (!data || !data.ok) return;
+    state.processes = data.processes || [];
+    state.clients = Number(data.clients) || 0;
+    state.monitor = data.monitor || null;
+    state.dingtalk = data.dingtalk || null;
+    state.startedAt = Number(data.startedAt) || state.startedAt;
+    setSources(data.sources, data.sourceErrors);
+    if (state.paused) return;
+    renderSources();
+    renderDingtalk();
+    if (dom.dtDrawer && !dom.dtDrawer.classList.contains("hidden")) renderDtDrawer();
+    renderFooter();
+  }
+
   function handleEvent(event) {
     if (!event || typeof event.type !== "string") return;
     if (typeof event.seq === "number" && event.seq > state.seq) state.seq = event.seq;
@@ -678,6 +701,19 @@
     }
   }
 
+  function dingtalkState(data) {
+    if (!data || !data.configured) return { text: "未配置", cls: "off" };
+    var binding = data.binding || {};
+    if (binding.state === "pending_confirm") return { text: "待确认", cls: "warn" };
+    if (binding.state === "waiting") return { text: "待绑定", cls: "warn" };
+    if (data.connected && binding.state === "bound") return { text: "已连接", cls: "ok" };
+    if (data.status === "reconnecting") return { text: "重连中", cls: "warn" };
+    // 刚启动时 Stream 还在 connect，status 是 connecting，不能直接显示“已断开”。
+    if (data.status === "connecting" || data.connected) return { text: "连接中", cls: "warn" };
+    if (data.status === "stopped") return { text: "已停止", cls: "off" };
+    return { text: "已断开", cls: "bad" };
+  }
+
   function renderDingtalk() {
     var data = state.dingtalk;
     if (!dom.dtState) return;
@@ -693,7 +729,6 @@
       dom.dtFail.textContent = "0 / 0";
       dom.dtDir.textContent = "0 / 0";
       dom.dtTop.textContent = "—";
-      dom.dtRecent.textContent = "—";
       return;
     }
 
@@ -701,18 +736,9 @@
     var usage = data.usage || {};
     var local = usage.local || {};
     var bill = usage.billable || {};
-    var stateText = "未配置";
-    var stateClass = "off";
-    if (data.configured) {
-      if (binding.state === "pending_confirm") { stateText = "待确认"; stateClass = "warn"; }
-      else if (binding.state === "waiting") { stateText = "待绑定"; stateClass = "warn"; }
-      else if (data.connected && binding.state === "bound") { stateText = "已连接"; stateClass = "ok"; }
-      else if (data.status === "reconnecting") { stateText = "重连中"; stateClass = "warn"; }
-      else if (data.connected) { stateText = "连接中"; stateClass = "warn"; }
-      else { stateText = "已断开"; stateClass = "bad"; }
-    }
-    dom.dtState.textContent = stateText;
-    dom.dtState.className = "connTag " + stateClass;
+    var stateInfo = dingtalkState(data);
+    dom.dtState.textContent = stateInfo.text;
+    dom.dtState.className = "connTag " + stateInfo.cls;
 
     var bindText = "未绑定";
     if (binding.state === "waiting") bindText = "等待首条消息";
@@ -737,17 +763,152 @@
       ? top.map(function (key) { return key.split("/").pop() + " " + byApi[key]; }).join(" · ")
       : "—";
 
-    var recent = (local.recent || []).slice(0, 6);
-    dom.dtRecent.innerHTML = recent.length
-      ? recent.map(function (item) {
-        return '<div class="recentCall">'
-          + '<span class="' + (item.ok ? "ok" : "bad") + '">' + (item.ok ? "✓" : "✕") + '</span>'
-          + '<span class="api">' + esc(clip(item.api, 28)) + '</span>'
-          + '<span class="ms">' + (item.ms || 0) + 'ms</span>'
-          + '<span class="time">' + clockText(item.at) + '</span>'
-          + '</div>';
-      }).join("")
-      : '<div class="emptyMini">暂无调用</div>';
+  }
+
+  // ---------------------------------------------------------------- 钉钉详情抽屉
+
+  function fmtWhen(ts) {
+    if (!ts) return "—";
+    var date = new Date(Number(ts));
+    if (!Number.isFinite(date.getTime())) return "—";
+    return pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+  }
+
+  function dingtalkAmountSummary(map) {
+    var source = map || {};
+    var keys = Object.keys(source);
+    if (!keys.length) return "—";
+    return keys.sort(function (a, b) { return source[b] - source[a]; })
+      .map(function (key) { return key + " " + fmtNum(source[key]); })
+      .join(" · ");
+  }
+
+  function dingtalkThresholds(thresholds) {
+    var t = thresholds || {};
+    var parts = [];
+    if (Number.isFinite(Number(t.warnAt))) parts.push("告警 " + Math.round(Number(t.warnAt) * 100) + "%");
+    if (Number.isFinite(Number(t.confirmOnlyAt))) parts.push("仅确认 " + Math.round(Number(t.confirmOnlyAt) * 100) + "%");
+    if (Number.isFinite(Number(t.hardStopAt))) parts.push("停止出站 " + Math.round(Number(t.hardStopAt) * 100) + "%");
+    return parts.length ? "阈值：" + parts.join(" · ") : "";
+  }
+
+  function openDtDetail() {
+    if (!dom.dtDrawer) return;
+    if (dom.drawer && !dom.drawer.classList.contains("hidden")) closeDetail();
+    dom.dtDrawer.classList.remove("hidden");
+    dom.dtScrim.classList.remove("hidden");
+    renderDtDrawer();
+  }
+
+  function closeDtDetail() {
+    if (!dom.dtDrawer) return;
+    dom.dtDrawer.classList.add("hidden");
+    dom.dtScrim.classList.add("hidden");
+  }
+
+  /** 通道、绑定、计费、调用明细都放抽屉里，右侧卡片只留摘要。 */
+  function renderDtDrawer() {
+    if (!dom.dtDrawerBody) return;
+    var data = state.dingtalk;
+    if (!data) {
+      dom.dtDrawerBody.innerHTML = '<div class="emptyState">'
+        + '<div class="emptyIcon">◌</div>'
+        + '<div class="emptyTitle">钉钉通道未配置</div>'
+        + '<div class="emptySub">在桌面端完成通道配置后，这里会显示连接、绑定和调用明细。</div>'
+        + '</div>';
+      return;
+    }
+    var info = dingtalkState(data);
+    var binding = data.binding || {};
+    var usage = data.usage || {};
+    var local = usage.local || {};
+    var bill = usage.billable || {};
+    var percent = Number(bill.percent) || 0;
+    var ratio = Math.min(100, Math.round(percent * 100));
+    var parts = [];
+
+    var tags = ['<span class="connTag ' + esc(info.cls) + '">' + esc(info.text) + '</span>'];
+    tags.push('<span class="tag">' + esc(usage.month || "本月") + '</span>');
+    tags.push('<span class="tag">' + (data.enabled ? "已启用" : "已停用") + '</span>');
+    if (data.status) tags.push('<span class="tag">Stream ' + esc(data.status) + '</span>');
+    parts.push('<div class="drawerStatus">' + tags.join("") + '</div>');
+
+    parts.push('<div class="detailGrid">'
+      + detailCell("绑定用户", binding.userId || "未绑定")
+      + detailCell("绑定模式", binding.mode || "—")
+      + detailCell("绑定时间", binding.boundAt ? fmtWhen(binding.boundAt) : "—", binding.boundAt ? new Date(binding.boundAt).toLocaleString() : "")
+      + detailCell("最近入站", data.lastInboundAt ? ago(data.lastInboundAt) : "—", data.lastInboundAt ? new Date(data.lastInboundAt).toLocaleString() : "")
+      + detailCell("最近出站", data.lastOutboundAt ? ago(data.lastOutboundAt) : "—", data.lastOutboundAt ? new Date(data.lastOutboundAt).toLocaleString() : "")
+      + detailCell("最近本地调用", local.lastAt ? ago(local.lastAt) : "—", local.lastAt ? new Date(local.lastAt).toLocaleString() : "")
+      + '</div>');
+
+    if (binding.state === "waiting") {
+      parts.push('<div class="dtHint">待绑定：' + (binding.code ? "绑定码 " + esc(binding.code) : "等待首条消息")
+        + (binding.expiresAt ? "，" + esc(fmtWhen(binding.expiresAt)) + " 前有效" : "") + '</div>');
+    } else if (binding.state === "pending_confirm") {
+      parts.push('<div class="dtHint">待确认绑定：' + esc(binding.pendingNick || "未知用户") + '</div>');
+    }
+    if (data.lastError) parts.push('<div class="dtAlert">最近错误：' + esc(data.lastError) + '</div>');
+    if (usage.quotaExhausted) parts.push('<div class="dtAlert">额度已用尽（' + esc(usage.quotaReason || "quota") + "），出站已停止。</div>");
+
+    var directions = bill.byDirection || {};
+    var thresholds = dingtalkThresholds(usage.thresholds);
+    parts.push('<div class="detailSection"><div class="detailLabel"><span>本月计费额度</span><span>' + ratio + '%</span></div>'
+      + '<div class="usageBar"><i class="' + (percent >= 1 ? "bad" : percent >= 0.8 ? "warn" : "") + '" style="width:' + ratio + '%"></i></div>'
+      + '<div class="detailGrid dtGrid">'
+      + detailCell("计费调用", fmtNum(bill.total || 0))
+      + detailCell("额度上限", fmtNum(bill.limit || 0))
+      + detailCell("使用比例", ratio + "%")
+      + detailCell("今日", fmtNum(bill.today || 0))
+      + detailCell("入站 / 出站", (directions.in || 0) + " / " + (directions.out || 0))
+      + detailCell("失败", fmtNum(bill.failures || 0))
+      + '</div>'
+      + (bill.byKind && Object.keys(bill.byKind).length ? '<div class="dtHint">按类型：' + esc(dingtalkAmountSummary(bill.byKind)) + '</div>' : "")
+      + (thresholds ? '<div class="dtHint">' + esc(thresholds) + '</div>' : "")
+      + '</div>');
+
+    parts.push('<div class="detailSection"><div class="detailLabel"><span>本月本地调用</span><span>共 ' + fmtNum(local.total || 0) + ' 次</span></div>'
+      + '<div class="detailGrid dtGrid">'
+      + detailCell("今日", fmtNum(local.today || 0))
+      + detailCell("成功", fmtNum(local.ok || 0))
+      + detailCell("失败 / 重试", (local.fail || 0) + " / " + (local.retries || 0))
+      + '</div>'
+      + '<div class="dtHint">按类别：' + esc(dingtalkAmountSummary(local.byCategory))
+      + ' · 按来源：' + esc(dingtalkAmountSummary(local.bySource)) + '</div></div>');
+
+    var byApi = local.byApi || {};
+    var apiKeys = Object.keys(byApi)
+      .sort(function (a, b) { return byApi[b] - byApi[a]; })
+      .slice(0, 10);
+    if (apiKeys.length) {
+      var maxCount = byApi[apiKeys[0]] || 1;
+      parts.push('<div class="detailSection"><div class="detailLabel"><span>按接口</span><span>Top ' + apiKeys.length + '</span></div>'
+        + '<div class="dtApiList">' + apiKeys.map(function (key) {
+          return '<div class="dtApiRow"><span class="dtApiName" title="' + esc(key) + '">' + esc(key) + '</span>'
+            + '<span class="dtApiBar"><i style="width:' + Math.max(4, Math.round((byApi[key] / maxCount) * 100)) + '%"></i></span>'
+            + '<b>' + fmtNum(byApi[key]) + '</b></div>';
+        }).join("") + '</div></div>');
+    }
+
+    var recent = (local.recent || []).slice(0, 20);
+    parts.push('<div class="detailSection"><div class="detailLabel"><span>最近调用</span><span>最近 ' + recent.length + ' 条</span></div>'
+      + (recent.length
+        ? '<div class="recentCalls">' + recent.map(function (item) {
+          return '<div class="recentCall dt">'
+            + '<span class="' + (item.ok ? "ok" : "bad") + '">' + (item.ok ? "✓" : "✕") + '</span>'
+            + '<span class="api" title="' + esc(item.api) + '">' + esc(clip(item.api, 48)) + '</span>'
+            + '<span class="cat">' + esc(item.category || "") + '</span>'
+            + '<span class="ms">' + (item.ms || 0) + 'ms</span>'
+            + '<span class="time">' + esc(fmtWhen(item.at)) + '</span>'
+            + '</div>';
+        }).join("") + '</div>'
+        : '<div class="emptyMini">暂无调用</div>')
+      + '</div>');
+
+    parts.push('<div class="footNote">本地调用逐条计；计费以钉钉资源管理为准。</div>');
+    var scrollTop = dom.dtDrawerBody.scrollTop;
+    dom.dtDrawerBody.innerHTML = parts.join("");
+    dom.dtDrawerBody.scrollTop = scrollTop;
   }
 
   function renderAll() {
@@ -756,6 +917,7 @@
     renderSessions();
     renderPending();
     renderDingtalk();
+    if (dom.dtDrawer && !dom.dtDrawer.classList.contains("hidden")) renderDtDrawer();
     renderEvents();
     renderFooter();
     if (state.selected) renderDrawer();
@@ -784,6 +946,7 @@
 
   function openDetail(id) {
     if (!id || !state.sessions.has(id)) return;
+    if (dom.dtDrawer && !dom.dtDrawer.classList.contains("hidden")) closeDtDetail();
     state.selected = id;
     dom.drawer.classList.remove("hidden");
     dom.scrim.classList.remove("hidden");
@@ -898,7 +1061,8 @@
     showBanner("本机鉴权失效：请从菜单栏「打开监控屏」重新进入。", true);
   }
 
-  function loadSnapshot() {
+  function loadSnapshot(options) {
+    var light = !!(options && options.light);
     return fetch("/monitor/state?ts=" + Date.now(), { cache: "no-store" })
       .then(function (res) {
         if (res.status === 401) {
@@ -910,27 +1074,29 @@
       })
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || "bad snapshot");
-        applySnapshot(data);
+        if (light) applyLightSnapshot(data);
+        else applySnapshot(data);
         state.loadFailures = 0;
         hideBanner();
         return data;
       });
   }
 
-  function stopPolling() {
-    if (state.pollTimer) {
-      clearInterval(state.pollTimer);
-      state.pollTimer = null;
-    }
+  /** SSE 只推会话/事件，钉钉连接状态、进程数这类快照字段要定时拉取。 */
+  function snapshotPollMs() {
+    var ms = Number(state.monitor && state.monitor.pollMs);
+    if (!Number.isFinite(ms) || ms < 500) ms = 3000;
+    return Math.min(5000, Math.max(2000, ms));
   }
 
   function startPolling() {
     if (state.pollTimer) return;
     state.pollTimer = setInterval(function () {
-      loadSnapshot().then(function () {
+      // SSE 在线时只补快照类字段；断线时退回整份快照，保证会话也不掉队。
+      loadSnapshot({ light: state.connected }).then(function () {
         if (!state.connected) setConn("轮询中", "connecting");
       }).catch(function () { /* 继续等下一轮 */ });
-    }, 3000);
+    }, snapshotPollMs());
   }
 
   function connect() {
@@ -941,7 +1107,6 @@
     state.stream = stream;
     stream.onopen = function () {
       state.connected = true;
-      stopPolling();
       setConn("已连接", "on");
       hideBanner();
     };
@@ -961,6 +1126,7 @@
   function boot() {
     loadSnapshot().then(function () {
       connect();
+      startPolling();
     }).catch(function (error) {
       if (String(error && error.message) === "unauthorized") return;
       state.loadFailures += 1;
@@ -1024,9 +1190,16 @@
 
   dom.btnDrawerClose.addEventListener("click", closeDetail);
   dom.scrim.addEventListener("click", closeDetail);
+  dom.dtDetailBtn.addEventListener("click", openDtDetail);
+  dom.btnDtDrawerClose.addEventListener("click", closeDtDetail);
+  dom.dtScrim.addEventListener("click", closeDtDetail);
 
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") return;
+    if (dom.dtDrawer && !dom.dtDrawer.classList.contains("hidden")) {
+      closeDtDetail();
+      return;
+    }
     if (!dom.drawer.classList.contains("hidden")) {
       closeDetail();
       return;

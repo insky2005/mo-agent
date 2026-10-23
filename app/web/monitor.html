@@ -97,34 +97,6 @@
         </section>
 
         <aside class="side">
-          <section class="panel pendingPanel">
-            <div class="panelHead">
-              <h2>需要你处理</h2>
-              <span class="count warn" id="pendingCount">0</span>
-            </div>
-            <div class="pendingList" id="pendingList">
-              <div class="emptyMini">没有等待处理的请求</div>
-            </div>
-          </section>
-          <section class="panel dingtalkPanel">
-            <div class="panelHead">
-              <h2>钉钉通道</h2>
-              <span class="connTag" id="dtState">未配置</span>
-            </div>
-            <div class="usageBar"><i id="dtBar"></i></div>
-            <div class="footRow"><span>绑定</span><b id="dtBind">未绑定</b></div>
-            <div class="footRow"><span>本月本地调用</span><b id="dtLocal">0</b></div>
-            <div class="footRow"><span>其中计费</span><b id="dtUsage">0 / 3000</b></div>
-            <div class="footRow"><span>今日</span><b id="dtToday">0</b></div>
-            <div class="footRow"><span>失败 / 重试</span><b id="dtFail">0 / 0</b></div>
-            <div class="footRow"><span>入站 / 出站</span><b id="dtDir">0 / 0</b></div>
-            <div class="footRow"><span>Top 接口</span><b id="dtTop">—</b></div>
-            <details class="usageDetail">
-              <summary>最近调用</summary>
-              <div id="dtRecent" class="recentCalls">—</div>
-            </details>
-            <div class="footNote">本地调用逐条计；计费以钉钉资源管理为准。</div>
-          </section>
           <section class="panel eventsPanel">
             <div class="panelHead">
               <h2>实时事件</h2>
@@ -134,12 +106,56 @@
               <div class="emptyMini">等待事件…</div>
             </div>
           </section>
-          <section class="panel footPanel">
-            <div class="footRow"><span>手机在线</span><b id="clients">0</b></div>
-            <div class="footRow"><span>本机进程</span><b id="processCount">0</b></div>
-            <div class="footRow"><span>数据源</span><b id="sourceCount">0</b></div>
-            <div class="sourceList" id="sources"><div class="emptyMini">无数据源</div></div>
-            <div class="footNote" id="monitorNote">只读监控，不会代替你做决定。</div>
+
+          <section class="panel pendingPanel">
+            <div class="panelHead">
+              <h2>需要你处理</h2>
+              <span class="count warn" id="pendingCount">0</span>
+            </div>
+            <div class="pendingList" id="pendingList">
+              <div class="emptyMini">没有等待处理的请求</div>
+            </div>
+          </section>
+
+          <section class="panel statusPanel">
+            <div class="panelHead">
+              <h2>运行状态</h2>
+              <span class="panelHint">只读</span>
+            </div>
+            <div class="statusBody">
+              <div class="statusGroup">
+                <div class="statusGroupHead">
+                  <span class="groupTitle">钉钉通道</span>
+                  <span class="statusGroupRight">
+                    <span class="connTag" id="dtState">未配置</span>
+                    <button class="miniBtn" id="dtDetailBtn" type="button" title="查看钉钉通道详情">明细</button>
+                  </span>
+                </div>
+                <div class="usageBar"><i id="dtBar"></i></div>
+                <div class="statusGrid">
+                  <div class="statusRow"><span>绑定</span><b id="dtBind">未绑定</b></div>
+                  <div class="statusRow"><span>本月本地调用</span><b id="dtLocal">0</b></div>
+                  <div class="statusRow"><span>其中计费</span><b id="dtUsage">0 / 3000</b></div>
+                  <div class="statusRow"><span>今日</span><b id="dtToday">0</b></div>
+                  <div class="statusRow"><span>失败 / 重试</span><b id="dtFail">0 / 0</b></div>
+                  <div class="statusRow"><span>入站 / 出站</span><b id="dtDir">0 / 0</b></div>
+                  <div class="statusRow wide"><span>Top 接口</span><b id="dtTop">—</b></div>
+                </div>
+              </div>
+
+              <div class="statusGroup">
+                <div class="statusGroupHead">
+                  <span class="groupTitle">本机</span>
+                </div>
+                <div class="statusGrid three">
+                  <div class="statusRow"><span>手机在线</span><b id="clients">0</b></div>
+                  <div class="statusRow"><span>本机进程</span><b id="processCount">0</b></div>
+                  <div class="statusRow"><span>数据源</span><b id="sourceCount">0</b></div>
+                </div>
+                <div class="sourceList" id="sources"><div class="emptyMini">无数据源</div></div>
+                <div class="footNote" id="monitorNote">只读监控，不会代替你做决定。</div>
+              </div>
+            </div>
           </section>
         </aside>
       </div>
@@ -156,6 +172,18 @@
       <button class="iconBtn" id="btnDrawerClose" type="button" aria-label="关闭">×</button>
     </div>
     <div class="drawerBody" id="drawerBody"></div>
+  </aside>
+
+  <div class="scrim hidden" id="dtScrim"></div>
+  <aside class="drawer hidden" id="dtDrawer" aria-label="钉钉通道详情">
+    <div class="drawerHead">
+      <div>
+        <div class="drawerEyebrow">DINGTALK CHANNEL</div>
+        <h2>钉钉通道</h2>
+      </div>
+      <button class="iconBtn" id="btnDtDrawerClose" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="drawerBody" id="dtDrawerBody"></div>
   </aside>
 
   <script src="/monitor.js"></script>
