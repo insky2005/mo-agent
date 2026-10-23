@@ -124,6 +124,11 @@ export function normalizeDingTalkBotConfig(raw, options) {
     events: Object.assign({}, DEFAULT_EVENTS, input.events || {}),
     severityMin: input.severityMin || "critical",
     aggregateMs: Number.isFinite(Number(input.aggregateMs)) ? Number(input.aggregateMs) : 15000,
+    // 授权/提问消息后是否再补发便于复制的短码：
+    //   none   只发主消息（旧行为）
+    //   code   主消息 + 「短码」一条
+    //   actions  主消息 + 「A 短码」+「D 短码」两条
+    copyHints: input.copyHints === "code" || input.copyHints === "actions" ? input.copyHints : "none",
     maxPerMinute: Number.isFinite(Number(input.maxPerMinute)) ? Number(input.maxPerMinute) : 10,
     quietHours: input.quietHours || null,
     usage: {
@@ -170,6 +175,10 @@ export function createDingTalkBot(options) {
   const config = normalizeDingTalkBotConfig(opts.config, opts);
   const now = opts.now || Date.now;
   const broker = opts.broker || null;
+  // 审批决定可能来自 hook（broker）或 DSH 原生待办：由 host 注入统一路由。
+  const decide = typeof opts.decide === "function"
+    ? opts.decide
+    : (id, decision) => (broker && typeof broker.decide === "function" ? broker.decide(id, decision) : false);
   const usage = opts.usage || createUsageStore({
     ...config.usage,
     channel: "dingtalk-bot",
@@ -230,7 +239,7 @@ export function createDingTalkBot(options) {
     }
   }
 
-  function setShortId(eventId, kind) {
+  function setShortId(eventId, kind, meta) {
     if (!eventId) return "";
     for (const [key, value] of shortIds) {
       if (value && value.eventId === eventId) return key;
@@ -238,7 +247,7 @@ export function createDingTalkBot(options) {
     pruneShortIds();
     const used = new Set(shortIds.keys());
     const candidate = shortIdFor(eventId, used);
-    if (candidate) shortIds.set(candidate, { eventId, kind, at: now() });
+    if (candidate) shortIds.set(candidate, Object.assign({ eventId, kind, at: now() }, meta || {}));
     return candidate;
   }
 
@@ -252,7 +261,14 @@ export function createDingTalkBot(options) {
       const candidate = shortIdFor(item.id, used);
       if (!candidate) continue;
       used.add(candidate);
-      shortIds.set(candidate, { eventId: item.id, kind: item.kind || "approval", at: now() });
+      shortIds.set(candidate, {
+        eventId: item.id,
+        kind: item.kind || "approval",
+        at: now(),
+        agentLabel: item.agentLabel || "",
+        sessionTitle: item.sessionTitle || "",
+        title: item.title || "",
+      });
     }
   }
 
@@ -318,12 +334,15 @@ export function createDingTalkBot(options) {
     return { mode: "dm", userId };
   }
 
-  async function postSessionWebhook(webhook, title, text) {
+  async function postSessionWebhook(webhook, title, text, format) {
     const token = await getOapiToken();
+    const payload = format === "text"
+      ? { msgtype: "text", text: { content: text } }
+      : { msgtype: "markdown", markdown: { title: title || "mo-agent", text } };
     const response = await fetchImpl(webhook, {
       method: "POST",
       headers: { "content-type": "application/json", "x-acs-dingtalk-access-token": token },
-      body: JSON.stringify({ msgtype: "markdown", markdown: { title: title || "mo-agent", text } }),
+      body: JSON.stringify(payload),
     }, { api: "robot/sendBySession", category: "stream" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || (data.errcode && data.errcode !== 0)) {
@@ -334,33 +353,36 @@ export function createDingTalkBot(options) {
     return data;
   }
 
-  async function sendViaSession(title, text) {
+  async function sendViaSession(title, text, format) {
     if (!binding || !binding.sessionWebhook) throw new Error("session-webhook-missing");
     if (binding.sessionWebhookExpiredTime && now() > Number(binding.sessionWebhookExpiredTime) - 5000) {
       binding.sessionWebhook = "";
       saveBinding();
       throw new Error("session-webhook-expired");
     }
-    await postSessionWebhook(binding.sessionWebhook, title, text);
+    await postSessionWebhook(binding.sessionWebhook, title, text, format);
   }
 
-  async function sendViaApi(title, text) {
+  async function sendViaApi(title, text, format) {
     const target = bindingTarget();
     if (!target) throw new Error("no-target");
     const robotCode = binding.robotCode || config.robotCode;
     if (!robotCode) throw new Error("missing-robotCode");
 
+    const isText = format === "text";
+    const msgKey = isText ? "sampleText" : "sampleMarkdown";
+    const msgParam = isText ? { content: text } : { title, text };
     let url;
     let body;
     let api;
     if (target.mode === "group") {
       url = API_BASE + "/v1.0/robot/groupMessages/send";
       api = "robot/groupMessages/send";
-      body = { robotCode, openConversationId: target.openConversationId, msgKey: "sampleMarkdown", msgParam: JSON.stringify({ title, text }) };
+      body = { robotCode, openConversationId: target.openConversationId, msgKey, msgParam: JSON.stringify(msgParam) };
     } else {
       url = API_BASE + "/v1.0/robot/oToMessages/batchSend";
       api = "robot/oToMessages/batchSend";
-      body = { robotCode, userIds: [target.userId], msgKey: "sampleMarkdown", msgParam: JSON.stringify({ title, text }) };
+      body = { robotCode, userIds: [target.userId], msgKey, msgParam: JSON.stringify(msgParam) };
     }
 
     let token = await getApiToken(false);
@@ -405,7 +427,13 @@ export function createDingTalkBot(options) {
     const title = intent.title || "mo-agent";
     let id = "";
     const isAction = intent.kind === "approval" || intent.kind === "question";
-    if (isAction && intent.eventId) id = setShortId(intent.eventId, intent.kind);
+    if (isAction && intent.eventId) {
+      id = setShortId(intent.eventId, intent.kind, {
+        agentLabel: intent.agentLabel || "",
+        sessionTitle: intent.sessionTitle || "",
+        title: intent.title || "",
+      });
+    }
     let body = intent.body || "";
     if (id) body = "#" + id + (body ? " " + body : "");
     let text = title + "\n\n" + body;
@@ -472,10 +500,11 @@ export function createDingTalkBot(options) {
       sessionId: entry.sessionId,
     };
     if (!accepts(synthetic)) return;
-    await deliverText(synthetic, title, text);
+    const ok = await deliverText(synthetic, title, text);
+    if (ok && ids.length) await deliverCopyHints(synthetic, ids);
   }
 
-  async function deliverText(intent, title, text) {
+  async function deliverText(intent, title, text, format) {
     const nowAt = now();
     while (sentTimes.length && nowAt - sentTimes[0] > 60000) sentTimes.shift();
     if (sentTimes.length >= config.maxPerMinute) {
@@ -485,7 +514,7 @@ export function createDingTalkBot(options) {
 
     try {
       try {
-        await sendViaSession(title, text);
+        await sendViaSession(title, text, format);
       } catch (sessionError) {
         const fallback = !sessionError.kind
           || sessionError.kind === "session-expired"
@@ -495,7 +524,7 @@ export function createDingTalkBot(options) {
           binding.sessionWebhook = "";
           saveBinding();
         }
-        await sendViaApi(title, text);
+        await sendViaApi(title, text, format);
       }
       noteSendSuccess(intent.kind);
       sentTimes.push(nowAt);
@@ -509,13 +538,32 @@ export function createDingTalkBot(options) {
     }
   }
 
+  /** 主消息之后补发便于复制的短码；纯文本消息，避免 markdown 标题混进复制内容。 */
+  async function deliverCopyHints(intent, ids) {
+    if (config.copyHints === "none" || !ids.length) return;
+    const base = {
+      kind: "hint",
+      severity: intent.severity,
+      requiresAction: false,
+      sessionId: intent.sessionId || null,
+    };
+    if (config.copyHints === "code") {
+      await deliverText(base, "短码", ids.join(" "), "text");
+      return;
+    }
+    await deliverText(base, "短码", "A " + ids.join(" "), "text");
+    await deliverText(base, "短码", "D " + ids.join(" "), "text");
+  }
+
   async function send(intent) {
     if (!accepts(intent)) return false;
     if (config.aggregateMs > 0 && ACTION_KINDS.has(intent.kind) && intent.eventId) {
       return enqueueAggregate(intent);
     }
     const built = buildSingle(intent);
-    return deliverText(intent, built.title, built.text);
+    const ok = await deliverText(intent, built.title, built.text);
+    if (ok && built.id) await deliverCopyHints(intent, [built.id]);
+    return ok;
   }
 
   function accepts(intent) {
@@ -537,13 +585,13 @@ export function createDingTalkBot(options) {
     return Boolean(bindingTarget());
   }
 
-  async function replyTo(message, text, kind) {
-    const title = "mo-agent";
+  async function replyTo(message, text, kind, title) {
+    const heading = title || "mo-agent";
     try {
       if (message && message.sessionWebhook) {
-        await postSessionWebhook(message.sessionWebhook, title, text);
+        await postSessionWebhook(message.sessionWebhook, heading, text);
       } else {
-        await sendViaApi(title, text);
+        await sendViaApi(heading, text);
       }
       usage.recordBillable({ kind: kind || "reply", direction: "out" });
       lastOutboundAt = now();
@@ -577,14 +625,19 @@ export function createDingTalkBot(options) {
     audit({ action: "bind", userId: binding.userId, conversationId: binding.conversationId, ok: true });
   }
 
+  // 一条回复可以带多个短码，方便直接粘贴聚合消息里的「A A3F2 B7C1」。
+  function codesOf(value) {
+    return [...new Set(value.split(/\s+/).filter(Boolean))];
+  }
+
   function parseDecision(text) {
     const value = String(text || "").trim().toUpperCase();
-    let match = /^([AD])\s*([0-9A-F]{4,6})$/.exec(value);
-    if (match) return { approve: match[1] === "A", id: match[2] };
-    match = /^批准\s*([0-9A-F]{4,6})$/.exec(value);
-    if (match) return { approve: true, id: match[1] };
-    match = /^拒绝\s*([0-9A-F]{4,6})$/.exec(value);
-    if (match) return { approve: false, id: match[1] };
+    let match = /^([AD])\s*([0-9A-F]{4,6}(?:\s+[0-9A-F]{4,6})*)$/.exec(value);
+    if (match) return { approve: match[1] === "A", ids: codesOf(match[2]) };
+    match = /^批准\s*([0-9A-F]{4,6}(?:\s+[0-9A-F]{4,6})*)$/.exec(value);
+    if (match) return { approve: true, ids: codesOf(match[1]) };
+    match = /^拒绝\s*([0-9A-F]{4,6}(?:\s+[0-9A-F]{4,6})*)$/.exec(value);
+    if (match) return { approve: false, ids: codesOf(match[1]) };
     return null;
   }
 
@@ -594,27 +647,45 @@ export function createDingTalkBot(options) {
       await replyTo(message, "未识别。请回复「A A3F2」表示同意，或「D A3F2」表示拒绝。", "reply");
       return;
     }
-    const { approve, id } = parsed;
-    const target = resolveShortId(id);
-    if (!target) {
-      await replyTo(message, "未找到 " + id, "reply");
-      audit({ action: "decide", id, ok: false, reason: "not-found" });
-      return;
-    }
-    if (!broker || typeof broker.decide !== "function") {
-      await replyTo(message, "处理失败 " + id + "：审批服务不可用", "reply");
-      return;
-    }
+    const { approve, ids } = parsed;
     const decision = approve ? DECISION.ALLOW_ONCE : DECISION.REJECT_ONCE;
-    const ok = broker.decide(target.eventId, decision);
-    if (ok) {
-      shortIds.delete(id);
-      await replyTo(message, (approve ? "已同意 " : "已拒绝 ") + id, "reply");
-      audit({ action: "decide", id, eventId: target.eventId, decision, ok: true });
-    } else {
-      await replyTo(message, "已处理 " + id, "reply");
-      audit({ action: "decide", id, eventId: target.eventId, ok: false, reason: "already-handled" });
+    const okIds = [];
+    const missing = [];
+    const failed = [];
+    const labels = [];
+    const lines = [];
+    for (const id of ids) {
+      const target = resolveShortId(id);
+      if (!target) {
+        missing.push(id);
+        lines.push("#" + id + " 未找到");
+        continue;
+      }
+      if (target.agentLabel && !labels.includes(target.agentLabel)) labels.push(target.agentLabel);
+      let ok = false;
+      try {
+        ok = await decide(target.eventId, decision);
+      } catch (error) {
+        log.warn("钉钉审批失败 " + id + ": " + (error && error.message ? error.message : String(error)));
+        ok = false;
+      }
+      if (ok) {
+        shortIds.delete(id);
+        okIds.push(id);
+        lines.push("#" + id + (approve ? " 已同意" : " 已拒绝"));
+      } else {
+        failed.push(id);
+        lines.push("#" + id + " 已处理（请确认是否重复处理或在其他终端已处理）");
+      }
     }
+    const label = labels.length === 1 ? labels[0] : (labels.length > 1 ? "多个 Agent" : "");
+    if (lines.length) {
+      // 钉钉的 markdown title 只用于通知预览，聊天里显示的是 text；
+      // 所以标题必须同时写进正文，否则用户只看到「#BDBE 已同意」。
+      const heading = "授权确认" + (label ? " [" + label + "]" : "");
+      await replyTo(message, heading + "\n\n" + lines.join("\n"), "reply", heading);
+    }
+    audit({ action: "decide", ids, decision, ok: okIds.length, missing, failed });
   }
 
   async function handleFrame(frame) {

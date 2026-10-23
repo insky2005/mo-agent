@@ -166,6 +166,128 @@ test("固定文本：A/D + 短码生效，非法格式不生效", async () => {
   assert.equal(brokerCalls[1].decision, DECISION.REJECT_ONCE);
 });
 
+function sentMessages(fetchImpl) {
+  return fetchImpl.calls
+    .filter((entry) => entry.url.includes("oToMessages"))
+    .map((entry) => {
+      const body = JSON.parse(entry.init.body);
+      const param = JSON.parse(body.msgParam);
+      return { msgKey: body.msgKey, text: param.text || param.content || "" };
+    });
+}
+
+test("copyHints=code：主消息 + 只有短码的一条", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("oToMessages")) return jsonResponse({ processQueryKey: "p" });
+    return jsonResponse({});
+  });
+  const { bot } = makeBot({
+    fetchImpl,
+    config: { copyHints: "code", aggregateMs: 0 },
+    pending: [{ id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" }],
+  });
+  await bot.start();
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
+
+  const sent = sentMessages(fetchImpl);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].msgKey, "sampleMarkdown");
+  assert.match(sent[1].text, /^[0-9A-F]{4,6}$/);
+});
+
+test("copyHints=actions：主消息 + A/D 短码；一条回复可处理多个短码", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("oToMessages")) return jsonResponse({ processQueryKey: "p" });
+    if (entry.url.includes("session.example")) return jsonResponse({ errcode: 0 });
+    return jsonResponse({});
+  });
+  const { bot, stream, brokerCalls } = makeBot({
+    fetchImpl,
+    config: { copyHints: "actions", aggregateMs: 0 },
+    pending: [
+      { id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" },
+      { id: "b7c1d2e3-0000-4000-8000-000000000000", kind: "approval" },
+    ],
+  });
+  await bot.start();
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
+  await bot.send({ kind: "approval", severity: "critical", title: "授权请求", body: "执行测试 2", eventId: "b7c1d2e3-0000-4000-8000-000000000000" });
+
+  const sent = sentMessages(fetchImpl);
+  assert.equal(sent.length, 6); // 每个审批：主消息 + A 短码 + D 短码
+  assert.equal(sent.filter((item) => item.msgKey === "sampleMarkdown").length, 2);
+  const codes = sent
+    .filter((item) => item.msgKey === "sampleText")
+    .map((item) => /^A ([0-9A-F]{4,6})$/.exec(item.text))
+    .filter(Boolean)
+    .map((match) => match[1]);
+  assert.equal(codes.length, 2);
+
+  // 直接回复聚合后的「A 短码 短码」，两条审批一起放行。
+  await stream.onMessage(inbound("A " + codes.join(" ")));
+  assert.equal(brokerCalls.length, 2);
+  assert.ok(brokerCalls.every((call) => call.decision === DECISION.ALLOW_ONCE));
+});
+
+function lastSessionReply(fetchImpl) {
+  const calls = fetchImpl.calls.filter((entry) => entry.url.includes("session.example"));
+  const body = JSON.parse(calls[calls.length - 1].init.body);
+  return body.markdown;
+}
+
+test("回复格式：授权确认 [Agent] + #短码 已同意", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("oToMessages")) return jsonResponse({ processQueryKey: "p" });
+    if (entry.url.includes("session.example")) return jsonResponse({ errcode: 0 });
+    return jsonResponse({});
+  });
+  const { bot, stream } = makeBot({
+    fetchImpl,
+    config: { aggregateMs: 0 },
+    pending: [{ id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval" }],
+  });
+  await bot.start();
+  await bot.send({ kind: "approval", severity: "critical", agentLabel: "Qoder CN", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
+  const main = sentMessages(fetchImpl).find((item) => item.msgKey === "sampleMarkdown");
+  const code = /#([0-9A-F]{4,6})/.exec(main.text)[1];
+
+  await stream.onMessage(inbound("A " + code));
+  const reply = lastSessionReply(fetchImpl);
+  assert.equal(reply.title, "授权确认 [Qoder CN]");
+  assert.equal(reply.text, "授权确认 [Qoder CN]\n\n#" + code + " 已同意");
+});
+
+test("回复格式：已结束的审批显示 #短码 已处理（已结束）", async () => {
+  const fetchImpl = fakeFetch((entry) => {
+    if (entry.url.includes("oauth2/accessToken")) return jsonResponse({ accessToken: "t", expireIn: 7200 });
+    if (entry.url.includes("gettoken")) return jsonResponse({ access_token: "o", expires_in: 7200 });
+    if (entry.url.includes("oToMessages")) return jsonResponse({ processQueryKey: "p" });
+    if (entry.url.includes("session.example")) return jsonResponse({ errcode: 0 });
+    return jsonResponse({});
+  });
+  const { bot, stream } = makeBot({
+    fetchImpl,
+    decideResult: false,
+    config: { aggregateMs: 0 },
+    pending: [{ id: "a3f2b7c1-0000-4000-8000-000000000000", kind: "approval", agentLabel: "Qoder CN" }],
+  });
+  await bot.start();
+  await bot.send({ kind: "approval", severity: "critical", agentLabel: "Qoder CN", title: "授权请求", body: "执行测试", eventId: "a3f2b7c1-0000-4000-8000-000000000000" });
+  const main = sentMessages(fetchImpl).find((item) => item.msgKey === "sampleMarkdown");
+  const code = /#([0-9A-F]{4,6})/.exec(main.text)[1];
+
+  await stream.onMessage(inbound("A " + code));
+  const reply = lastSessionReply(fetchImpl);
+  assert.equal(reply.title, "授权确认 [Qoder CN]");
+  assert.equal(reply.text, "授权确认 [Qoder CN]\n\n#" + code + " 已处理（请确认是否重复处理或在其他终端已处理）");
+});
+
 test("配对码绑定：错误码不绑定，正确码立即绑定", async () => {
   const { bot, stream, bindingFile } = makeBot({
     binding: false,

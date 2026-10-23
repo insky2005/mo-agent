@@ -415,6 +415,36 @@ proj-x
 - 聚合后的消息只计 1 次出站；项数不影响计次。
 - `aggregateMs = 0` 时退化为逐条发送（仅调试用）。
 
+### 6.3.1 复制用短码（`copyHints`）
+
+主消息之后可以再补发便于直接复制粘贴的纯文本消息：
+
+| 配置 | 发送条数 | 内容 |
+|---|---|---|
+| `none`（默认） | 1 | 只有主消息 |
+| `code` | 2 | 主消息 + 短码，如 `A3F2` |
+| `actions` | 3 | 主消息 + `A A3F2` + `D A3F2` |
+
+- 补发消息使用钉钉 **text** 类型，不是 markdown，复制出来只有短码本身。
+- 聚合消息只补发一组：`A A3F2 B7C1` / `D A3F2 B7C1`；回复支持一次带多个短码，批量处理。
+- 补发消息也计入 `maxPerMinute` 和本地计次。
+
+### 6.3.2 确认回复格式
+
+用户回复 `A 短码` / `D 短码` 后，机器人的确认消息统一为：
+
+```text
+授权确认 [DeepSeek Harness]
+
+#6B40 已同意
+```
+
+- 标题带 Agent 名，便于同时处理多个 Agent 时核对。
+- 正文逐行列出短码和结果：`已同意` / `已拒绝`。
+- 审批已经结束（手机/电脑先处理、超时、或服务重启）：`#A7E9 已处理（请确认是否重复处理或在其他终端已处理）`。
+- 短码不存在或已过期：`#XXXX 未找到`。
+- 一条回复带多个短码时，按行列出每个短码的结果。
+
 ### 6.4 静默时段
 
 - 默认关闭；开启后按本机时区（`Asia/Shanghai`）判断。
@@ -836,27 +866,33 @@ dingtalk: {
 
 ### 10.2 UI 卡片
 
-在 [`app/web/monitor.html`](../../app/web/monitor.html) 右侧栏、“需要你处理”之后新增：
+在 [`app/web/monitor.html`](../../app/web/monitor.html) 右侧栏底部的「运行状态」面板中新增「钉钉通道」分组（与手机在线 / 本机进程 / 数据源同卡片）：
 
 ```html
-<section class="panel dingtalkPanel">
-  <div class="panelHead">
-    <h2>钉钉通道</h2>
-    <span class="connTag" id="dtState">未配置</span>
+<section class="panel statusPanel">
+  <div class="panelHead"><h2>运行状态</h2></div>
+  <div class="statusBody">
+    <div class="statusGroup">
+      <div class="statusGroupHead">
+        <span class="groupTitle">钉钉通道</span>
+        <span class="statusGroupRight">
+          <span class="connTag" id="dtState">未配置</span>
+          <button class="miniBtn" id="dtDetailBtn" type="button">明细</button>
+        </span>
+      </div>
+      <div class="usageBar"><i id="dtBar"></i></div>
+      <div class="statusGrid">
+        <div class="statusRow"><span>绑定</span><b id="dtBind">未绑定</b></div>
+        <div class="statusRow"><span>本月本地调用</span><b id="dtLocal">0</b></div>
+        <div class="statusRow"><span>其中计费</span><b id="dtUsage">0 / 3000</b></div>
+        <div class="statusRow"><span>今日</span><b id="dtToday">0</b></div>
+        <div class="statusRow"><span>失败 / 重试</span><b id="dtFail">0 / 0</b></div>
+        <div class="statusRow"><span>入站 / 出站</span><b id="dtDir">0 / 0</b></div>
+        <div class="statusRow wide"><span>Top 接口</span><b id="dtTop">—</b></div>
+      </div>
+    </div>
+    <!-- 本机：手机在线 / 本机进程 / 数据源 + 数据源列表 -->
   </div>
-  <div class="usageBar"><i id="dtBar"></i></div>
-  <div class="footRow"><span>绑定</span><b id="dtBind">未绑定</b></div>
-  <div class="footRow"><span>本月本地调用</span><b id="dtLocal">0</b></div>
-  <div class="footRow"><span>其中计费</span><b id="dtUsage">0 / 3000</b></div>
-  <div class="footRow"><span>今日</span><b id="dtToday">0</b></div>
-  <div class="footRow"><span>失败 / 重试</span><b id="dtFail">0 / 0</b></div>
-  <div class="footRow"><span>入站 / 出站</span><b id="dtDir">0 / 0</b></div>
-  <div class="footRow"><span>Top 接口</span><b id="dtTop">—</b></div>
-  <details class="usageDetail">
-    <summary>最近调用</summary>
-    <div id="dtRecent" class="recentCalls">—</div>
-  </details>
-  <div class="footNote">本地调用逐条计；计费以钉钉资源管理为准。</div>
 </section>
 ```
 
@@ -868,10 +904,10 @@ dingtalk: {
 - 状态：未配置 / 待绑定 / 待确认 / 已连接 / 重连中 / 已断开；
 - `dtBind`：未绑定 / 待确认·昵称 / 已绑定·昵称；`waiting` 时显示倒计时；
 - `dtLocal` / `dtUsage` / `dtToday` / `dtFail` / `dtTop` 分别渲染本地调用、计费额度、今日、失败/重试、Top 接口；
-- `dtRecent` 渲染 `usage.recent`（最多 20 条，显示时间、api、ms、ok）；
-- 复用现有快照轮询，不新增接口。
+- 卡片只留摘要；点「明细」打开抽屉（`dtDrawer`），展示绑定信息、最近入/出站、额度阈值、按类型/接口/来源统计和 `usage.local.recent`（最多 20 条）；
+- 抽屉随快照实时刷新并保留滚动位置；复用现有快照轮询，不新增接口。
 
-[`app/web/monitor.css`](../../app/web/monitor.css) 增加 `.usageBar`、`.connTag` 两个样式即可。
+[`app/web/monitor.css`](../../app/web/monitor.css) 增加 `.usageBar`、`.connTag`、`.statusGroup` / `.statusGrid` / `.statusRow` 等样式。
 
 ---
 
