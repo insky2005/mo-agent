@@ -6,7 +6,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-OUT_DIR="${OUT_DIR:-$ROOT/dist}"
+OUT_DIR="${OUT_DIR:-$ROOT/cli/dist}"
 TARGET="${TARGET:-}"
 
 command -v bun >/dev/null 2>&1 || {

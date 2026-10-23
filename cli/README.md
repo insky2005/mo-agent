@@ -98,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-r
 
 ```bash
 MO_VERSION=v0.2.0 bash scripts/install-remote.sh
-MO_CLI_BASE_URL=file://$PWD/dist bash scripts/install-remote.sh
+MO_CLI_BASE_URL=file://$PWD/cli/dist bash scripts/install-remote.sh
 ```
 
 **发布前要改一处**：`scripts/install-remote.sh` 里的 `REPO="CHANGE_ME/mo-agent"`，或让用户用 `MO_AGENT_REPO=you/mo-agent` 覆盖。
@@ -126,8 +126,8 @@ chmod +x mo-darwin-arm64 && mv mo-darwin-arm64 /usr/local/bin/mo
 ### 本地出包
 
 ```bash
-bash scripts/build-cli.sh                 # → dist/mo-0.2.0-darwin-arm64
-npm pack --pack-destination dist          # → dist/mo-agent-0.2.0.tgz（约 25KB）
+bash scripts/build-cli.sh                 # → cli/dist/mo-0.2.0-darwin-arm64
+npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
 ## 命令

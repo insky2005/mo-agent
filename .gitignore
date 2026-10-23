@@ -51,4 +51,5 @@ docs/raw/
 docs/private/
 
 # ---- CLI 构建产物（单文件二进制 / npm 包）----
+cli/dist/
 dist/
