@@ -155,7 +155,7 @@ export async function skillCommand(ctx, args) {
       () =>
         table(rows, ["目标", "已装", "路径", "说明"]).replace(/[ \t]+$/gm, "")
         + (hint ? "\n\n" + hint : "")
-        + "\n\n安装：mo skill install（交互选择）或 --target <名称|目录> --yes",
+        + "\n\n安装：mo skill install",
     );
     return 0;
   }
@@ -186,11 +186,9 @@ export async function skillCommand(ctx, args) {
       written.push({ target: name, path: dest });
     }
     emit(args.options, { ok: true, written, moOnPath: Boolean(which("mo")) }, () => {
-      const lines = written.map((item) => "已安装 " + item.path);
-      lines.push("", "新开会话后技能才会加载。");
-      if (!which("mo")) {
-        lines.push("注意：mo 不在 PATH 里。技能会先让主 Agent 安装 mo；也可以现在把安装目录加进 PATH。");
-      }
+      const lines = written.map((item) => "✓ " + item.path);
+      lines.push("新开会话后生效。");
+      if (!which("mo")) lines.push("提示：mo 不在 PATH。");
       return lines.join("\n");
     });
     return 0;
@@ -211,7 +209,7 @@ export async function skillCommand(ctx, args) {
       removed.push({ target: name, path: skillDir });
     }
     emit(args.options, { ok: true, removed }, () =>
-      removed.length ? removed.map((item) => "已移除 " + item.path).join("\n") : "没有需要移除的技能");
+      removed.length ? removed.map((item) => "✓ 已移除 " + item.path).join("\n") : "没有需要移除的技能");
     return 0;
   }
 

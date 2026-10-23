@@ -239,7 +239,7 @@ else
 fi
 
 echo
-"$INSTALLED" doctor || true
+"$INSTALLED" --version | sed 's/^/✓ mo /'
 echo
 
 IN_PATH=0
@@ -247,20 +247,25 @@ case ":$PATH:" in
   *":$(dirname "$INSTALLED"):"*) IN_PATH=1 ;;
 esac
 
+NEED_SKILL=0
+if [ "$NO_SKILL" = "0" ] && [ -z "${MO_SKIP_SKILL:-}" ]; then
+  if [ -t 0 ]; then
+    "$INSTALLED" skill install || true
+  else
+    NEED_SKILL=1
+  fi
+fi
+
 if [ "$IN_PATH" = "0" ]; then
-  printf '当前终端先加 PATH（无需重开）：\n  export PATH="%s:$PATH"\n\n' "$(dirname "$INSTALLED")"
+  printf 'PATH 未包含，先执行：\n  export PATH="%s:$PATH"\n' "$(dirname "$INSTALLED")"
 fi
 
 if [ -n "$SHELL_NAME" ]; then
-  printf '当前终端执行以下脚本启用补全：\n  hash -r 2>/dev/null; eval "$(%s completion %s)"\n\n' "$INSTALLED" "$SHELL_NAME"
+  printf '启用补全：\n  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
-if [ "$NO_SKILL" = "0" ] && [ -z "${MO_SKIP_SKILL:-}" ] && [ -t 0 ]; then
-  echo
-  "$INSTALLED" skill install || true
+if [ "$NEED_SKILL" = "1" ]; then
+  echo "下一步：mo skill install && mo project add ."
 else
-  echo "下一步：mo skill install（给主 Agent 装技能），然后 cd 到你的项目执行 mo project add ."
-fi
-if [ "$MODE" = "link" ]; then
-  echo "开发模式：改源码立即生效；要装成独立二进制，跑 bash scripts/install-cli.sh --binary"
+  echo "下一步：mo project add ."
 fi

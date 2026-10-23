@@ -36,7 +36,7 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "下载 $URL"
+echo "下载 mo…"
 if ! curl -fL --retry 2 -o "$TMP/$ASSET" "$URL"; then
   echo "下载失败。检查：仓库名是否正确、Release 是否已发布、仓库是否公开。" >&2
   exit 1
@@ -62,8 +62,8 @@ esac
 # 技能：默认一起装（--no-skill 或 MO_SKIP_SKILL=1 可跳过）
 if [ "${MO_SKIP_SKILL:-0}" != "1" ] && [ "${1:-}" != "--no-skill" ]; then
   if "$BIN_DIR/mo" skill install --yes >/dev/null 2>&1; then
-    echo "技能已安装（mo skill list 查看）"
+    echo "✓ 技能"
   else
-    echo "技能安装跳过；之后可手动执行：mo skill install"
+    echo "技能未安装，可稍后执行：mo skill install"
   fi
 fi
