@@ -37,6 +37,15 @@ MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 
 安装记录写在 `~/.mo-agent/install.json`（`mode` / `bin` / `entry`），`--uninstall` 靠它精确清理。
 
+对应的 npm 脚本（命名统一为 `cli:` 前缀）：
+
+| 命令 | 作用 |
+|---|---|
+| `npm run cli:build` | 构建 `cli/dist/mo` |
+| `npm run cli:install` | 装到 PATH 并写补全 |
+| `npm run cli:demo` | 跑四场景演示 |
+| `npm run cli:version:check` | 校验 `cli/lib/version.mjs` 与 `package.json` 一致 |
+
 写 rc 前会备份为 `*.mo-agent.bak-<时间>`；最后跑一次 `mo doctor`。
 
 装完会打印一段**当前终端执行即可启用补全**的脚本（不用重开终端）：

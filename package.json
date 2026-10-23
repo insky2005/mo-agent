@@ -8,6 +8,10 @@
   "scripts": {
     "start": "node host/index.mjs",
     "dev": "node --watch host/index.mjs",
+    "cli:build": "bash scripts/build-cli.sh",
+    "cli:install": "bash scripts/install-cli.sh",
+    "cli:demo": "bash cli/demo/run.sh",
+    "cli:version:check": "node scripts/check-version.mjs",
     "docs:capabilities": "node scripts/gen-capabilities.mjs",
     "docs:capabilities:check": "node scripts/gen-capabilities.mjs --check",
     "hooks": "node scripts/configure-hooks.mjs",
@@ -21,11 +25,7 @@
     "voice:build:whisper": "bash scripts/build-whisper.sh",
     "voice:test": "node --test host/voice/",
     "voice:demo": "node host/voice/p0.mjs --kind approval --nonce 4729 --transcript 四七二九",
-    "voice:live": "node host/voice/p0.mjs --live --kind approval --broker",
-    "cli:install": "bash scripts/install-cli.sh",
-    "cli:demo": "bash cli/demo/run.sh",
-    "build:cli": "bash scripts/build-cli.sh",
-    "check:version": "node scripts/check-version.mjs"
+    "voice:live": "node host/voice/p0.mjs --live --kind approval --broker"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
