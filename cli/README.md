@@ -286,6 +286,8 @@ bash scripts/install-skill.sh [--uninstall]
 
 技能内容见 [skills/mo/SKILL.md](../skills/mo/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、七条铁律。
 
+接好之后怎么验证它真按流程走：见 [demo/agent-test.md](demo/agent-test.md)（六个用例，不需要登录执行者也能测四个）。
+
 **mo 还没装时**，技能会让 Agent 先说明情况并征得同意，然后由它执行安装（下载到临时文件再运行，不走 `curl | bash`），装完用绝对路径继续。不同意就只给命令、停下。
 
 **装完要新开会话**——技能目录在会话启动时加载。
