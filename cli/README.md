@@ -23,7 +23,7 @@ MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 脚本做两件事：
 
 1. **默认安装单文件二进制**（和 Release 里分发的是同一个产物），拷到 `~/.local/bin/mo`；没有 bun 时退化为源码软链并提示；
-   - 产物在 `cli/dist/mo`（指向版本化文件名的软链）；
+   - 产物是 `cli/dist/mo`（本地构建不带版本和平台，`mo --version` 看版本；发布时才由 CI 重命名）；
    - 产物比 `cli/`、`core/tasks/`、`package.json` 都新时**直接复用，不重复构建**；
    - 想强制重建用 `--rebuild`；
 2. 按 `$SHELL` 把补全块写进 `~/.zshrc` / `~/.bashrc`——用注释标记包围，重装只更新这一段，删掉该段即关闭。
@@ -155,7 +155,8 @@ chmod +x mo-darwin-arm64 && mv mo-darwin-arm64 /usr/local/bin/mo
 ### 本地出包
 
 ```bash
-bash scripts/build-cli.sh                 # → cli/dist/mo-0.2.0-darwin-arm64
+bash scripts/build-cli.sh                 # → cli/dist/mo
+TARGET=bun-linux-x64 bash scripts/build-cli.sh   # → cli/dist/mo-linux-x64（交叉编译不带版本）
 npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
