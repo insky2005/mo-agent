@@ -29,15 +29,22 @@ bun "${ARGS[@]}"
 
 echo "产物: $OUT ($(du -h "$OUT" | cut -f1))"
 
-# 稳定的入口名：安装脚本和文档都认 cli/dist/mo，不用记版本化的文件名
-ALIAS="$OUT_DIR/mo"
-if [ "$OUT" != "$ALIAS" ]; then
-  ln -sfn "$(basename "$OUT")" "$ALIAS"
-  echo "入口: $ALIAS -> $(basename "$OUT")"
+HOST="bun-$(node -p 'process.platform + "-" + process.arch')"
+IS_HOST=0
+if [ -z "$TARGET" ] || [ "$TARGET" = "$HOST" ]; then
+  IS_HOST=1
 fi
 
-HOST="bun-$(node -p 'process.platform + "-" + process.arch')"
-if [ -z "$TARGET" ] || [ "$TARGET" = "$HOST" ]; then
+# 稳定入口只给本机构建：交叉编译产物不能顶掉"本机可运行"的那个
+ALIAS="$OUT_DIR/mo"
+if [ "$IS_HOST" = "1" ] && [ "$OUT" != "$ALIAS" ]; then
+  ln -sfn "$(basename "$OUT")" "$ALIAS"
+  echo "入口: $ALIAS -> $(basename "$OUT")"
+elif [ "$IS_HOST" = "0" ]; then
+  echo "交叉编译产物，不更新 $ALIAS"
+fi
+
+if [ "$IS_HOST" = "1" ]; then
   "$OUT" --version
 else
   echo "（交叉编译产物，跳过本机执行验证）"

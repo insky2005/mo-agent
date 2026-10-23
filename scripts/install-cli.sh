@@ -164,6 +164,11 @@ chmod +x "$ENTRY"
 ARTIFACT="$ROOT/cli/dist/mo"
 
 # 产物比这些输入新，就认为可以复用
+# 产物能否在本机跑：防止交叉编译产物被当成可安装件
+runnable() {
+  "$ARTIFACT" --version >/dev/null 2>&1
+}
+
 is_stale() {
   [ -x "$ARTIFACT" ] || return 0
   if find "$ROOT/cli/mo.mjs" "$ROOT/cli/lib" "$ROOT/cli/commands" \
@@ -180,7 +185,7 @@ if [ "$MODE" = "binary" ]; then
     echo "没有找到 bun，退化为源码软链（需要 Node，且依赖仓库路径不变）"
     echo "  想要单文件安装：brew install oven-sh/bun/bun 后重跑"
     MODE="link"
-  elif [ "$REBUILD" = "0" ] && ! is_stale; then
+  elif [ "$REBUILD" = "0" ] && ! is_stale && runnable; then
     echo "复用已构建的 ${ARTIFACT}"
     SOURCE="$ARTIFACT"
   else
