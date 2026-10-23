@@ -13,6 +13,7 @@ import { receiptCommand } from "./commands/receipt.mjs";
 import { ledgerCommand } from "./commands/ledger.mjs";
 import { runCommand } from "./commands/run.mjs";
 import { doctorCommand } from "./commands/doctor.mjs";
+import { completionCommand, completeCommand } from "./commands/completion.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -33,6 +34,7 @@ const HELP = [
   "  mo receipt submit <id> --file -       提交回执（stdin）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "  mo doctor                            自检",
+  "  mo completion bash|zsh               输出补全脚本（eval 即可）",
   "",
   "全局选项：--project <名称|路径>  --json  --help",
   "",
@@ -46,9 +48,18 @@ const ROUTES = {
   ledger: ledgerCommand,
   run: runCommand,
   doctor: doctorCommand,
+  completion: completionCommand,
 };
 
 async function main(argv) {
+  // 补全回调走原始 argv：parseArgs 会把 --ti 这类半截参数吃掉
+  if (argv[0] === "__complete") {
+    const raw = argv.slice(1);
+    const describe = raw[0] === "--describe";
+    const words = describe ? raw.slice(1) : raw;
+    return completeCommand({ cwd: process.cwd() }, { words, describe });
+  }
+
   const args = parseArgs(argv);
   const group = args.positional[0];
 
@@ -61,13 +72,14 @@ async function main(argv) {
     return 0;
   }
 
+  const ctx = { cwd: process.cwd(), env: process.env };
+  const subArgs = { positional: args.positional.slice(1), options: args.options };
+
   const handler = ROUTES[group];
   if (!handler) {
     throw new MoError("E_USAGE", "未知命令：" + group + "（mo help 查看用法）");
   }
 
-  const ctx = { cwd: process.cwd(), env: process.env };
-  const subArgs = { positional: args.positional.slice(1), options: args.options };
   return await handler(ctx, subArgs);
 }
 

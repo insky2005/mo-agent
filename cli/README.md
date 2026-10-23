@@ -130,6 +130,30 @@ bash scripts/build-cli.sh                 # → cli/dist/mo-0.2.0-darwin-arm64
 npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
+## Tab 补全
+
+支持 bash 与 zsh：命令、子命令、选项，以及**任务 id（带状态和标题）**、`--project` 的项目名。
+
+```bash
+# zsh
+echo 'eval "$(mo completion zsh)"' >> ~/.zshrc
+
+# bash
+echo 'eval "$(mo completion bash)"' >> ~/.bashrc
+```
+
+重开终端后：
+
+```text
+mo task <TAB>              create confirm cancel status list dispatch
+mo task confirm <TAB>      t_01M5…:draft 任务面板加筛选
+mo task create --ti<TAB>   --title --timeout
+mo ledger query --project <TAB>   demo  other-project
+```
+
+实现上是一个隐藏回调 `mo __complete`，shell 脚本把当前行交给它；脚本本身很短，可先 `mo completion zsh` 看一眼再 eval。
+
+没有候选时回退到 shell 默认（bash 的文件名补全、zsh 的 `_files`），所以 `--file` 这类路径参数照常可用。
 ## 命令
 
 ```bash
