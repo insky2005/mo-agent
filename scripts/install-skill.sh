@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把 mo-workbench 技能装到主 Agent 的技能目录。
+# 把 mo 技能装到主 Agent 的技能目录。
 #   bash scripts/install-skill.sh              # 自动检测 ~/.dsh/skills 与 ~/.claude/skills
 #   bash scripts/install-skill.sh --uninstall
 #   MO_SKILL_DIR=/some/skills bash scripts/install-skill.sh
@@ -7,8 +7,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-SRC="$ROOT/skills/mo-workbench"
-NAME="mo-workbench"
+SRC="$ROOT/skills/mo"
+NAME="mo"
 
 UNINSTALL=0
 [ "${1:-}" = "--uninstall" ] && UNINSTALL=1

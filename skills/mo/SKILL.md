@@ -1,9 +1,9 @@
 ---
-name: mo-workbench
+name: mo
 description: 把讨论落成任务卡并派给执行 Agent。用户说"开始做/落地/派给 X/就这么办"，或要查看任务进度与验收结果时使用。
 ---
 
-# mo workbench
+# mo
 
 用 `mo` 把"聊出来的想法"固化成任务卡，再派给执行 Agent（Claude / Codex / Qoder / pi / qwen），最后按账本汇报。
 

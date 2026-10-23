@@ -223,7 +223,7 @@ bash scripts/install-skill.sh --uninstall
 MO_SKILL_DIR=/some/skills bash scripts/install-skill.sh
 ```
 
-技能内容见 [skills/mo-workbench/SKILL.md](../skills/mo-workbench/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、六条铁律。
+技能内容见 [skills/mo/SKILL.md](../skills/mo/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、六条铁律。
 
 **装完要新开会话**——技能目录在会话启动时加载。
 
