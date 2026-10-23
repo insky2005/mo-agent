@@ -148,6 +148,7 @@ case ":$PATH:" in
   *) echo "注意：$(dirname "$INSTALLED") 不在 PATH 中，加进去并重开终端" ;;
 esac
 
+SHELL_NAME=""
 if [ "$WANT_COMPLETION" = "auto" ]; then
   SHELL_NAME="$(detect_shell)"
   if [ -n "$SHELL_NAME" ]; then
@@ -156,7 +157,8 @@ if [ "$WANT_COMPLETION" = "auto" ]; then
     echo "未识别 shell（SHELL=${SHELL:-未设置}），跳过补全；可用 --completion zsh|bash"
   fi
 elif [ "$WANT_COMPLETION" = "yes" ]; then
-  install_block "$INSTALLED" "${WANT_SHELL:-zsh}"
+  SHELL_NAME="${WANT_SHELL:-zsh}"
+  install_block "$INSTALLED" "$SHELL_NAME"
 else
   # --no-completion：不仅不写，还把旧的块清掉
   for shell in zsh bash; do
@@ -171,4 +173,19 @@ fi
 echo
 "$INSTALLED" doctor || true
 echo
+
+IN_PATH=0
+case ":$PATH:" in
+  *":$(dirname "$INSTALLED"):"*) IN_PATH=1 ;;
+esac
+
+if [ "$IN_PATH" = "0" ]; then
+  printf '当前终端先加 PATH（无需重开）：\n  export PATH="%s:$PATH"\n\n' "$(dirname "$INSTALLED")"
+fi
+
+if [ -n "$SHELL_NAME" ]; then
+  printf '当前终端立刻启用补全（无需重开）：\n  hash -r 2>/dev/null; eval "$(%s completion %s)"\n\n' "$INSTALLED" "$SHELL_NAME"
+fi
+
 echo "下一步：cd 到你的项目，执行 mo project add ."
+echo "新开的终端会自动生效；上面那行只用于当前这个终端。"
