@@ -11,12 +11,19 @@
 **方式一：安装脚本（推荐）**
 
 ```bash
-bash scripts/install-cli.sh              # 软链到 ~/.local/bin（无权限则 /usr/local/bin）
-bash scripts/install-cli.sh --uninstall  # 卸载
-MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定目录
+bash scripts/install-cli.sh                  # 软链 + 自动装 Tab 补全
+bash scripts/install-cli.sh --no-completion  # 只装命令，并清掉旧补全块
+bash scripts/install-cli.sh --completion bash  # 补全写到 ~/.bashrc
+bash scripts/install-cli.sh --uninstall      # 卸载（含补全块）
+MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 ```
 
-脚本只做一件事：把 `cli/mo.mjs` 软链成 PATH 里的 `mo`，然后跑一次 `mo doctor`。
+脚本做两件事：
+
+1. 把 `cli/mo.mjs` 软链成 PATH 里的 `mo`（~/.local/bin，无权限则 /usr/local/bin）；
+2. 按 `$SHELL` 把补全块写进 `~/.zshrc` / `~/.bashrc`——用注释标记包围，重装只更新这一段，删掉该段即关闭。
+
+写 rc 前会备份为 `*.mo-agent.bak-<时间>`；最后跑一次 `mo doctor`。
 
 **方式二：npm link**
 
@@ -133,6 +140,8 @@ npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（�
 ## Tab 补全
 
 支持 bash 与 zsh：命令、子命令、选项，以及**任务 id（带状态和标题）**、`--project` 的项目名。
+
+`scripts/install-cli.sh` 会自动装好；手动安装见下。
 
 ```bash
 # zsh
