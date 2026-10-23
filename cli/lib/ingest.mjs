@@ -33,8 +33,8 @@ export function ingest({ home, root, card, result }) {
   const receiptFile = cardReceiptFile(root, meta);
 
   if (result && result.timedOut) {
-    const next = transition({ home, root, card, to: "blocked", payload: { reason: "timeout" } });
-    return summary(next, { status: "blocked", reason: "timeout", receipt: null, receiptFile });
+    const next = transition({ home, root, card, to: "blocked", payload: { reason: "timeout", outputTail: result.outputTail } });
+    return summary(next, { status: "blocked", reason: "timeout", receipt: null, receiptFile, outputTail: result.outputTail });
   }
 
   if (result && result.spawnError) {
@@ -42,18 +42,32 @@ export function ingest({ home, root, card, result }) {
       home, root, card, to: "failed",
       payload: { reason: "dispatch_failed", message: String(result.spawnError.message || result.spawnError) },
     });
-    return summary(next, { status: "failed", reason: "dispatch_failed", receipt: null, receiptFile });
+    return summary(next, { status: "failed", reason: "dispatch_failed", receipt: null, receiptFile, outputTail: result.outputTail });
   }
 
   const receipt = readReceipt(root, meta.id);
   if (!receipt) {
-    const next = transition({ home, root, card, to: "blocked", payload: { reason: "missing_receipt", exitCode: result && result.code } });
-    return summary(next, { status: "blocked", reason: "missing_receipt", receipt: null, receiptFile });
+    const exitCode = result && result.code;
+    const next = transition({
+      home,
+      root,
+      card,
+      to: "blocked",
+      payload: { reason: "missing_receipt", exitCode, outputTail: result && result.outputTail },
+    });
+    return summary(next, {
+      status: "blocked",
+      reason: "missing_receipt",
+      receipt: null,
+      receiptFile,
+      exitCode,
+      outputTail: result && result.outputTail,
+    });
   }
 
   if (receipt.__parseError) {
-    const next = transition({ home, root, card, to: "blocked", payload: { reason: "bad_receipt" } });
-    return summary(next, { status: "blocked", reason: "bad_receipt", receipt: null, receiptFile });
+    const next = transition({ home, root, card, to: "blocked", payload: { reason: "bad_receipt", exitCode: result && result.code } });
+    return summary(next, { status: "blocked", reason: "bad_receipt", receipt: null, receiptFile, exitCode: result && result.code, outputTail: result && result.outputTail });
   }
 
   const checked = validateReceipt(receipt, { taskId: meta.id });

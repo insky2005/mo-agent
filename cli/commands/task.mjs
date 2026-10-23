@@ -188,8 +188,13 @@ export function runDispatch(args, { home, root, taskId }) {
       ];
       if (result.receipt && result.receipt.summary) lines.push("结论: " + result.receipt.summary);
       if (result.reason && result.reason !== "receipt") lines.push("原因: " + result.reason);
+      if (result.exitCode !== undefined && result.exitCode !== null) lines.push("执行者退出码: " + result.exitCode);
       if (result.errors) lines.push("问题: " + result.errors.join("；"));
       if (result.receiptFile) lines.push("回执: " + result.receiptFile);
+      if (result.outputTail) {
+        const tail = String(result.outputTail).split("\n").slice(-8).join("\n");
+        lines.push("", "执行者最后的输出：", tail);
+      }
       return lines.join("\n");
     });
     return result.status === "done" ? 0 : 1;
