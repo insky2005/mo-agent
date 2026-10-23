@@ -108,10 +108,16 @@ mo task create --agent codex …
 
 | 模板 | 展开为 | 说明 |
 |---|---|---|
-| `claude` | `claude -p "$(cat)"` | 只读 |
-| `claude-edit` | `claude -p "$(cat)" --permission-mode acceptEdits` | 允许改文件 |
-| `codex` | `codex exec -s workspace-write -` | 工作区可写 |
-| `codex-readonly` | `codex exec -s read-only -` | 只读 |
+| `claude` | `claude -p "$(cat)" --permission-mode acceptEdits` | Claude Code |
+| `codex` | `codex exec -s workspace-write -` | Codex CLI |
+| `qoder` | `qodercli -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（国际版） |
+| `qodercn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（CN 版） |
+| `pi` | `pi -p "$(cat)"` | pi |
+| `qwen` | `qwen --approval-mode auto-edit "$(cat)"` | Qwen Code |
+
+`mo agents` 会标出每个模板在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
+
+模板都选了"能写文件"的模式——执行者必须能写 `$MO_RECEIPT`，只读模式跑出来的任务永远到不了 `done`。
 
 需要别的参数就用 `--exec` 写完整命令（两者互斥）：
 

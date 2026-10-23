@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAgent, listAgents, EXECUTORS } from "./lib/executors.mjs";
+import { resolveAgent, listAgents, which, EXECUTORS } from "./lib/executors.mjs";
 
 test("已知模板展开成完整命令", () => {
   const claude = resolveAgent("claude");
@@ -31,5 +31,16 @@ test("模板命令都从 stdin 取 prompt", () => {
   for (const [name, preset] of Object.entries(EXECUTORS)) {
     const readsStdin = preset.command.includes("$(cat)") || /(^|\s)-$/.test(preset.command);
     assert.ok(readsStdin, name + " 看起来不读 stdin");
+  }
+});
+test("which 能找到 node，找不到的返回 null", () => {
+  assert.ok(which("node"));
+  assert.equal(which("definitely-not-a-real-binary-xyz"), null);
+});
+
+test("listAgents 带 installed 与 path", () => {
+  for (const agent of listAgents()) {
+    assert.equal(typeof agent.installed, "boolean");
+    if (agent.installed) assert.ok(agent.path);
   }
 });

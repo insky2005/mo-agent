@@ -1,20 +1,17 @@
 /**
  * 常见 Agent 的执行模板。
  *
- * 只收录"能从 stdin 读 prompt、能写文件"的非交互用法；
- * 桌面端 Agent（Qoder、WorkBuddy）没有 headless 入口，不在这里。
+ * 收录原则：非交互、能从 stdin 读 prompt、且**能写文件**——
+ * 写不了 $MO_RECEIPT 的执行者拿不到 done，给了也是坑。
  *
- * 模板只是默认值：需要额外参数时用 --exec 写完整命令，或直接改卡里的 exec。
+ * 桌面端 Agent（Qoder 桌面版、WorkBuddy）没有 headless 入口，不在这里。
  */
+import fs from "node:fs";
+import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 
 export const EXECUTORS = {
   claude: {
-    command: 'claude -p "$(cat)"',
-    description: "Claude Code，只读；需要改文件用 claude-edit",
-    requires: "claude",
-  },
-  "claude-edit": {
     command: 'claude -p "$(cat)" --permission-mode acceptEdits',
     description: "Claude Code，允许在工作区改文件",
     requires: "claude",
@@ -24,10 +21,25 @@ export const EXECUTORS = {
     description: "Codex CLI，工作区可写",
     requires: "codex",
   },
-  "codex-readonly": {
-    command: "codex exec -s read-only -",
-    description: "Codex CLI，只读",
-    requires: "codex",
+  qoder: {
+    command: 'qodercli -p "$(cat)" --permission-mode accept_edits',
+    description: "Qoder CLI（国际版），允许改文件",
+    requires: "qodercli",
+  },
+  qodercn: {
+    command: 'qoderclicn -p "$(cat)" --permission-mode accept_edits',
+    description: "Qoder CLI（CN 版），允许改文件",
+    requires: "qoderclicn",
+  },
+  pi: {
+    command: 'pi -p "$(cat)"',
+    description: "pi，非交互模式",
+    requires: "pi",
+  },
+  qwen: {
+    command: 'qwen --approval-mode auto-edit "$(cat)"',
+    description: "Qwen Code，自动批准文件编辑",
+    requires: "qwen",
   },
 };
 
@@ -42,11 +54,31 @@ export function resolveAgent(name) {
   return { name: key, ...preset };
 }
 
+/** 在 PATH 里找可执行文件（不执行它） */
+export function which(binary) {
+  const dirs = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    const candidate = path.join(dir, binary);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // 继续找
+    }
+  }
+  return null;
+}
+
 export function listAgents() {
-  return Object.entries(EXECUTORS).map(([name, preset]) => ({
-    name,
-    command: preset.command,
-    description: preset.description,
-    requires: preset.requires,
-  }));
+  return Object.entries(EXECUTORS).map(([name, preset]) => {
+    const found = which(preset.requires);
+    return {
+      name,
+      command: preset.command,
+      description: preset.description,
+      requires: preset.requires,
+      installed: Boolean(found),
+      path: found,
+    };
+  });
 }
