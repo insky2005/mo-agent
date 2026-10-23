@@ -261,6 +261,20 @@ mo skill install --target /some/skills
 
 `pi` 没有固定的 skills 目录，用 `pi --skill ~/.agents/skills/mo` 指过来即可。
 
+### 用 skills CLI 安装
+
+本仓库符合 skills 生态的布局（`skills/<name>/SKILL.md`），可以直接：
+
+```bash
+npx skills add <org>/mo-agent       # 装到 ~/.agents/skills/mo
+npx skills update mo                # 之后更新
+```
+
+这条路**不需要先装 mo**：技能会先就位，主 Agent 首次使用时发现没有 `mo` 会停下来引导安装。
+仓库需要公开（或对方有读权限）。
+
+### 用 mo 自己装
+
 技能内容内联在 CLI 里，所以单文件二进制也能装。还没有 `mo` 时用脚本引导：
 
 ```bash
