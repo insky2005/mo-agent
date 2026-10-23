@@ -480,9 +480,17 @@ export function createMoAgentServer(options) {
         const extra = body.answers && typeof body.answers === "object" && Object.keys(body.answers).length
           ? { answers: body.answers }
           : {};
-        const done = broker.decide(body.id, body.decision, extra);
+        // 同一个 id 可能来自 hook（broker）或 DSH 原生待办，交给统一路由判断；
+        // 否则手机通知上的「允许」对 DSH 会话没有效果。
+        const done = typeof options.decide === "function"
+          ? await options.decide(body.id, body.decision, extra)
+          : broker.decide(body.id, body.decision, extra);
+        const clientAt = Number(body.clientAt) || 0;
+        const delayMs = clientAt > 0 ? Math.max(0, Date.now() - clientAt) : null;
         log.info("手机已应答 " + body.id + " -> " + body.decision
           + (extra.answers ? "（含 " + Object.keys(extra.answers).length + " 个答案）" : "")
+          + (delayMs === null ? "" : " 端到端=" + delayMs + "ms")
+          + " 来源=" + (typeof body.source === "string" && body.source ? body.source : "unknown")
           + (done ? "" : " (已失效)"));
         return json(res, 200, { ok: done, error: done ? undefined : "该请求已结束" });
       }

@@ -16,6 +16,7 @@ import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
+import { createDecisionRouter } from "./decisions.mjs";
 import { checkVoiceReady, createVoiceChannel, decisionForOutcome } from "./voice/channel.mjs";
 import { createScriptedListener } from "./voice/io.mjs";
 import { makeNonce } from "./voice/text.mjs";
@@ -231,6 +232,12 @@ const runtime = {};
 let dingtalkBot = null;
 const pairing = new PairingManager({ log, ttlMs: config.qrTtlMs || 5 * 60 * 1000 });
 
+// 手机/钉钉/语音发来的决定统一走这里：先 broker，再 DSH 原生待办。
+let decisionRouter = null;
+const routeDecision = (id, decision, extra) => (decisionRouter
+  ? decisionRouter.decide(id, decision, extra)
+  : broker.decide(id, decision, extra));
+
 const broker = new ApprovalBroker({
   hub,
   log,
@@ -267,7 +274,7 @@ async function ensureDingTalkBot() {
     notifier.unregister(dingtalkBot);
     dingtalkBot.stop();
   }
-  dingtalkBot = createDingTalkBot({ config: cfg, log, broker });
+  dingtalkBot = createDingTalkBot({ config: cfg, log, broker, decide: routeDecision });
   notifier.register(dingtalkBot);
   await dingtalkBot.start();
   const pending = dingtalkSetup && typeof dingtalkSetup.status === "function"
@@ -403,6 +410,7 @@ const created = await createAdapters({
   dsh,
 });
 const monitor = created.adapters.find((a) => a.name === "dsh") || null;
+decisionRouter = createDecisionRouter({ broker, monitor, dsh, log });
 for (const adapter of created.adapters) hub.register(adapter);
 
 // P2 语音口述任务：沿用 P1 的「当前关注会话」，先成草稿，严格确认后只发送一次。
@@ -492,6 +500,7 @@ const moHost = createMoAgentServer({
   config,
   hub,
   broker,
+  decide: routeDecision,
   dsh,
   processes,
   runtime,

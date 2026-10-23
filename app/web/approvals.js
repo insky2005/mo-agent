@@ -148,7 +148,7 @@
   }
 
   function decide(id, decision, answers) {
-    var body = { id: id, decision: decision };
+    var body = { id: id, decision: decision, clientAt: Date.now(), source: 'app' };
     if (answers && Object.keys(answers).length) body.answers = answers;
     fetch(BASE + '/api/approve', {
       method: 'POST',

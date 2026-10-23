@@ -247,6 +247,10 @@ Hub 的 `applyEvent` 改为表驱动：
 | `approval.*` | 交给 approvals 中枢 |
 | `source.error` | 记录数据源健康度 |
 
+手机通知 / 钉钉回复 / 语音只带一个 id，host 用 `host/decisions.mjs` 统一路由：
+先尝试 `approvals/broker`（hook 型 Agent），未命中再看 `pending.*`（DSH 原生 `approval/request`）。
+否则会出现「卡片在手机上能看见，点允许却没有效果」——通知按钮只认 broker id 时会丢掉 DSH 待办。
+
 **顺序契约**：适配器结束一轮时，先发 `session.upsert`（`status=completed`、`runId` 一并写入），再发 `run.completed`。消费者只依赖 `seq` 顺序，不依赖两次网络到达顺序。
 
 ## 7. 通知策略
