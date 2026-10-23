@@ -13,6 +13,7 @@ import { receiptCommand } from "./commands/receipt.mjs";
 import { ledgerCommand } from "./commands/ledger.mjs";
 import { runCommand } from "./commands/run.mjs";
 import { doctorCommand } from "./commands/doctor.mjs";
+import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
   "mo —— 个人工作台 CLI",
@@ -52,9 +53,7 @@ async function main(argv) {
   const group = args.positional[0];
 
   if (args.options.version || group === "version" || group === "--version") {
-    const { createRequire } = await import("node:module");
-    const require = createRequire(import.meta.url);
-    process.stdout.write(require("../package.json").version + "\n");
+    process.stdout.write(VERSION + "\n");
     return 0;
   }
   if (!group || group === "help" || group === "--help" || args.options.help) {

@@ -1,20 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { emit } from "../lib/output.mjs";
+import { VERSION } from "../lib/version.mjs";
 import { moHome, ledgerDir } from "../lib/paths.mjs";
 import { listProjects } from "../lib/project.mjs";
 import { readEvents } from "../lib/store.mjs";
-
-function readVersion() {
-  try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const pkg = JSON.parse(fs.readFileSync(path.join(here, "..", "..", "package.json"), "utf8"));
-    return pkg.version;
-  } catch {
-    return "unknown";
-  }
-}
 
 /**
  * 自检：只有必需项失败才算失败。
@@ -28,7 +18,7 @@ export function doctorCommand(ctx, args) {
 
   const checks = [
     { name: "node", required: true, ok: true, value: process.versions.node },
-    { name: "mo-agent", required: true, ok: true, value: readVersion() },
+    { name: "mo-agent", required: true, ok: true, value: VERSION },
     { name: "home", required: true, ok: fs.existsSync(home), value: home },
     { name: "ledger", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
     { name: "knowledge", required: false, ok: fs.existsSync(knowledge), value: knowledge },

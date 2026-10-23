@@ -72,6 +72,50 @@ mo task dispatch <id>     # 派单，等回执
 
 注意：Claude / Codex 默认可能需要确认文件写入权限，按各家方式开启（例如 Claude 的 `--permission-mode`）。**权限由你决定，mo 不替你放行。**
 
+## 分发给别人
+
+别人不用 clone 源码。两条路，按“对方有没有 Node”选。
+
+### A. 单文件二进制（推荐，对方不需要 Node）
+
+```bash
+bash scripts/build-cli.sh                        # → dist/mo-0.2.0-darwin-arm64（约 60MB）
+TARGET=bun-linux-x64 bash scripts/build-cli.sh   # 交叉编译
+```
+
+产物是自包含可执行文件（Node 运行时已打进包里），拷过去就能跑：
+
+```bash
+chmod +x mo-0.2.0-darwin-arm64
+mv mo-0.2.0-darwin-arm64 /usr/local/bin/mo
+mo --version
+```
+
+分发方式：放到 GitHub Releases 或内网文件服务，给对方一条命令：
+
+```bash
+curl -fsSL https://你的地址/mo-0.2.0-darwin-arm64 -o /usr/local/bin/mo && chmod +x /usr/local/bin/mo
+```
+
+### B. npm 包（对方有 Node 18+）
+
+```bash
+npm pack --pack-destination dist        # → dist/mo-agent-0.2.0.tgz，约 25KB
+# 发给对方后：
+npm i -g ./mo-agent-0.2.0.tgz
+```
+
+包内只包含 `cli/`、`core/tasks/`、`core/errors.mjs`、README 与 LICENSE（由 `package.json` 的 `files` 控制），不带测试、不带桌面端、不带构建产物。
+
+发布到 registry 前要处理两件事：去掉 `private`；确认包名与许可证（当前是 PolyForm Noncommercial，商业分发需授权）。
+
+### 对方装完的第一个命令
+
+```bash
+mo doctor
+cd <项目> && mo project add .
+```
+
 ## 命令
 
 ```bash
