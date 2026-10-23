@@ -34,7 +34,7 @@ function home() {
  */
 export const AGENT_TARGETS = {
   agents: { path: ".agents/skills", note: "通用位置" },
-  pi: { path: ".agents/skills", note: "pi 没有固定目录，用 --skill 指向这里" },
+  pi: { path: ".agents/skills", note: "pi 直接扫描 ~/.agents/skills（Agent Skills 规范）" },
   claude: { path: ".claude/skills" },
   codex: { path: ".codex/skills" },
   qodercli: { path: ".qoder/skills" },
