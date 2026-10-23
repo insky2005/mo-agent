@@ -60,3 +60,20 @@ test("内置内容包含技能名与铁律", () => {
   assert.match(SKILL_MD, /^---\nname: mo/);
   assert.match(SKILL_MD, /没确认不派单/);
 });
+test("默认目标包含 ~/.agents，且只加已存在的 Agent 目录", () => {
+  const fakeHome = tmpDir();
+  fs.mkdirSync(path.join(fakeHome, ".claude"), { recursive: true });
+  const before = { home: process.env.HOME, dsh: process.env.DSH_HOME };
+  process.env.HOME = fakeHome;
+  delete process.env.DSH_HOME;
+  try {
+    const result = run(["list"]);
+    assert.match(result.out, /agents/);
+    assert.match(result.out, /\.claude/);
+    assert.doesNotMatch(result.out, /\.dsh/);
+  } finally {
+    process.env.HOME = before.home;
+    if (before.dsh === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = before.dsh;
+  }
+});

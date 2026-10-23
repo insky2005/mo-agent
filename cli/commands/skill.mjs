@@ -10,20 +10,33 @@ function home() {
   return process.env.HOME || os.homedir();
 }
 
-/** dsh / claude / 任意目录，带默认目标 */
-export function resolveTargets(names, options = {}) {
+/**
+ * 安装目标：
+ *   agents  ~/.agents/skills        通用位置，默认总是装
+ *   dsh     ~/.dsh/skills           默认仅在 DSH 已安装时装
+ *   claude  ~/.claude/skills        默认仅在 Claude 已安装时装
+ *   路径     显式指定
+ */
+export function resolveTargets(names) {
   const defaults = {
+    agents: path.join(home(), ".agents", "skills"),
     dsh: path.join(process.env.DSH_HOME || path.join(home(), ".dsh"), "skills"),
     claude: path.join(home(), ".claude", "skills"),
   };
-  const requested = names.length ? names : Object.keys(defaults);
+
+  let requested = names;
+  if (!requested.length) {
+    // 默认：通用位置 + 已经装了的 Agent
+    requested = Object.keys(defaults).filter((name) => {
+      if (name === "agents") return true;
+      return fs.existsSync(path.dirname(defaults[name]));
+    });
+  }
+
   const out = [];
   for (const name of requested) {
     if (defaults[name]) {
-      const dir = defaults[name];
-      const parent = path.dirname(dir);
-      if (!names.length && !fs.existsSync(parent)) continue; // 默认目标：没装这个 Agent 就跳过
-      out.push({ name, dir });
+      out.push({ name, dir: defaults[name] });
     } else if (path.isAbsolute(name) || name.startsWith(".")) {
       out.push({ name, dir: path.resolve(process.cwd(), name) });
     } else {
@@ -45,7 +58,7 @@ export function skillCommand(ctx, args) {
       return [name, installed ? "✓" : "✗", path.join(dir, SKILL_NAME)];
     });
     emit(args.options, { targets: targets.map((t) => ({ ...t, installed: fs.existsSync(path.join(t.dir, SKILL_NAME, "SKILL.md")) })) },
-      () => table(rows, ["目标", "已装", "路径"]) + "\n\n安装：mo skill install [--target dsh|claude|<目录>]");
+      () => table(rows, ["目标", "已装", "路径"]) + "\n\n安装：mo skill install [--target agents|dsh|claude|<目录>]");
     return 0;
   }
 

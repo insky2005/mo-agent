@@ -218,12 +218,19 @@ npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（�
 把技能装到主 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
 
 ```bash
-mo skill install                 # 装到 ~/.dsh/skills 与 ~/.claude/skills
-mo skill list                    # 看装没装
+mo skill install                 # ~/.agents/skills + 已安装 Agent 的目录
+mo skill list                    # 看每个目标装没装
 mo skill uninstall
-mo skill install --target dsh    # 只装某一个
+mo skill install --target agents # 只装通用位置
+mo skill install --target claude # 只装某个 Agent
 mo skill install --target /some/skills
 ```
+
+| 目标 | 路径 | 默认 |
+|---|---|---|
+| `agents` | `~/.agents/skills/mo` | 总是装 |
+| `dsh` | `~/.dsh/skills/mo` | 仅当 `~/.dsh` 存在 |
+| `claude` | `~/.claude/skills/mo` | 仅当 `~/.claude` 存在 |
 
 技能内容内联在 CLI 里，所以单文件二进制也能装。还没有 `mo` 时用脚本引导：
 

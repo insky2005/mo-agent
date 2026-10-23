@@ -15,13 +15,15 @@ UNINSTALL=0
 
 TARGETS=()
 [ -n "${MO_SKILL_DIR:-}" ] && TARGETS+=("$MO_SKILL_DIR")
-TARGETS+=("${DSH_HOME:-$HOME/.dsh}/skills" "$HOME/.claude/skills")
+TARGETS+=("$HOME/.agents/skills")                        # 通用位置，总是装
+TARGETS+=("${DSH_HOME:-$HOME/.dsh}/skills" "$HOME/.claude/skills")  # 已装的 Agent
 
 [ -d "$SRC" ] || { echo "找不到技能源目录：$SRC" >&2; exit 1; }
 
 for dir in "${TARGETS[@]}"; do
   parent="$(dirname "$dir")"
-  if [ -z "${MO_SKILL_DIR:-}" ] && [ ! -d "$parent" ]; then
+  # 通用位置总是建；Agent 目录只在它存在时才装
+  if [ -z "${MO_SKILL_DIR:-}" ] && [ "$dir" != "$HOME/.agents/skills" ] && [ ! -d "$parent" ]; then
     continue
   fi
   if [ "$UNINSTALL" = "1" ]; then
