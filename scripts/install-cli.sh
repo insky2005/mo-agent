@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# 安装 mo CLI：软链到 PATH，并把 shell 补全写进 rc 文件。
-#   bash scripts/install-cli.sh                   # 安装 + 补全
-#   bash scripts/install-cli.sh --no-completion   # 只装命令
-#   bash scripts/install-cli.sh --uninstall       # 卸载（含补全块）
+# 安装 mo CLI。
+#   bash scripts/install-cli.sh            # 构建单文件二进制，拷到 ~/.local/bin/mo
+#   bash scripts/install-cli.sh --link     # 开发模式：软链到源码，改完立即生效
+#   bash scripts/install-cli.sh --no-completion
+#   bash scripts/install-cli.sh --uninstall
 #   MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh
 set -euo pipefail
 
@@ -10,10 +11,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 ENTRY="$ROOT/cli/mo.mjs"
 NAME="mo"
+HOME_DIR="${MO_AGENT_HOME:-$HOME/.mo-agent}"
+RECORD="$HOME_DIR/install.json"
 
 BEGIN_MARK="# >>> mo completion >>>"
 END_MARK="# <<< mo completion <<<"
 
+MODE="binary"
 UNINSTALL=0
 WANT_COMPLETION="auto"
 WANT_SHELL="${MO_SHELL:-}"
@@ -21,11 +25,13 @@ WANT_SHELL="${MO_SHELL:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --uninstall) UNINSTALL=1 ;;
+    --link) MODE="link" ;;
+    --binary) MODE="binary" ;;
     --no-completion) WANT_COMPLETION="none" ;;
     --completion) WANT_COMPLETION="yes"; shift; WANT_SHELL="${1:-}" ;;
     --completion=*) WANT_COMPLETION="yes"; WANT_SHELL="${1#--completion=}" ;;
     -h|--help)
-      sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "未知参数：$1" >&2; exit 2 ;;
   esac
@@ -90,14 +96,7 @@ install_block() {
   echo "补全已写入：${rc}（${shell}）"
 }
 
-uninstall_all() {
-  for dir in "${MO_BIN_DIR:-}" "$HOME/.local/bin" "/usr/local/bin"; do
-    [ -n "$dir" ] || continue
-    if [ -L "$dir/$NAME" ] && [ "$(readlink "$dir/$NAME")" = "$ENTRY" ]; then
-      rm -f "$dir/$NAME"
-      echo "已移除 $dir/$NAME"
-    fi
-  done
+remove_completion() {
   for shell in zsh bash; do
     local rc
     rc="$(rc_for "$shell")"
@@ -106,6 +105,41 @@ uninstall_all() {
       echo "已移除补全块：$rc"
     fi
   done
+}
+
+recorded_bin() {
+  [ -f "$RECORD" ] || return 0
+  grep '^bin=' "$RECORD" | head -1 | cut -d= -f2-
+}
+
+write_record() {
+  local bin="$1" mode="$2"
+  mkdir -p "$HOME_DIR"
+  {
+    echo "# mo 安装记录（scripts/install-cli.sh 写入）"
+    echo "mode=$mode"
+    echo "bin=$bin"
+    echo "entry=$ENTRY"
+    echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$RECORD"
+}
+
+uninstall_all() {
+  local bin
+  bin="$(recorded_bin)"
+  if [ -n "$bin" ] && [ -e "$bin" ]; then
+    rm -f "$bin"
+    echo "已移除 $bin"
+  fi
+  for dir in "${MO_BIN_DIR:-}" "$HOME/.local/bin" "/usr/local/bin"; do
+    [ -n "$dir" ] || continue
+    if [ -L "$dir/$NAME" ] && [ "$(readlink "$dir/$NAME")" = "$ENTRY" ]; then
+      rm -f "$dir/$NAME"
+      echo "已移除 $dir/$NAME（源码软链）"
+    fi
+  done
+  remove_completion
+  rm -f "$RECORD"
   exit 0
 }
 
@@ -124,6 +158,19 @@ fi
 
 chmod +x "$ENTRY"
 
+SOURCE="$ENTRY"
+if [ "$MODE" = "binary" ]; then
+  if command -v bun >/dev/null 2>&1; then
+    echo "构建单文件二进制…"
+    OUT_NAME="mo" bash "$ROOT/scripts/build-cli.sh" >/dev/null
+    SOURCE="$ROOT/cli/dist/mo"
+  else
+    echo "没有找到 bun，退化为源码软链（需要 Node，且依赖仓库路径不变）"
+    echo "  想要单文件安装：brew install oven-sh/bun/bun 后重跑"
+    MODE="link"
+  fi
+fi
+
 CANDIDATES=()
 [ -n "${MO_BIN_DIR:-}" ] && CANDIDATES+=("$MO_BIN_DIR")
 CANDIDATES+=("$HOME/.local/bin" "/usr/local/bin")
@@ -132,21 +179,22 @@ INSTALLED=""
 for dir in "${CANDIDATES[@]}"; do
   mkdir -p "$dir" 2>/dev/null || continue
   [ -w "$dir" ] || continue
-  ln -sf "$ENTRY" "$dir/$NAME"
+  if [ "$MODE" = "link" ]; then
+    ln -sf "$ENTRY" "$dir/$NAME"
+  else
+    install -m 0755 "$SOURCE" "$dir/$NAME"
+  fi
   INSTALLED="$dir/$NAME"
-  echo "已安装：$INSTALLED -> $ENTRY"
+  echo "已安装：$INSTALLED（$MODE）"
   break
 done
 
 if [ -z "$INSTALLED" ]; then
-  echo "没有可写目录。用 MO_BIN_DIR=/某个在PATH里的目录 重试，或改用 npm link。" >&2
+  echo "没有可写目录。用 MO_BIN_DIR=/某个在PATH里的目录 重试。" >&2
   exit 1
 fi
 
-case ":$PATH:" in
-  *":$(dirname "$INSTALLED"):"*) ;;
-  *) echo "注意：$(dirname "$INSTALLED") 不在 PATH 中，加进去并重开终端" ;;
-esac
+write_record "$INSTALLED" "$MODE"
 
 SHELL_NAME=""
 if [ "$WANT_COMPLETION" = "auto" ]; then
@@ -160,14 +208,7 @@ elif [ "$WANT_COMPLETION" = "yes" ]; then
   SHELL_NAME="${WANT_SHELL:-zsh}"
   install_block "$INSTALLED" "$SHELL_NAME"
 else
-  # --no-completion：不仅不写，还把旧的块清掉
-  for shell in zsh bash; do
-    rc="$(rc_for "$shell")"
-    if [ -n "$rc" ] && [ -f "$rc" ] && grep -qF "$BEGIN_MARK" "$rc"; then
-      strip_block "$rc"
-      echo "已移除补全块：$rc"
-    fi
-  done
+  remove_completion
 fi
 
 echo
@@ -188,4 +229,6 @@ if [ -n "$SHELL_NAME" ]; then
 fi
 
 echo "下一步：cd 到你的项目，执行 mo project add ."
-echo "新开的终端会自动生效；上面那行只用于当前这个终端。"
+if [ "$MODE" = "link" ]; then
+  echo "开发模式：改源码立即生效；要装成独立二进制，跑 bash scripts/install-cli.sh --binary"
+fi

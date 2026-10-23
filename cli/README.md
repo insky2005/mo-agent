@@ -11,17 +11,27 @@
 **方式一：安装脚本（推荐）**
 
 ```bash
-bash scripts/install-cli.sh                  # 软链 + 自动装 Tab 补全
+bash scripts/install-cli.sh                # 构建单文件二进制并安装（推荐）
+bash scripts/install-cli.sh --link         # 开发模式：软链到源码，改完立即生效
 bash scripts/install-cli.sh --no-completion  # 只装命令，并清掉旧补全块
 bash scripts/install-cli.sh --completion bash  # 补全写到 ~/.bashrc
-bash scripts/install-cli.sh --uninstall      # 卸载（含补全块）
+bash scripts/install-cli.sh --uninstall    # 卸载（含补全块）
 MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 ```
 
 脚本做两件事：
 
-1. 把 `cli/mo.mjs` 软链成 PATH 里的 `mo`（~/.local/bin，无权限则 /usr/local/bin）；
+1. **默认构建单文件二进制**（和 Release 里分发的是同一个产物），拷到 `~/.local/bin/mo`；没有 bun 时退化为源码软链并提示；
 2. 按 `$SHELL` 把补全块写进 `~/.zshrc` / `~/.bashrc`——用注释标记包围，重装只更新这一段，删掉该段即关闭。
+
+两种安装方式的区别：
+
+| 方式 | 装的是什么 | 依赖 | 适用 |
+|---|---|---|---|
+| 默认 | 61MB 自包含二进制 | 无（bun 只在构建时需要） | 日常使用；仓库挪走也不影响 |
+| `--link` | 指向 `cli/mo.mjs` 的软链 | 源码 + Node | 改 CLI 时免构建 |
+
+安装记录写在 `~/.mo-agent/install.json`（`mode` / `bin` / `entry`），`--uninstall` 靠它精确清理。
 
 写 rc 前会备份为 `*.mo-agent.bak-<时间>`；最后跑一次 `mo doctor`。
 
