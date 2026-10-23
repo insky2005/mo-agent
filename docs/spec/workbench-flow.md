@@ -1,6 +1,6 @@
 # 个人工作台：任务流转与分支（v0 设计）
 
-状态：**待评审**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
+状态：**P0 已落地（CLI）**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
 
 ## 1. 目标与非目标
 
@@ -289,7 +289,7 @@ canceled            canceled                failed                  └─> canc
 |---|---|---|
 | 建卡 | `mo task create --project . --title ... --json` | `task_create` |
 | 确认 | `mo task confirm t_x` | **不暴露给主 Agent** |
-| 派单 | `mo task dispatch t_x --assignee auto` | `task_dispatch` |
+| 派单 | `mo task dispatch t_x --exec "claude -p"` | `task_dispatch` |
 | 状态 | `mo task status t_x` | `task_status` |
 | 收件箱 | `mo inbox pull` | `inbox_pull` |
 | 账本 | `mo ledger query --project p_x --days 7` | `ledger_query` |
@@ -299,6 +299,8 @@ canceled            canceled                failed                  └─> canc
 | 提交回执 | `mo receipt submit t_x --file -` | `receipt_submit`（可选） |
 
 MCP 传输：Streamable HTTP（`/mcp`，复用本机令牌）；需要 stdio 时用 `mo mcp` 薄壳转发。
+
+CLI 入口是 [`cli/mo.mjs`](../../cli/mo.mjs)，`npm link` 后命令名即为 `mo`。P0 只实现 CLI 一列。
 
 ## 10. 数据格式
 
@@ -358,13 +360,23 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 ## 12. 落地阶段
 
-| 阶段 | 内容 | 验收 |
-|---|---|---|
-| **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create|dispatch|status` + `mo run` + 账本 | 一条任务从建卡到 `done`，账本可查 |
+| 阶段 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + `mo run` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
 | **P1** | MCP server + `inbox_pull` + 注入唤醒 | 主 Agent 全程不离开对话框完成一轮 |
 | **P2** | `verify` 执行器 + watchdog + `blocked` 升级 | 失败/超时能正确转给人 |
 | **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 |
-| **P4** | 面板/手机端展示 + `mo doctor` + `mo manager check` | 换主 Agent 后仍可继续 |
+| **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 |
+
+### 12.1 P0 实现记录
+
+- `core/tasks/`：状态机（`model.mjs`）、卡解析/渲染（`card.mjs`）、回执校验（`receipt.mjs`）、账本事件（`ledger.mjs`），全部纯逻辑；
+- `cli/`：`project|task|receipt|ledger|run|doctor` 六个命令，全部 IO 集中在这里；
+- 派单协议：卡全文走 stdin + `MO_TASK_ID / MO_PROJECT / MO_PROJECT_ROOT / MO_RECEIPT` 环境变量；
+- 账本：`~/.mo-agent/ledger/YYYY-MM.jsonl`，按 taskId 可查；
+- 测试：`core/tasks/*.test.mjs`（17 项）+ `cli/cli.test.mjs`（5 项，含端到端建卡→派单→done）。
+
+**已知偏差**：`verified` 一律为 `unverified`——`verify` 自动执行属于 P2，P0 只校验回执里的自检结果格式。
 
 ## 13. 安装与首次使用
 

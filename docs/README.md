@@ -42,7 +42,7 @@ docs/
 |---|---|---|
 | [event-contract.md](spec/event-contract.md) | ✅ 生效（M1–M4 已落地） | 事件词汇表、状态语义、映射责任、接入清单 |
 | [dingtalk-bot.md](spec/dingtalk-bot.md) | ✅ 生效 | 钉钉 Stream 通道、消息形态、配置 |
-| [workbench-flow.md](spec/workbench-flow.md) | 🧪 设计（未实现） | 个人工作台：任务流转、分支、安装 |
+| [workbench-flow.md](spec/workbench-flow.md) | 🟡 P0 已落地（CLI） | 个人工作台：任务流转、分支、安装 |
 
 ### guides/ — 操作手册
 
