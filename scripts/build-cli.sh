@@ -29,6 +29,13 @@ bun "${ARGS[@]}"
 
 echo "产物: $OUT ($(du -h "$OUT" | cut -f1))"
 
+# 稳定的入口名：安装脚本和文档都认 cli/dist/mo，不用记版本化的文件名
+ALIAS="$OUT_DIR/mo"
+if [ "$OUT" != "$ALIAS" ]; then
+  ln -sfn "$(basename "$OUT")" "$ALIAS"
+  echo "入口: $ALIAS -> $(basename "$OUT")"
+fi
+
 HOST="bun-$(node -p 'process.platform + "-" + process.arch')"
 if [ -z "$TARGET" ] || [ "$TARGET" = "$HOST" ]; then
   "$OUT" --version

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 安装 mo CLI。
-#   bash scripts/install-cli.sh            # 构建单文件二进制，拷到 ~/.local/bin/mo
+#   bash scripts/install-cli.sh            # 复用/构建单文件二进制，拷到 ~/.local/bin/mo
 #   bash scripts/install-cli.sh --link     # 开发模式：软链到源码，改完立即生效
+#   bash scripts/install-cli.sh --rebuild  # 强制重新构建
 #   bash scripts/install-cli.sh --no-completion
 #   bash scripts/install-cli.sh --uninstall
 #   MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh
@@ -19,6 +20,7 @@ END_MARK="# <<< mo completion <<<"
 
 MODE="binary"
 UNINSTALL=0
+REBUILD=0
 WANT_COMPLETION="auto"
 WANT_SHELL="${MO_SHELL:-}"
 
@@ -27,6 +29,7 @@ while [ $# -gt 0 ]; do
     --uninstall) UNINSTALL=1 ;;
     --link) MODE="link" ;;
     --binary) MODE="binary" ;;
+    --rebuild) REBUILD=1 ;;
     --no-completion) WANT_COMPLETION="none" ;;
     --completion) WANT_COMPLETION="yes"; shift; WANT_SHELL="${1:-}" ;;
     --completion=*) WANT_COMPLETION="yes"; WANT_SHELL="${1#--completion=}" ;;
@@ -158,16 +161,32 @@ fi
 
 chmod +x "$ENTRY"
 
+ARTIFACT="$ROOT/cli/dist/mo"
+
+# 产物比这些输入新，就认为可以复用
+is_stale() {
+  [ -x "$ARTIFACT" ] || return 0
+  if find "$ROOT/cli/mo.mjs" "$ROOT/cli/lib" "$ROOT/cli/commands" \
+       "$ROOT/core/tasks" "$ROOT/core/errors.mjs" "$ROOT/package.json" \
+       "$ROOT/scripts/build-cli.sh" -newer "$ARTIFACT" -type f 2>/dev/null | head -1 | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
 SOURCE="$ENTRY"
 if [ "$MODE" = "binary" ]; then
-  if command -v bun >/dev/null 2>&1; then
-    echo "构建单文件二进制…"
-    OUT_NAME="mo" bash "$ROOT/scripts/build-cli.sh" >/dev/null
-    SOURCE="$ROOT/cli/dist/mo"
-  else
+  if ! command -v bun >/dev/null 2>&1; then
     echo "没有找到 bun，退化为源码软链（需要 Node，且依赖仓库路径不变）"
     echo "  想要单文件安装：brew install oven-sh/bun/bun 后重跑"
     MODE="link"
+  elif [ "$REBUILD" = "0" ] && ! is_stale; then
+    echo "复用已构建的 ${ARTIFACT}"
+    SOURCE="$ARTIFACT"
+  else
+    echo "构建单文件二进制…"
+    OUT_NAME="mo" bash "$ROOT/scripts/build-cli.sh" >/dev/null
+    SOURCE="$ARTIFACT"
   fi
 fi
 

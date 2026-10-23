@@ -11,8 +11,9 @@
 **方式一：安装脚本（推荐）**
 
 ```bash
-bash scripts/install-cli.sh                # 构建单文件二进制并安装（推荐）
+bash scripts/install-cli.sh                # 安装单文件二进制（已构建则复用）
 bash scripts/install-cli.sh --link         # 开发模式：软链到源码，改完立即生效
+bash scripts/install-cli.sh --rebuild      # 强制重新构建
 bash scripts/install-cli.sh --no-completion  # 只装命令，并清掉旧补全块
 bash scripts/install-cli.sh --completion bash  # 补全写到 ~/.bashrc
 bash scripts/install-cli.sh --uninstall    # 卸载（含补全块）
@@ -21,7 +22,10 @@ MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
 
 脚本做两件事：
 
-1. **默认构建单文件二进制**（和 Release 里分发的是同一个产物），拷到 `~/.local/bin/mo`；没有 bun 时退化为源码软链并提示；
+1. **默认安装单文件二进制**（和 Release 里分发的是同一个产物），拷到 `~/.local/bin/mo`；没有 bun 时退化为源码软链并提示；
+   - 产物在 `cli/dist/mo`（指向版本化文件名的软链）；
+   - 产物比 `cli/`、`core/tasks/`、`package.json` 都新时**直接复用，不重复构建**；
+   - 想强制重建用 `--rebuild`；
 2. 按 `$SHELL` 把补全块写进 `~/.zshrc` / `~/.bashrc`——用注释标记包围，重装只更新这一段，删掉该段即关闭。
 
 两种安装方式的区别：
