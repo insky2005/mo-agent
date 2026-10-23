@@ -51,7 +51,7 @@ Mo Agent 从进程、会话记录和 Agent hooks 三个层面观察，不要求 
 
 ### 1. 安装桌面端
 
-当前以 macOS 桌面版为主。从发布产物安装后，菜单栏会出现 Mo Agent 图标，不占 Dock；如需从源码构建，见 [DEVELOPMENT.md](DEVELOPMENT.md)。Linux / Windows 正在适配，方案见 [docs/desktop-cross-platform.md](docs/desktop-cross-platform.md)。
+当前以 macOS 桌面版为主。从发布产物安装后，菜单栏会出现 Mo Agent 图标，不占 Dock；如需从源码构建，见 [DEVELOPMENT.md](DEVELOPMENT.md)。Linux / Windows 正在适配，方案见 [docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)。
 
 ### 2. 手机扫码
 
@@ -110,10 +110,10 @@ Mo Agent 采用 **PolyForm Noncommercial 1.0.0**：个人与非商业用途免�
 ## 进一步了解
 
 - 开发、构建、接口、架构与排障：[DEVELOPMENT.md](DEVELOPMENT.md)
-- 跨平台路径与 Agent 差异：[docs/desktop-cross-platform.md](docs/desktop-cross-platform.md)
-- 语音手册：[docs/voice.md](docs/voice.md)
+- 跨平台路径与 Agent 差异：[docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)
+- 语音手册：[docs/guides/voice.md](docs/guides/voice.md)
 - 设计原则：[ADR-0001 观察优先](docs/adr/adr-0001-observational-first.md)
-- 全部文档：[docs/](docs/)
+- 全部文档：[docs/README.md](docs/README.md)
 
 ---
 

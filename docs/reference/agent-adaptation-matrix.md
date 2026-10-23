@@ -19,7 +19,7 @@
 - **同源低价**：Gemini CLI / Qwen Code（同一套 hook 语义），Cursor（放行型 hook，IDE 用户多）。
 - **只能走 ACP**：Codex、Kimi（hook 审批路径目前是坏的）。ACP 只能控制「我们自己启动的会话」，补不了旁路观测。
 - **明确不做**：Aider、Windsurf / Kiro、通义灵码 / Comate / 文心快码这类没有外部决策点的产品。
-- **一个易混点**：国产模型 + Claude Code / Codex 壳，不算新 Agent，按壳评估即可（见 [domestic-agents-hooks.md](research/domestic-agents-hooks.md)）。
+- **一个易混点**：国产模型 + Claude Code / Codex 壳，不算新 Agent，按壳评估即可（见 [domestic-agents-hooks.md](../research/domestic-agents-hooks.md)）。
 
 ## 1. 总表
 
@@ -50,7 +50,7 @@
 说明：
 
 - 表中「放行」指**旁路 hook** 能否代替用户在本地弹框上点允许；「ACP」是另一条路线，只能控制 mo-agent 自己启动的会话，不能接管用户已经跑起来的进程。
-- `runEnd` 的 explicit / inferred 定义见 [core/contract.mjs](../core/contract.mjs) 与 [event-contract.md](spec/event-contract.md)。
+- `runEnd` 的 explicit / inferred 定义见 [core/contract.mjs](../../core/contract.mjs) 与 [event-contract.md](../spec/event-contract.md)。
 - 状态为 ✅ 的行必须以 `adapters/profiles/*.json` 为准；本表不重复 profile 的细节。
 
 ## 2. 同族多形态：别把「一个产品」当成「一个 Agent」
@@ -88,7 +88,7 @@
 
 产品层提醒：WorkBuddy 自己已经支持企微远程批准（手机下发任务 + 确认操作）。
 如果目标用户已经在用企微助理，WorkBuddy 的适配价值主要是「统一面板 / 跨 Agent 通知」，
-而不是「唯一能远程批准 WorkBuddy 的方案」。详见 [workbuddy-desktop.md](research/workbuddy-desktop.md)。
+而不是「唯一能远程批准 WorkBuddy 的方案」。详见 [workbuddy-desktop.md](../research/workbuddy-desktop.md)。
 
 ## 4. 维护规则（持续更新）
 
@@ -163,11 +163,11 @@
 
 ### 项目内
 
-- [远程批准能力预研](research/remote-approval-hooks.md)
-- [国产 Agent hooks 盘点](research/domestic-agents-hooks.md)
-- [Qoder CN 桌面端预研](research/qoder-cn-desktop.md)
-- [Claude Desktop 预研](research/claude-desktop.md)
-- [WorkBuddy 桌面端预研](research/workbuddy-desktop.md)
+- [远程批准能力预研](../research/remote-approval-hooks.md)
+- [国产 Agent hooks 盘点](../research/domestic-agents-hooks.md)
+- [Qoder CN 桌面端预研](../research/qoder-cn-desktop.md)
+- [Claude Desktop 预研](../research/claude-desktop.md)
+- [WorkBuddy 桌面端预研](../research/workbuddy-desktop.md)
 - [运行态能力表](capabilities.md)
 
 ### 外部

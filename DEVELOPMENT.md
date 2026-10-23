@@ -28,7 +28,7 @@
 | host/notify-webhook.mjs 第三方通道（Bark/钉钉/企业微信/飞书/通用） | 已实现 |
 | host/hms-push.mjs 华为 HMS 推送（OAuth + messages:send） | 已实现并验证送达 |
 | desktop/ 桌面壳（含日志轮转、语音开关） | 已完成 |
-| host/voice/ 两段式语音确认（TTS 播报 + 口令 + 草稿回读） | 已并入桌面分发包（默认关闭，托盘可勾选）；手册见 docs/voice.md，正式签名/升级验证暂缓 |
+| host/voice/ 两段式语音确认（TTS 播报 + 口令 + 草稿回读） | 已并入桌面分发包（默认关闭，托盘可勾选）；手册见 docs/guides/voice.md，正式签名/升级验证暂缓 |
 
 ## 快速开始
 
@@ -85,8 +85,8 @@
 
 查看当前接入状态：`npm run hooks`。手动配置的旧方式仍保留在
 [hooks/claude-code/settings.snippet.json](hooks/claude-code/settings.snippet.json)，仅作兜底。
-配置管理的设计与边界见 [docs/agent-hooks.md](docs/agent-hooks.md)。
-Claude Code 的 Notification 类型、标题与正文模板见 [docs/claude-code-notifications.md](docs/claude-code-notifications.md)。
+配置管理的设计与边界见 [docs/guides/agent-hooks.md](docs/guides/agent-hooks.md)。
+Claude Code 的 Notification 类型、标题与正文模板见 [docs/reference/claude-code-notifications.md](docs/reference/claude-code-notifications.md)。
 
 ### Qoder CN（桌面端「智能工作台」）
 
@@ -174,7 +174,7 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
 ## 桌面托盘（macOS）
 
-> Linux / Windows 的跨平台方案、路径矩阵与 Agent 路径差异见 [docs/desktop-cross-platform.md](docs/desktop-cross-platform.md)。
+> Linux / Windows 的跨平台方案、路径矩阵与 Agent 路径差异见 [docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)。
 > 当前仍是方案阶段，macOS 分发包与构建流程不受影响。
 
     ./scripts/build-desktop.sh
@@ -191,7 +191,7 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
 - 一键配置 Agent…：弹出「一键配置」窗口，用单个列表列出所有已启用的 Agent；需要 hook 的显示将写入的 hook、状态和按钮，原生接入的只显示状态
 - 设置（安装与配对）：弹出面板窗口，里面是「扫码装 App」「扫码配对」两个二维码
-- 语音：启用语音 / 麦克风权限设置… / 语音命令 / 语音测试（详见 [docs/voice.md](docs/voice.md)）
+- 语音：启用语音 / 麦克风权限设置… / 语音命令 / 语音测试（详见 [docs/guides/voice.md](docs/guides/voice.md)）
 - 打开监控屏：常驻桌面大窗，实时显示所有会话的运行状态、最近一轮内容、等待处理项和事件流；
   另有筛选、搜索、会话详情和 SSE 实时推送（断线自动轮询兜底），只读展示，不会替你做决定
 - 重启服务：重启本地 host 服务，随后自动打开「设置」面板
@@ -212,8 +212,8 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 - 支持按活跃 / 运行中 / 等待 / 完成 / 异常筛选，按标题 / 路径 / 最近内容搜索；SSE 推送会话与事件，同时按 host 轮询节奏轻量刷新钉钉连接、进程、数据源等快照字段，断线时自动退化为整份快照轮询。
   「活跃」和手机端「只看活跃」同口径：运行中、有待处理请求、当前选中，或最近 6 小时有更新（不在运行的分支除外）。
 
-![实时监控屏](monitor-screen.jpg)
-![会话详情](monitor-detail.jpg)
+![实时监控屏](docs/assets/monitor-screen.jpg)
+![会话详情](docs/assets/monitor-detail.jpg)
 
 监控屏和日志页一样只允许本机访问（回环地址 + 本机令牌），并且**只读**：批准和回答仍在手机或终端完成。
 
@@ -277,7 +277,7 @@ App 在前台时保持屏幕常亮（`FLAG_KEEP_SCREEN_ON`），手机可以一�
 ## 语音免手确认
 
 Agent 卡在授权时，host 用 TTS 念出动作、目标和 4 位口令，你复述口令才放行；说「拒绝」可直接拒绝。
-全程本机识别，音频不上传。完整说明（权限、配置、日志、排障、构建）见 [docs/voice.md](docs/voice.md)。
+全程本机识别，音频不上传。完整说明（权限、配置、日志、排障、构建）见 [docs/guides/voice.md](docs/guides/voice.md)。
 
 分发包默认自带语音桥、静态 whisper 和 `ggml-small-q8_0` 模型（语音资源约 254MB，App 约 282MB），
 装完即用，不需要联网下载模型。
@@ -318,7 +318,7 @@ ad-hoc 签名导致重建/升级后麦克风权限可能重置，重新授权一
 ## 通知通道（可选）
 
 除了 Android 原生前台服务，host 还能把同一条 notify 事件转发到第三方 App，用来覆盖 iPhone 或跨网段。
-配置文件默认是 ~/.mo-agent/notify.json（里面有 channels 数组），示例见 docs/notify.example.json：
+配置文件默认是 ~/.mo-agent/notify.json（里面有 channels 数组），示例见 docs/reference/notify.example.json：
 
     {
       "channels": [
@@ -365,8 +365,8 @@ Bark 也可以写成 { "type": "bark", "deviceKey": "你的Key" }，走官方 /p
 设计依据：docs/adr/adr-0001-observational-first.md（观察优先，暂不做 ACP 托管）。
 
 事件契约：docs/spec/event-contract.md（统一事件、状态语义与映射；决策见 docs/adr/adr-0003-event-contract.md）。
-Agent 能力表：docs/capabilities.md（由 scripts/gen-capabilities.mjs 生成）。
-Agent 适配性矩阵：docs/agent-adaptation-matrix.md（研究态总表，含未接入/不可行与证据级别，持续更新）。
+Agent 能力表：docs/reference/capabilities.md（由 scripts/gen-capabilities.mjs 生成）。
+Agent 适配性矩阵：docs/reference/agent-adaptation-matrix.md（研究态总表，含未接入/不可行与证据级别，持续更新）。
 
 ## 会话派生关系（分支）
 
@@ -436,7 +436,7 @@ mo-agent 的处理：
 托盘图特意比 App 图标更粗更大——实际渲染只有 18px，细节会糊。
 
     node scripts/gen-icons.mjs      # 重新生成全部图标
-    node scripts/icon-preview.mjs   # 生成 docs/icon-preview.png（含深色底反色模拟与 18px 放大）
+    node scripts/icon-preview.mjs   # 生成 docs/assets/icon-preview.png（含深色底反色模拟与 18px 放大）
     ./scripts/build-desktop.sh && ./scripts/build-android.sh
 
 改图标只改 scripts/icon-art.mjs；改完两端都要重新打包。

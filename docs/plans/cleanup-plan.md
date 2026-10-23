@@ -107,7 +107,7 @@ notify-test.mjs、tray-preview.mjs、icon-preview.mjs
 
 ## 任务 4：补文档
 
-### 新建 docs/voice.md
+### 新建 docs/guides/voice.md
 
 内容：
 
@@ -126,7 +126,7 @@ notify-test.mjs、tray-preview.mjs、icon-preview.mjs
 
 ### 更新
 
-- README.md：语音章节压缩成“用法 + 链接到 docs/voice.md”
+- README.md：语音章节压缩成“用法 + 链接到 docs/guides/voice.md”
 - docs/adr/adr-0002-hands-free-voice.md 补最终决策
   - 方案 B（外层 App 原生子进程录音）验证失败，原因是 cottontail 成为 TCC 责任主体
   - 最终保留方案 C（嵌套 helper）
@@ -136,7 +136,7 @@ notify-test.mjs、tray-preview.mjs、icon-preview.mjs
 
 ### 验收
 
-一个没参与过的人，只读 README + docs/voice.md，能完成：
+一个没参与过的人，只读 README + docs/guides/voice.md，能完成：
 
     ./scripts/install-desktop.sh
 

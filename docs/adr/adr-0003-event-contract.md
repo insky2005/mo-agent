@@ -53,7 +53,7 @@ Claude Code 接入后暴露了三个问题：状态不实时、展示的“你�
 - 删除 `agent.*` / `agent.needs.*` / `session.started` / `dsh.error` 别名。
 - `notice` 只保留 attention 语义；完成/失败统一 `run.*`，删除重复通知分支。
 - SSE 只发 `event: message`，删除 named event 与 `?envelope=1` 协商。
-- `scripts/gen-capabilities.mjs` 生成 [docs/capabilities.md](../capabilities.md)，`npm run check` 校验时效。
+- `scripts/gen-capabilities.mjs` 生成 [docs/reference/capabilities.md](../reference/capabilities.md)，`npm run check` 校验时效。
 - `npm test` 211 项全绿。
 
 ## 结果

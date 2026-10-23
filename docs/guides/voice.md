@@ -2,7 +2,7 @@
 
 目标：**不打字、不按键**。Agent 卡在授权时，host 用 TTS 把动作、目标和口令念出来；你复述口令，它才放行。
 
-设计取舍见 [ADR-0002](adr/adr-0002-hands-free-voice.md)。本文是使用与排障手册。
+设计取舍见 [ADR-0002](../adr/adr-0002-hands-free-voice.md)。本文是使用与排障手册。
 
 ## 架构
 

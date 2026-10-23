@@ -329,7 +329,7 @@ es.onmessage = (e) => {
 
 ### 9.1 新增一个 Agent 需要做什么
 
-详细接入清单已落到 [adapters/README.md](../adapters/README.md) 与 [adapters/profiles/_template.json](../adapters/profiles/_template.json)。
+详细接入清单已落到 [adapters/README.md](../../adapters/README.md) 与 [adapters/profiles/_template.json](../../adapters/profiles/_template.json)。
 
 1. **加 profile**：`adapters/profiles/<id>.json`
    - `id`、`label`、`enabled`
@@ -431,7 +431,7 @@ es.onmessage = (e) => {
 - [x] registry 按 `profile.module` + `profile.export` 动态加载，新增 Agent 不改 registry。
 - [x] 能力声明参与行为门控：`runEnd: none` 只更新状态，不发 `run.*`（DSH/Claude 各有测试）。
 - [x] hooks 桥读取 `profile.hooks.events`；`hook-cli.mjs event <HookEvent> <agent>`，旧 `permission`/`notify` 命令兼容。
-- [x] 提供 [adapters/profiles/_template.json](../adapters/profiles/_template.json) 与 [adapters/README.md](../adapters/README.md)。
+- [x] 提供 [adapters/profiles/_template.json](../../adapters/profiles/_template.json) 与 [adapters/README.md](../../adapters/README.md)。
 - [x] 打包脚本把 `adapters/*.mjs` 与 `core/*.mjs` 复制进运行时，动态 import 在 Bun 单文件包里可用。
 
 ### M4：清理——已落地
@@ -439,7 +439,7 @@ es.onmessage = (e) => {
 - [x] 删除 `agent.*` / `agent.needs.*` / `session.started` / `dsh.error` 别名。
 - [x] 删除重复通知分支：`notice` 只做 attention，完成/失败统一走 `run.*`。
 - [x] 删除旧 named SSE：只发 `event: message`，客户端不再带 `?envelope=1`。
-- [x] 新增 `scripts/gen-capabilities.mjs`，生成 [docs/capabilities.md](../capabilities.md)；`npm run check` 会校验是否最新。
+- [x] 新增 `scripts/gen-capabilities.mjs`，生成 [docs/reference/capabilities.md](../reference/capabilities.md)；`npm run check` 会校验是否最新。
 - [x] 测试更新：旧事件名不再被接受、SSE 只有 message 帧。
 
 ## 13. 待决问题

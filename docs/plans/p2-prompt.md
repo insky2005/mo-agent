@@ -13,8 +13,8 @@
 - docs/p2-plan.md
 - docs/adr/adr-0001-observational-first.md
 - docs/adr/adr-0002-hands-free-voice.md
-- docs/p1-plan.md
-- docs/voice.md
+- docs/plans/p1-plan.md
+- docs/guides/voice.md
 - host/voice/text.mjs
 - host/voice/confirm.mjs
 - host/voice/commands.mjs

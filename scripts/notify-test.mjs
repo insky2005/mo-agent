@@ -16,4 +16,4 @@ const res = await fetch(url + "/local/notify", {
   }),
 });
 console.log("发送结果:", await res.text());
-console.log("通道配置: ~/.mo-agent/notify.json（示例见 docs/notify.example.json）");
+console.log("通道配置: ~/.mo-agent/notify.json（示例见 docs/reference/notify.example.json）");

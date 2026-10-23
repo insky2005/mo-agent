@@ -9,7 +9,7 @@
 
 - docs/adr/adr-0001-observational-first.md
 - docs/adr/adr-0002-hands-free-voice.md
-- docs/cleanup-plan.md
+- docs/plans/cleanup-plan.md
 - host/voice/channel.mjs、confirm.mjs、text.mjs、io.mjs、helper-client.mjs
 - host/index.mjs、host/http.mjs
 - desktop/src/bun/index.ts

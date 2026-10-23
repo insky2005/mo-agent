@@ -961,7 +961,7 @@ dingtalk: {
 | `app/web/monitor.html` | 新增“钉钉通道”面板 |
 | `app/web/monitor.js` | `renderDingtalk` + 快照接入 |
 | `app/web/monitor.css` | 进度条 / 状态标签样式 |
-| `docs/notify.example.json` | 保持现状（避免空凭证被注册）；schema 以本文 §5 为准 |
+| `docs/reference/notify.example.json` | 保持现状（避免空凭证被注册）；schema 以本文 §5 为准 |
 | `package.json` | `check` / `test` 增加新文件 |
 | `host/dingtalk-device.test.mjs` | 单测：init/begin/poll 状态、二维码 URL、WAITING/SUCCESS/FAIL/EXPIRED、超时、凭据 0600 |
 | `host/dingtalk-stream.test.mjs` | 单测：gateway/ACK、msgId 去重、重连退避、状态映射 |

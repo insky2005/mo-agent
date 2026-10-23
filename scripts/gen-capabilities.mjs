@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 从 adapters/profiles/*.json 生成 Agent 能力表。
- *   node scripts/gen-capabilities.mjs          # 写入 docs/capabilities.md
+ *   node scripts/gen-capabilities.mjs          # 写入 docs/reference/capabilities.md
  *   node scripts/gen-capabilities.mjs --check  # 只校验是否最新
  */
 import fs from "node:fs";
@@ -12,7 +12,7 @@ import { loadProfiles } from "../adapters/registry.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const profilesDir = path.join(root, "adapters", "profiles");
-const target = path.join(root, "docs", "capabilities.md");
+const target = path.join(root, "docs", "reference", "capabilities.md");
 
 function code(value) {
   return value ? "`" + String(value) + "`" : "—";
@@ -61,7 +61,7 @@ if (process.argv.includes("--check")) {
     current = "";
   }
   if (current !== markdown) {
-    console.error("[capabilities] docs/capabilities.md 已过期，运行：npm run docs:capabilities");
+    console.error("[capabilities] docs/reference/capabilities.md 已过期，运行：npm run docs:capabilities");
     process.exit(1);
   }
   console.log("[capabilities] 文档已是最新");

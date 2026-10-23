@@ -10,8 +10,8 @@
 
 - docs/adr/adr-0001-observational-first.md
 - docs/adr/adr-0002-hands-free-voice.md
-- docs/p1-plan.md
-- docs/voice.md
+- docs/plans/p1-plan.md
+- docs/guides/voice.md
 - host/voice/text.mjs（buildDictationDraft、parseReply）
 - host/voice/confirm.mjs（listenOnce、runVoiceConfirm 的 dictation 分支）
 - host/voice/commands.mjs（P1 命令执行器、事件、目标会话）
