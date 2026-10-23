@@ -74,46 +74,60 @@ mo task dispatch <id>     # 派单，等回执
 
 ## 分发给别人
 
-别人不用 clone 源码。两条路，按“对方有没有 Node”选。
+不要求对方 clone 源码。三条路。
 
-### A. 单文件二进制（推荐，对方不需要 Node）
+### A. GitHub Releases + 一行安装（推荐）
+
+打 tag（例如 `v0.2.0`）后，`.github/workflows/cli-release.yml` 会自动：
+
+- 跑 `npm test`
+- 用 bun 交叉编译四个平台：`darwin-arm64` / `darwin-x64` / `linux-x64` / `linux-arm64`
+- 为每个产物生成 `.sha256`
+- 打 npm 包
+- 全部挂到 Release
+
+对方只需要一条命令：
 
 ```bash
-bash scripts/build-cli.sh                        # → dist/mo-0.2.0-darwin-arm64（约 60MB）
-TARGET=bun-linux-x64 bash scripts/build-cli.sh   # 交叉编译
+curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
 ```
 
-产物是自包含可执行文件（Node 运行时已打进包里），拷过去就能跑：
+脚本会按 `uname` 选产物、校验 sha256、装到 `~/.local/bin/mo`。
+
+指定版本或在本地验证：
 
 ```bash
-chmod +x mo-0.2.0-darwin-arm64
-mv mo-0.2.0-darwin-arm64 /usr/local/bin/mo
-mo --version
+MO_VERSION=v0.2.0 bash scripts/install-remote.sh
+MO_CLI_BASE_URL=file://$PWD/dist bash scripts/install-remote.sh
 ```
 
-分发方式：放到 GitHub Releases 或内网文件服务，给对方一条命令：
+**发布前要改一处**：`scripts/install-remote.sh` 里的 `REPO="CHANGE_ME/mo-agent"`，或让用户用 `MO_AGENT_REPO=you/mo-agent` 覆盖。
+
+**私有仓库注意**：Release 资产需要登录才能下载，`curl` 一行安装会 404。要么仓库公开，要么改用 npm 私有源（方式 B/C 仍可用）。
+
+### B. 从 GitHub 直接装 npm 包
+
+对方有 Node 时，连 tarball 都不用传：
 
 ```bash
-curl -fsSL https://你的地址/mo-0.2.0-darwin-arm64 -o /usr/local/bin/mo && chmod +x /usr/local/bin/mo
+npm i -g github:<org>/<repo>
 ```
 
-### B. npm 包（对方有 Node 18+）
+npm 会自己拉仓库，并按 `package.json` 的 `files` 只装 `cli/` + `core/tasks/` + `core/errors.mjs`。
+
+### C. 手动下载二进制
+
+Release 页面下载 `mo-darwin-arm64`（约 61MB），`chmod +x` 后放进 PATH：
 
 ```bash
-npm pack --pack-destination dist        # → dist/mo-agent-0.2.0.tgz，约 25KB
-# 发给对方后：
-npm i -g ./mo-agent-0.2.0.tgz
+chmod +x mo-darwin-arm64 && mv mo-darwin-arm64 /usr/local/bin/mo
 ```
 
-包内只包含 `cli/`、`core/tasks/`、`core/errors.mjs`、README 与 LICENSE（由 `package.json` 的 `files` 控制），不带测试、不带桌面端、不带构建产物。
-
-发布到 registry 前要处理两件事：去掉 `private`；确认包名与许可证（当前是 PolyForm Noncommercial，商业分发需授权）。
-
-### 对方装完的第一个命令
+### 本地出包
 
 ```bash
-mo doctor
-cd <项目> && mo project add .
+bash scripts/build-cli.sh                 # → dist/mo-0.2.0-darwin-arm64
+npm pack --pack-destination dist          # → dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
 ## 命令

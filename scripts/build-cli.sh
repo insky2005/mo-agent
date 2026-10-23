@@ -17,7 +17,8 @@ command -v bun >/dev/null 2>&1 || {
 VERSION="$(node -p "require('$ROOT/package.json').version")"
 PLATFORM="${TARGET#bun-}"
 [ -n "$PLATFORM" ] || PLATFORM="$(node -p 'process.platform + "-" + process.arch')"
-OUT="$OUT_DIR/mo-$VERSION-$PLATFORM"
+OUT_NAME="${OUT_NAME:-mo-$VERSION-$PLATFORM}"
+OUT="$OUT_DIR/$OUT_NAME"
 
 mkdir -p "$OUT_DIR"
 
@@ -27,4 +28,10 @@ ARGS=(build --compile --minify "$ROOT/cli/mo.mjs" --outfile "$OUT")
 bun "${ARGS[@]}"
 
 echo "产物: $OUT ($(du -h "$OUT" | cut -f1))"
-"$OUT" --version
+
+HOST="bun-$(node -p 'process.platform + "-" + process.arch')"
+if [ -z "$TARGET" ] || [ "$TARGET" = "$HOST" ]; then
+  "$OUT" --version
+else
+  echo "（交叉编译产物，跳过本机执行验证）"
+fi

@@ -1,0 +1,53 @@
+name: cli-release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Test
+        run: npm test
+
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in bun-darwin-arm64 bun-darwin-x64 bun-linux-x64 bun-linux-arm64; do
+            OUT_NAME="mo-${target#bun-}" TARGET="$target" bash scripts/build-cli.sh
+          done
+
+      - name: Checksums
+        run: |
+          cd dist
+          for f in mo-*; do
+            shasum -a 256 "$f" > "$f.sha256"
+          done
+          ls -lh
+
+      - name: Package for npm
+        run: npm pack --pack-destination dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/mo-*
+            dist/mo-agent-*.tgz
+          generate_release_notes: true
