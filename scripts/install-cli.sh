@@ -135,7 +135,7 @@ uninstall_all() {
     [ -n "$dir" ] || continue
     if [ -L "$dir/$NAME" ] && [ "$(readlink "$dir/$NAME")" = "$ENTRY" ]; then
       rm -f "$dir/$NAME"
-      echo "已移除 $dir/$NAME（源码软链）"
+      echo "已移除 ${dir}/${NAME}（源码软链）"
     fi
   done
   remove_completion
@@ -185,7 +185,7 @@ for dir in "${CANDIDATES[@]}"; do
     install -m 0755 "$SOURCE" "$dir/$NAME"
   fi
   INSTALLED="$dir/$NAME"
-  echo "已安装：$INSTALLED（$MODE）"
+  echo "已安装：${INSTALLED}（${MODE}）"
   break
 done
 
