@@ -33,8 +33,8 @@ function home() {
  * pi 没有固定的 skills 目录，用 `pi --skill <path>` 指过来。
  */
 export const AGENT_TARGETS = {
-  agents: { path: ".agents/skills", note: "通用位置" },
-  pi: { path: ".pi/agent/skills", note: "pi 原生目录；与 agents 二选一，重复会被判同名冲突" },
+  agents: { path: ".agents/skills", note: "通用" },
+  pi: { path: ".pi/agent/skills", note: "原生（与 agents 二选一）" },
   claude: { path: ".claude/skills" },
   codex: { path: ".codex/skills" },
   qodercli: { path: ".qoder/skills" },
@@ -140,7 +140,7 @@ export async function skillCommand(ctx, args) {
     // pi 同时读 ~/.agents 和 ~/.pi/agent；两处都装会被判同名冲突
     const duplicated = installedNames.has("agents") && installedNames.has("pi");
     const hint = duplicated
-      ? "注意：agents 与 pi 各装了一份。pi 会保留先发现的那份并告警，建议只留一处（mo skill uninstall --target pi）。"
+      ? "注意：agents 与 pi 各一份，pi 会告警；建议只留一处。"
       : "";
 
     emit(
