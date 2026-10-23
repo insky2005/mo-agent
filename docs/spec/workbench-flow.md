@@ -503,4 +503,5 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 3. 记忆检索后端默认值（内置 vs 自动检测 qmd）；
 4. `assignee: auto` 的排序权重（空闲度 / 历史成功率 / 最近使用）；
 5. 人不在场时，`blocked` 的默认超时与升级路径（手机推送？）；
-6. 主 Agent 的工具隔离在 DSH 侧的具体配置方式。
+6. 主 Agent 的工具隔离在 DSH 侧的具体配置方式；
+7. 跨平台（Windows）：暂不支持，方案与差距见 [cli-cross-platform.md](cli-cross-platform.md)，与桌面端跨平台一并处理。
