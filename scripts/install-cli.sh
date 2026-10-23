@@ -3,6 +3,7 @@
 #   bash scripts/install-cli.sh            # 复用/构建单文件二进制，拷到 ~/.local/bin/mo
 #   bash scripts/install-cli.sh --link     # 开发模式：软链到源码，改完立即生效
 #   bash scripts/install-cli.sh --rebuild  # 强制重新构建
+#   bash scripts/install-cli.sh --no-skill # 不装主 Agent 技能
 #   bash scripts/install-cli.sh --no-completion
 #   bash scripts/install-cli.sh --uninstall
 #   MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh
@@ -21,6 +22,7 @@ END_MARK="# <<< mo completion <<<"
 MODE="binary"
 UNINSTALL=0
 REBUILD=0
+NO_SKILL=0
 WANT_COMPLETION="auto"
 WANT_SHELL="${MO_SHELL:-}"
 
@@ -30,6 +32,7 @@ while [ $# -gt 0 ]; do
     --link) MODE="link" ;;
     --binary) MODE="binary" ;;
     --rebuild) REBUILD=1 ;;
+    --no-skill) NO_SKILL=1 ;;
     --no-completion) WANT_COMPLETION="none" ;;
     --completion) WANT_COMPLETION="yes"; shift; WANT_SHELL="${1:-}" ;;
     --completion=*) WANT_COMPLETION="yes"; WANT_SHELL="${1#--completion=}" ;;
@@ -252,7 +255,12 @@ if [ -n "$SHELL_NAME" ]; then
   printf '当前终端执行以下脚本启用补全：\n  hash -r 2>/dev/null; eval "$(%s completion %s)"\n\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
-echo "下一步：cd 到你的项目，执行 mo project add ."
+if [ "$NO_SKILL" = "0" ] && [ -z "${MO_SKIP_SKILL:-}" ] && [ -t 0 ]; then
+  echo
+  "$INSTALLED" skill install || true
+else
+  echo "下一步：mo skill install（给主 Agent 装技能），然后 cd 到你的项目执行 mo project add ."
+fi
 if [ "$MODE" = "link" ]; then
   echo "开发模式：改源码立即生效；要装成独立二进制，跑 bash scripts/install-cli.sh --binary"
 fi

@@ -58,3 +58,12 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "注意：$BIN_DIR 不在 PATH 中，加进去并重开终端" ;;
 esac
+
+# 技能：默认一起装（--no-skill 或 MO_SKIP_SKILL=1 可跳过）
+if [ "${MO_SKIP_SKILL:-0}" != "1" ] && [ "${1:-}" != "--no-skill" ]; then
+  if "$BIN_DIR/mo" skill install --yes >/dev/null 2>&1; then
+    echo "技能已安装（mo skill list 查看）"
+  else
+    echo "技能安装跳过；之后可手动执行：mo skill install"
+  fi
+fi

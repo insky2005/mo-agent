@@ -10,9 +10,23 @@ description: 把讨论落成任务卡并派给执行 Agent。用户说"开始做
 ## 前提
 
 ```bash
-mo --version          # 不可用就停，告诉用户先跑 scripts/install-cli.sh
+mo --version          # 不可用 → 见下面的「mo 还没装」
 mo doctor             # 顺带确认当前目录属于某个项目
 ```
+
+### mo 还没装
+
+**不要自己猜命令，也不要继续建卡。** 停下来告诉用户：技能已就位，但 `mo` 不在 PATH 里，然后给出安装方式：
+
+```bash
+# 从 Release 装单文件二进制（同时会装技能）
+curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
+
+# 本机已有源码
+bash scripts/install-cli.sh
+```
+
+用户装完后，让 ta 重开终端（或按安装脚本打印的那行命令刷新），再执行 `mo --version` 确认。
 
 当前目录不是项目时，先问用户是否要 `mo project add .`，**不要自动建**。
 

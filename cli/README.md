@@ -8,6 +8,15 @@
 
 只需要 Node 18+，没有任何第三方依赖。
 
+### 两种安装顺序
+
+| 你先有 | 怎么做 | 结果 |
+|---|---|---|
+| 想先装 mo | `bash scripts/install-cli.sh`（或远端 `install-remote.sh`） | 装好命令后，终端里会提示/直接进入技能安装 |
+| 想先装技能 | `curl -fsSL .../skills/mo/SKILL.md -o ~/.agents/skills/mo/SKILL.md` | 主 Agent 首次使用时发现没有 `mo`，会停下来引导安装 |
+
+两条路的终点一样：`mo` 在 PATH 里 + `~/.agents/skills/mo/SKILL.md`（按需复制到各 Agent 目录）。
+
 **方式一：安装脚本（推荐）**
 
 ```bash

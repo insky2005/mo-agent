@@ -5,6 +5,7 @@ import { MoError } from "../../core/errors.mjs";
 import { SKILL_MD, SKILL_NAME } from "../lib/skill-content.mjs";
 import readline from "node:readline/promises";
 import { all, has } from "../lib/args.mjs";
+import { which } from "../lib/executors.mjs";
 import { emit, table } from "../lib/output.mjs";
 
 function isDir(target) {
@@ -150,8 +151,14 @@ export async function skillCommand(ctx, args) {
       }
       written.push({ target: name, path: dest });
     }
-    emit(args.options, { ok: true, written }, () =>
-      written.map((item) => "已安装 " + item.path).join("\n") + "\n\n新开会话后技能才会加载。");
+    emit(args.options, { ok: true, written, moOnPath: Boolean(which("mo")) }, () => {
+      const lines = written.map((item) => "已安装 " + item.path);
+      lines.push("", "新开会话后技能才会加载。");
+      if (!which("mo")) {
+        lines.push("注意：mo 不在 PATH 里。技能会先让主 Agent 安装 mo；也可以现在把安装目录加进 PATH。");
+      }
+      return lines.join("\n");
+    });
     return 0;
   }
 
