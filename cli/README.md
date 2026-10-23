@@ -98,13 +98,30 @@ mo project add .          # 认领项目，写 .mo-agent/project.json
 
 > 从 stdin 读任务卡，把回执写到 `$MO_RECEIPT`。
 
+常用 Agent 有内置模板，用 `--agent` 选，不用记完整命令：
+
+```bash
+mo agents                        # 列出模板
+mo task create --agent claude …  # 展开成 claude -p "$(cat)"
+mo task create --agent codex …
+```
+
+| 模板 | 展开为 | 说明 |
+|---|---|---|
+| `claude` | `claude -p "$(cat)"` | 只读 |
+| `claude-edit` | `claude -p "$(cat)" --permission-mode acceptEdits` | 允许改文件 |
+| `codex` | `codex exec -s workspace-write -` | 工作区可写 |
+| `codex-readonly` | `codex exec -s read-only -` | 只读 |
+
+需要别的参数就用 `--exec` 写完整命令（两者互斥）：
+
 | 执行者 | `--exec` 写法 | 备注 |
 |---|---|---|
-| Claude Code | `claude -p "$(cat)"` | 需先登录；要改文件加 `--permission-mode acceptEdits` |
-| Codex | `codex exec -s workspace-write -` | 需先登录；`-s` 决定能不能写文件 |
 | 自己的脚本 | `node scripts/run-task.mjs` | 最可控 |
 | 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
 | 先演示 | `node /…/cli/demo/executor.mjs` | 仓库自带的假执行者，不花钱 |
+
+模板只是建卡时的默认值：派单时 `--agent` / `--exec` 可以覆盖卡里的命令。
 
 **执行者能不能用，先手动验一次**：
 

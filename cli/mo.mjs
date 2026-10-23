@@ -14,6 +14,7 @@ import { ledgerCommand } from "./commands/ledger.mjs";
 import { runCommand } from "./commands/run.mjs";
 import { doctorCommand } from "./commands/doctor.mjs";
 import { completionCommand, completeCommand } from "./commands/completion.mjs";
+import { agentsCommand } from "./commands/agents.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -34,6 +35,7 @@ const HELP = [
   "  mo receipt submit <id> --file -       提交回执（stdin）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "  mo doctor                            自检",
+  "  mo agents                            列出内置执行者模板（--agent claude 等）",
   "  mo completion bash|zsh               输出补全脚本（eval 即可）",
   "",
   "全局选项：--project <名称|路径>  --json  --help",
@@ -49,6 +51,7 @@ const ROUTES = {
   run: runCommand,
   doctor: doctorCommand,
   completion: completionCommand,
+  agents: agentsCommand,
 };
 
 async function main(argv) {

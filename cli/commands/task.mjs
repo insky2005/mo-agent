@@ -8,10 +8,22 @@ import { moHome, cardPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
+import { resolveAgent } from "../lib/executors.mjs";
 import { transition } from "../lib/ingest.mjs";
 
 function resolveContext(ctx, args) {
   return resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
+}
+
+/** --agent 与 --exec 二选一：前者用内置模板，后者是完整命令 */
+function pickExecutor(options) {
+  const agentName = one(options, "agent");
+  const command = one(options, "exec");
+  if (agentName && command) {
+    throw new MoError("E_USAGE", "--agent 与 --exec 只能二选一");
+  }
+  if (agentName) return resolveAgent(agentName);
+  return null;
 }
 
 function parseVerifyInput(values) {
@@ -61,6 +73,7 @@ function createTask(ctx, args, home) {
   if (!deliverables.length) throw new MoError("E_USAGE", "缺少 --deliverable（至少一条交付物）");
 
   const verify = parseVerifyInput(all(args.options, "verify"));
+  const chosen = pickExecutor(args.options);
   const id = newTaskId();
   const now = new Date().toISOString();
   const receipt = ".mo-agent/receipts/" + id + ".json";
@@ -74,7 +87,8 @@ function createTask(ctx, args, home) {
     updated: now,
     from: "cli",
     assignee: one(args.options, "assignee", "auto"),
-    exec: one(args.options, "exec"),
+    agent: chosen ? chosen.name : undefined,
+    exec: chosen ? chosen.command : one(args.options, "exec"),
     workdir: ".",
     verify,
     receipt,
@@ -174,11 +188,12 @@ function dispatchCommand(ctx, args, home) {
 }
 
 export function runDispatch(args, { home, root, taskId }) {
+  const chosen = pickExecutor(args.options);
   return dispatchTask({
     home,
     root,
     taskId,
-    exec: one(args.options, "exec"),
+    exec: chosen ? chosen.command : one(args.options, "exec"),
     timeout: one(args.options, "timeout"),
   }).then((result) => {
     emit(args.options, { ok: result.status === "done", ...result }, () => {
