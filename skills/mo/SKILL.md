@@ -146,16 +146,3 @@ mo ledger query --task <taskId> --json
 | `blocked(missing_receipt)` | 执行者没写回执 | 转述 `outputTail`（常见：未登录） |
 | `blocked(bad_receipt)` | 回执不合法 | 转述 `errors` |
 | `blocked(timeout)` | 超时 | 问重试还是换执行者 |
-
-## 没有 skill 机制时
-
-把下面这段放进项目或全局的 `CLAUDE.md` / `AGENTS.md`：
-
-```text
-要把讨论落地时，用 mo CLI：
-1) 先补齐交付物、验收标准、边界，再 mo task create --agent <claude|codex|qodercli|qoderclicn|pi|qwen>；
-2) 把卡摘要给用户，等确认；
-3) 确认后 mo task confirm，再 mo task dispatch；
-4) 只按 mo task status / mo ledger 的实际结果汇报，不要替执行者宣称完成。
-执行者没写回执（missing_receipt）一律视为未完成。
-```

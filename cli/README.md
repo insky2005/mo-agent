@@ -294,7 +294,16 @@ bash scripts/install-skill.sh [--uninstall]
 
 **装完要新开会话**——技能目录在会话启动时加载。
 
-没有技能机制的 Agent，把 SKILL.md 末尾那段 5 行说明贴进 `CLAUDE.md` / `AGENTS.md` 即可。
+没有技能机制的 Agent，把下面这段贴进项目的 `CLAUDE.md` 或 `AGENTS.md`：
+
+```text
+要把讨论落地时，用 mo CLI：
+1) 先补齐交付物、验收标准、边界，再 mo task create --agent <claude|codex|qodercli|qoderclicn|pi|qwen>；
+2) 把卡摘要给用户，等确认；
+3) 确认后 mo task confirm，再 mo task dispatch；
+4) 只按 mo task status / mo ledger 的实际结果汇报，不要替执行者宣称完成。
+执行者没写回执（missing_receipt）一律视为未完成。
+```
 
 > 目前是 CLI 形态：Agent 通过 shell 调 `mo`。MCP 端点、被唤醒（inbox）还没做，属 P1 的后半段。
 
