@@ -19,21 +19,25 @@ mo --version          # 不可用 → 见下面的「mo 还没装」
 mo doctor             # 顺带确认当前目录属于某个项目
 ```
 
+当前目录不是项目时，先问用户是否要 `mo project add .`，**不要自动建**。
+
 ### mo 还没装
 
-**不要自己猜命令，也不要继续建卡。** 停下来告诉用户：技能已就位，但 `mo` 不在 PATH 里，然后给出安装方式：
+**不要自己猜命令，也不要继续建卡。** 停下来告诉用户：技能已就位，但 `mo` 不在 PATH 里，然后给出两种安装方式（二选一）：
 
 ```bash
-# 从 Release 装单文件二进制（同时会装技能）
+# 方式一：Release 单文件二进制（不需要 Node，装完同时装技能）
 curl -fsSL https://raw.githubusercontent.com/<org>/<repo>/main/scripts/install-remote.sh | bash
 
-# 本机已有源码
+# 方式二：源码（需要 git 与 Node 18+）
+git clone https://github.com/<org>/<repo>.git
+cd mo-agent
 bash scripts/install-cli.sh
 ```
 
-用户装完后，让 ta 重开终端（或按安装脚本打印的那行命令刷新），再执行 `mo --version` 确认。
+源码方式里，没有 bun 时安装脚本会退化为软链到仓库（需要 Node）；有 bun 则构建单文件二进制。
 
-当前目录不是项目时，先问用户是否要 `mo project add .`，**不要自动建**。
+用户装完后，让 ta 重开终端（或按安装脚本打印的那行命令刷新），再执行 `mo --version` 确认。
 
 ## 什么时候动手
 
