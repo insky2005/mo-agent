@@ -294,7 +294,21 @@ bash scripts/install-skill.sh [--uninstall]
 
 **装完要新开会话**——技能目录在会话启动时加载。
 
-没有技能机制的 Agent，把下面这段贴进项目的 `CLAUDE.md` 或 `AGENTS.md`：
+没有技能机制的 Agent，可以让 mo 直接写进去：
+
+```bash
+mo agent init                 # 自动选 AGENTS.md / CLAUDE.md，按是否已装技能决定内容
+mo agent init --mode inline   # 强制写完整用法（不依赖技能）
+mo agent init --file docs/AI.md
+mo agent remove               # 只删自己那段
+```
+
+- **技能已安装**：只写一段指针，说明"按 mo 技能走"；
+- **技能未安装**：写完整用法（建卡 → 确认 → 派单 → 汇报）。
+
+两种内容都用 `<!-- >>> mo >>> -->` 标记包围，重跑只替换这一段、不动其它内容。
+
+也可以手动把下面这段贴进项目的 `CLAUDE.md` 或 `AGENTS.md`：
 
 ```text
 要把讨论落地时，用 mo CLI：

@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "run", "doctor", "agents", "skill", "completion", "help",
+    "project", "task", "receipt", "ledger", "run", "doctor", "agents", "skill", "agent", "completion", "help",
   ]);
 });
 
