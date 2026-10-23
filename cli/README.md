@@ -76,14 +76,26 @@ cd ~/c/work/your-project
 mo project add .          # 认领项目，写 .mo-agent/project.json
 ```
 
-然后建第一张卡。`--exec` 是执行者命令，**它从 stdin 读任务卡**：
+然后建第一张卡。`--exec` 是**任意 shell 命令**，不绑定任何厂商，只有一个要求：
 
-| 执行者 | `--exec` 写法 |
-|---|---|
-| Claude Code | `claude -p "$(cat)"` |
-| Codex | `codex exec -` |
-| 自己的脚本 | `node scripts/run-task.mjs` |
-| 先演示 | `node executor.mjs`（见 `scripts/demo-cli.sh`） |
+> 从 stdin 读任务卡，把回执写到 `$MO_RECEIPT`。
+
+| 执行者 | `--exec` 写法 | 备注 |
+|---|---|---|
+| Claude Code | `claude -p "$(cat)"` | 需先登录；要改文件加 `--permission-mode acceptEdits` |
+| Codex | `codex exec -s workspace-write -` | 需先登录；`-s` 决定能不能写文件 |
+| 自己的脚本 | `node scripts/run-task.mjs` | 最可控 |
+| 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
+| 先演示 | `node executor.mjs`（见 `scripts/demo-cli.sh`） | 不花钱 |
+
+**执行者能不能用，先手动验一次**：
+
+```bash
+echo "说一句 OK" | claude -p "$(cat)"        # 能出字就说明登录正常
+echo "说一句 OK" | codex exec -s workspace-write -
+```
+
+看到 `Not logged in` 就是没登录，先解决登录再派单；否则会得到 `blocked(missing_receipt)`。
 
 ```bash
 mo task create \
