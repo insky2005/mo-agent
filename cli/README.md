@@ -256,14 +256,15 @@ mo skill install --target /some/skills
 | 目标 | 路径 | 默认 |
 |---|---|---|
 | `agents` | `~/.agents/skills/mo` | 总是装（通用位置） |
-| `pi` | `~/.agents/skills/mo` | 同上；pi 按 Agent Skills 规范直接发现 `~/.agents/skills` |
+| `pi` | `~/.pi/agent/skills/mo` | 仅 `--target pi`；pi 也读 `~/.agents`，**别两处都装** |
 | `claude` | `~/.claude/skills/mo` | 目录存在时 |
 | `codex` | `~/.codex/skills/mo` | 目录存在时 |
 | `qodercli` | `~/.qoder/skills/mo` | 目录存在时 |
 | `qoderclicn` | `~/.qoder-cn/skills/mo` | 目录存在时 |
 | `qwen` | `~/.qwen/skills/mo` | 目录存在时 |
 
-`pi` 遵循 Agent Skills 规范，会直接扫描 `~/.agents/skills/`（以及项目的 `.agents/skills/`），所以和 `agents` 共用同一个位置即可，不需要额外参数。
+`pi` 有两个来源：原生的 `~/.pi/agent/skills/`，以及 Agent Skills 规范的 `~/.agents/skills/`（含项目级 `.agents/skills/`）。
+默认只装 `~/.agents` 一处就够了；`--target pi` 是给想放进 pi 自己目录的人用的——**两处都装会触发同名冲突**，pi 只保留先发现的那份并告警。
 
 ### 用 skills CLI 安装
 

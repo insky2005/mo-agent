@@ -34,7 +34,7 @@ function home() {
  */
 export const AGENT_TARGETS = {
   agents: { path: ".agents/skills", note: "通用位置" },
-  pi: { path: ".agents/skills", note: "pi 直接扫描 ~/.agents/skills（Agent Skills 规范）" },
+  pi: { path: ".pi/agent/skills", note: "pi 原生目录；与 agents 二选一，重复会被判同名冲突" },
   claude: { path: ".claude/skills" },
   codex: { path: ".codex/skills" },
   qodercli: { path: ".qoder/skills" },
@@ -53,7 +53,7 @@ export function resolveTargets(names) {
     // 默认：通用位置 + 已经装了配置目录的 Agent
     requested = Object.keys(defaults).filter((name) => {
       if (name === "agents") return true;
-      if (name === "pi") return false; // 与 agents 同一目录，默认不重复
+      if (name === "pi") return false; // pi 也会读 ~/.agents，默认不装第二份
       return isDir(path.dirname(defaults[name].dir));
     });
   }
@@ -84,7 +84,7 @@ export function allTargets() {
       name,
       dir,
       note: target.note || "",
-      available: name === "agents" || name === "pi" || isDir(path.dirname(dir)),
+      available: name === "agents" || isDir(path.dirname(dir)),
       installed: fs.existsSync(path.join(dir, SKILL_NAME, "SKILL.md")),
     };
   });
@@ -132,6 +132,17 @@ export async function skillCommand(ctx, args) {
       const installed = fs.existsSync(path.join(target.dir, SKILL_NAME, "SKILL.md"));
       return [target.name, installed ? "✓" : "✗", path.join(target.dir, SKILL_NAME), target.note || ""];
     });
+    const installedNames = new Set(
+      listed
+        .filter((target) => fs.existsSync(path.join(target.dir, SKILL_NAME, "SKILL.md")))
+        .map((target) => target.name),
+    );
+    // pi 同时读 ~/.agents 和 ~/.pi/agent；两处都装会被判同名冲突
+    const duplicated = installedNames.has("agents") && installedNames.has("pi");
+    const hint = duplicated
+      ? "注意：agents 与 pi 各装了一份。pi 会保留先发现的那份并告警，建议只留一处（mo skill uninstall --target pi）。"
+      : "";
+
     emit(
       args.options,
       {
@@ -139,9 +150,11 @@ export async function skillCommand(ctx, args) {
           ...target,
           installed: fs.existsSync(path.join(target.dir, SKILL_NAME, "SKILL.md")),
         })),
+        duplicated,
       },
       () =>
         table(rows, ["目标", "已装", "路径", "说明"]).replace(/[ \t]+$/gm, "")
+        + (hint ? "\n\n" + hint : "")
         + "\n\n安装：mo skill install（交互选择）或 --target <名称|目录> --yes",
     );
     return 0;
