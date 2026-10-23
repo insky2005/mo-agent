@@ -25,7 +25,9 @@
     "voice:build:whisper": "bash scripts/build-whisper.sh",
     "voice:test": "node --test host/voice/",
     "voice:demo": "node host/voice/p0.mjs --kind approval --nonce 4729 --transcript 四七二九",
-    "voice:live": "node host/voice/p0.mjs --live --kind approval --broker"
+    "voice:live": "node host/voice/p0.mjs --live --kind approval --broker",
+    "skill:install": "bash scripts/install-skill.sh",
+    "skill:uninstall": "bash scripts/install-skill.sh --uninstall"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -51,6 +53,7 @@
     "core/errors.mjs",
     "core/tasks/*.mjs",
     "!core/tasks/*.test.mjs",
-    "LICENSE"
+    "LICENSE",
+    "skills/**"
   ]
 }

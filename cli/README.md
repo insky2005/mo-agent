@@ -213,6 +213,24 @@ TARGET=bun-linux-x64 bash scripts/build-cli.sh   # → cli/dist/mo-linux-x64（�
 npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
+## 接到主 Agent
+
+把技能装到主 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
+
+```bash
+bash scripts/install-skill.sh            # ~/.dsh/skills 与 ~/.claude/skills
+bash scripts/install-skill.sh --uninstall
+MO_SKILL_DIR=/some/skills bash scripts/install-skill.sh
+```
+
+技能内容见 [skills/mo-workbench/SKILL.md](../skills/mo-workbench/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、六条铁律。
+
+**装完要新开会话**——技能目录在会话启动时加载。
+
+没有技能机制的 Agent，把 SKILL.md 末尾那段 5 行说明贴进 `CLAUDE.md` / `AGENTS.md` 即可。
+
+> 目前是 CLI 形态：Agent 通过 shell 调 `mo`。MCP 端点、被唤醒（inbox）还没做，属 P1 的后半段。
+
 ## Tab 补全
 
 支持 bash 与 zsh：命令、子命令、选项，以及**任务 id（带状态和标题）**、`--project` 的项目名。

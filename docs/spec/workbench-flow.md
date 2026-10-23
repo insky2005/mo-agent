@@ -363,7 +363,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 阶段 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + `mo run` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
-| **P1** | MCP server + `inbox_pull` + 注入唤醒 | 主 Agent 全程不离开对话框完成一轮 |
+| **P1** | 主 Agent 接入：skill + CLI（MCP / inbox 唤醒未做） | 主 Agent 全程不离开对话框完成一轮 | 🟡 CLI 形态已落地 |
 | **P2** | `verify` 执行器 + watchdog + `blocked` 升级 | 失败/超时能正确转给人 |
 | **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 |
 | **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 |
