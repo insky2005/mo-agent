@@ -184,6 +184,7 @@ export function runDispatch(args, { home, root, taskId }) {
     emit(args.options, { ok: result.status === "done", ...result }, () => {
       const lines = [
         taskId + " → " + result.status,
+        "执行者: " + (result.executor || "-"),
         "验收: " + result.verified,
       ];
       if (result.receipt && result.receipt.summary) lines.push("结论: " + result.receipt.summary);
