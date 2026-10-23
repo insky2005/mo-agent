@@ -66,7 +66,14 @@ alias mo='node /绝对路径/mo-agent/cli/mo.mjs'
 bash scripts/demo-cli.sh
 ```
 
-在临时目录里跑完 建卡 → 确认 → 派单 → done → 账本，用假执行者。
+在临时目录里跑四个场景，全部本地、不联网、不花钱：
+
+| 场景 | 期望 |
+|---|---|
+| 正常完成 | 执行者写合法回执 → `done` |
+| 没写回执 | `blocked(missing_receipt)`，退出码 0 也不算成功 |
+| 回执非法 | `blocked(bad_receipt)`，例如 `done` 却没有验收证据 |
+| 卡住后重试 | `blocked → running → done`，账本留下完整时间线 |
 
 ## 第一次使用
 
