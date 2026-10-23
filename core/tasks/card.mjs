@@ -7,7 +7,7 @@ import { STATES, isState } from "./model.mjs";
 
 const KEY_ORDER = [
   "id", "project", "title", "status", "created", "updated", "from",
-  "assignee", "exec", "workdir", "verify", "receipt", "timeout",
+  "assignee", "agent", "exec", "workdir", "verify", "receipt", "timeout",
   "retries", "on_fail", "budget",
 ];
 
