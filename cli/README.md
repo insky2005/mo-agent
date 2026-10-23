@@ -63,7 +63,7 @@ alias mo='node /绝对路径/mo-agent/cli/mo.mjs'
 **先看效果（不花钱、不调模型）**
 
 ```bash
-bash scripts/demo-cli.sh
+bash cli/demo.sh
 ```
 
 在临时目录里跑四个场景，全部本地、不联网、不花钱：
@@ -93,7 +93,7 @@ mo project add .          # 认领项目，写 .mo-agent/project.json
 | Codex | `codex exec -s workspace-write -` | 需先登录；`-s` 决定能不能写文件 |
 | 自己的脚本 | `node scripts/run-task.mjs` | 最可控 |
 | 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
-| 先演示 | `node executor.mjs`（见 `scripts/demo-cli.sh`） | 不花钱 |
+| 先演示 | `node executor.mjs`（见 `cli/demo.sh`） | 不花钱 |
 
 **执行者能不能用，先手动验一次**：
 

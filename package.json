@@ -23,7 +23,7 @@
     "voice:demo": "node host/voice/p0.mjs --kind approval --nonce 4729 --transcript 四七二九",
     "voice:live": "node host/voice/p0.mjs --live --kind approval --broker",
     "cli:install": "bash scripts/install-cli.sh",
-    "cli:demo": "bash scripts/demo-cli.sh",
+    "cli:demo": "bash cli/demo.sh",
     "build:cli": "bash scripts/build-cli.sh",
     "check:version": "node scripts/check-version.mjs"
   },
