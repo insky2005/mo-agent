@@ -21,12 +21,12 @@ export const EXECUTORS = {
     description: "Codex CLI，工作区可写",
     requires: "codex",
   },
-  qoder: {
+  qodercli: {
     command: 'qodercli -p "$(cat)" --permission-mode accept_edits',
     description: "Qoder CLI（国际版），允许改文件",
     requires: "qodercli",
   },
-  qodercn: {
+  qoderclicn: {
     command: 'qoderclicn -p "$(cat)" --permission-mode accept_edits',
     description: "Qoder CLI（CN 版），允许改文件",
     requires: "qoderclicn",

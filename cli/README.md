@@ -110,8 +110,8 @@ mo task create --agent codex …
 |---|---|---|
 | `claude` | `claude -p "$(cat)" --permission-mode acceptEdits` | Claude Code |
 | `codex` | `codex exec -s workspace-write -` | Codex CLI |
-| `qoder` | `qodercli -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（国际版） |
-| `qodercn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（CN 版） |
+| `qodercli` | `qodercli -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（国际版） |
+| `qoderclicn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（CN 版） |
 | `pi` | `pi -p "$(cat)"` | pi |
 | `qwen` | `qwen --approval-mode auto-edit "$(cat)"` | Qwen Code |
 
