@@ -281,7 +281,9 @@ npx skills update mo                # 之后更新
 bash scripts/install-skill.sh [--uninstall]
 ```
 
-技能内容见 [skills/mo/SKILL.md](../skills/mo/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、六条铁律。
+技能内容见 [skills/mo/SKILL.md](../skills/mo/SKILL.md)：什么时机建卡、派单前必须回显、失败怎么转述、七条铁律。
+
+**mo 还没装时**，技能会让 Agent 先说明情况并征得同意，然后由它执行安装（下载到临时文件再运行，不走 `curl | bash`），装完用绝对路径继续。不同意就只给命令、停下。
 
 **装完要新开会话**——技能目录在会话启动时加载。
 

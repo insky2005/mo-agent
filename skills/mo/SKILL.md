@@ -23,13 +23,35 @@ mo doctor             # 顺带确认当前目录属于某个项目
 
 ### mo 还没装
 
-**不要自己猜命令，也不要继续建卡。** 停下来告诉用户：技能已就位，但 `mo` 不在 PATH 里，然后给出两种安装方式（二选一）：
+**不要自己猜命令，也不要继续建卡。** 先说明情况，并**征得用户明确同意**再动手——安装会下载二进制、写 `~/.local/bin`，属于改动用户机器。
+
+#### 用户同意由你安装
 
 ```bash
-# 方式一：Release 单文件二进制（不需要 Node，装完同时装技能）
+TMP="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh -o "$TMP"
+bash "$TMP"
+
+~/.local/bin/mo --version     # PATH 可能还没刷新，先用绝对路径验证
+~/.local/bin/mo skill list    # 确认技能也装上了
+```
+
+装完告诉用户两件事：
+
+1. **重开终端**后 `mo` 才会在 PATH 里；当前会话用绝对路径 `~/.local/bin/mo` 也能继续；
+2. 新终端里执行 `mo --version` 确认。
+
+之后用绝对路径继续建卡派单是可以的，不需要等用户重开。
+
+#### 用户不同意，或想自己装
+
+给出两条命令，然后停下：
+
+```bash
+# Release 单文件二进制（不需要 Node，装完同时装技能）
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 
-# 方式二：源码（需要 git 与 Node 18+）
+# 源码（需要 git 与 Node 18+）
 git clone https://github.com/insky2005/mo-agent.git
 cd mo-agent
 bash scripts/install-cli.sh
@@ -37,7 +59,7 @@ bash scripts/install-cli.sh
 
 源码方式里，没有 bun 时安装脚本会退化为软链到仓库（需要 Node）；有 bun 则构建单文件二进制。
 
-用户装完后，让 ta 重开终端（或按安装脚本打印的那行命令刷新），再执行 `mo --version` 确认。
+**不要 `curl … | bash` 一把梭**：先把脚本下到临时文件，让用户有机会先看一眼再执行。
 
 ## 什么时候动手
 
@@ -107,7 +129,8 @@ mo ledger query --task <taskId> --json
 3. **执行者退出码 0 但没有回执 = 未完成**（`blocked(missing_receipt)`）；
 4. **不要手改** `.mo-agent/tasks/*.md`，除非用户明确要求；
 5. **不要自己写回执**——回执属于执行者，伪造等于把系统变成摆设；
-6. 一次对话最多派 3 个任务；不确定就停下来问。
+6. 一次对话最多派 3 个任务；不确定就停下来问；
+7. **安装软件、修改 shell 配置前必须得到用户明确同意**，不做"顺手就装了"。
 
 ## 常见失败
 
