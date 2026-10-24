@@ -1,6 +1,6 @@
 ---
 name: mo
-description: 把讨论落成任务卡并派给执行 Agent。用户说"开始做/落地/派给 X/就这么办"，或要查看任务进度与验收结果时使用。
+description: 把讨论落成任务卡并派给执行 Agent。用户说"开始做/落地/派给 X/就这么办"，要查看任务进度与验收结果，或要安装/初始化 mo 工具时使用。
 license: PolyForm-Noncommercial-1.0.0
 compatibility: 需要 mo CLI（单文件二进制或 npm 包）。安装见仓库 scripts/install-cli.sh 或 install-remote.sh。
 metadata:

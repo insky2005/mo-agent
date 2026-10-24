@@ -57,7 +57,7 @@ mo doctor
 1. 先装技能（二选一）：
    - `npx skills add insky2005/mo-agent`
    - 或把 `skills/mo/SKILL.md` 放到 `~/.agents/skills/mo/SKILL.md`（或对应 Agent 的技能目录）
-2. 开一个新的 Agent 会话，直接说：「用 mo 把这件事落成任务卡」。
+2. 开一个新的 Agent 会话，说「用 mo 把这件事落成任务卡」，或直接输入 `/mo 把这件事落成任务卡`（客户端支持技能斜杠时）。
 3. Agent 会先跑 `mo --version`，发现没有，说明情况并**征求你的同意**；同意后它执行安装脚本。
 4. 装完当前会话用 `~/.local/bin/mo` 绝对路径继续；新开终端后 `mo` 才在 PATH 里。
 
