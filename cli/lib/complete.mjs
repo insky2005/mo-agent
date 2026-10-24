@@ -6,6 +6,7 @@ import { moHome } from "./paths.mjs";
 import { listProjects, findProjectRoot } from "./project.mjs";
 import { listCards } from "./store.mjs";
 import { listAgents } from "./executors.mjs";
+import { listCandidates } from "./candidates.mjs";
 
 const SPEC = {
   project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
@@ -22,7 +23,10 @@ const SPEC = {
   worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
-  memory: { subs: ["recall", "list", "init", "path"], flags: ["--limit", "--scope", "--all", "--json"] },
+  memory: {
+    subs: ["recall", "list", "init", "path", "propose", "candidates", "accept", "reject"],
+    flags: ["--limit", "--scope", "--all", "--file", "--title", "--trigger", "--tag", "--body", "--source", "--id", "--json"],
+  },
   inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
 };
 
@@ -32,6 +36,7 @@ const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
   "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires", "--scope", "--peek",
+  "--title", "--trigger", "--tag", "--body", "--source", "--id",
 ]);
 
 function startsWith(prefix) {
@@ -51,6 +56,12 @@ function taskItems(cwd) {
   if (!root) return [];
   return listCards(root)
     .map((card) => item(card.meta.id, (card.meta.status || "") + " " + (card.meta.title || "")))
+    .sort((a, b) => a.value.localeCompare(b.value));
+}
+
+function candidateItems() {
+  return listCandidates({ home: moHome() })
+    .map((candidate) => item(candidate.id, candidate.scope + " " + candidate.title))
     .sort((a, b) => a.value.localeCompare(b.value));
 }
 
@@ -113,6 +124,7 @@ export function complete(ctx = {}) {
     return taskItems(cwd).filter(startsWith(current));
   }
   if (group === "receipt" && ["submit", "apply"].includes(sub)) return taskItems(cwd).filter(startsWith(current));
+  if (group === "memory" && ["accept", "reject"].includes(sub)) return candidateItems().filter(startsWith(current));
 
   return [];
 }

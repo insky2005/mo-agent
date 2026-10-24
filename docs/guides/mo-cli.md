@@ -140,6 +140,8 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo skill list \| install \| uninstall` | 给 Agent 装 mo 技能 |
 | `mo memory recall "关键词"` | 召回知识条目（派单时自动注入同一批） |
 | `mo memory list \| init \| path` | 列出 / 建骨架 / 打印知识库位置 |
+| `mo memory candidates` | 待裁决的候选条目 |
+| `mo memory accept \| reject <id>` | 采纳 / 丢弃候选（冲突时拒绝写入） |
 | `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
 | `mo doctor` | 自检 |
 | `mo help` | 帮助 |
@@ -331,6 +333,18 @@ npx skills add insky2005/mo-agent
 
 `mo memory init` 建骨架（幂等，不覆盖），之后拿编辑器改就行。`_` 开头的文件不参与召回；没有索引和缓存，改完下一次派单就生效。
 
+**候选区**：执行者回执里带的 `pitfalls`，或主 Agent 觉得该记下的偏好，都先落进 `knowledge/_candidates/`，等人裁决，不会自动写进知识库：
+
+```bash
+mo memory propose --title "派单超时先看日志" --trigger 派单 --trigger 超时 --body "先看 logs"
+mo memory candidates            # 看待裁决的（冲突的会标出来）
+mo memory accept <id>           # 采纳，写进知识库
+mo memory reject <id>           # 丢弃
+```
+
+- 缺触发条件直接拒收（`E_MEMORY_INVALID`）；
+- 同名或正文高度重合判冲突，`accept` 不给写（`E_MEMORY_CONFLICT`），只给新旧对比：改/删旧条目再采纳，或直接丢弃。
+
 **收件箱**：任务进入 `done` / `blocked` / `failed` 时，core 会落一条通知。主 Agent 拿不到推送时，用 `mo inbox pull` 主动拉——条目在 `~/.mo-agent/inbox/pending/`，拉完移到 `pulled/`，所以重复拉不会拿到旧消息。
 
 ```bash
@@ -351,6 +365,7 @@ mo inbox pull --task t_x # 只拉这一条
 | 自定义执行者 | `~/.mo-agent/workers.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 | 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
+| 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`、`inbox/pulled/` |
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，用于隔离测试环境。
@@ -394,4 +409,4 @@ mo inbox pull --task t_x # 只拉这一条
 - 派单是同步阻塞的：执行者跑多久，命令就等多久。
 - 确认权目前是流程约定；daemon 持有确认权在 P4。
 - 没有 daemon，也没有推送：任务的结束通知落在收件箱，主 Agent 需要主动 `mo inbox pull`，或查 `status` / `ledger`。
-- 知识只进不审：现在只有召回与注入，`memory_propose` 的候选区与冲突裁决还没做。
+- 记忆回流还是"人裁决"：候选不会自动入库，得跑 `mo memory accept`。

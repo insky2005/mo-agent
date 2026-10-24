@@ -438,6 +438,12 @@ mo memory list                     # 列出条目
 mo memory recall "派单 超时"        # 召回（派单时会自动带上同一批）
 mo memory path                     # 打印知识库位置
 
+# 记忆回流：候选区 → 人裁决 → 知识库
+mo memory propose --file -         # 从 stdin 提一条候选（也可 --title/--trigger/--body）
+mo memory candidates               # 看待裁决候选
+mo memory accept <id>              # 采纳（冲突时拒写并给对比）
+mo memory reject <id>              # 丢弃
+
 # 收件箱
 mo inbox pull                      # 拉取任务结束/阻塞的通知，拉完即归档
 mo inbox pull --peek               # 只看不归档
@@ -538,6 +544,8 @@ mo task logs <id> --tail 30
 - 注入条数 `MO_RECALL_LIMIT`（默认 5，上限 20）；
 - 读不到知识库时 `mo memory *` 报 `E_KNOWLEDGE_UNAVAILABLE`；派单不因此失败，只在 stderr 警告。
 
+**候选区**：执行者回执里的 `pitfalls`、或主 Agent 认为该记下的偏好，都先进 `_candidates/`，等人 `mo memory accept` 才写成条目。缺触发条件的直接拒收（`E_MEMORY_INVALID`）；同名或正文重合度 ≥ 0.6 判冲突，`accept` 不给写（`E_MEMORY_CONFLICT`），只给新旧对比。
+
 收件箱是 `B9.3` 的兜底：任务进入 done / blocked / failed 时 core 落一条，主 Agent 没被注入也能靠 `mo inbox pull` 补上。条目在 `~/.mo-agent/inbox/pending/`，pull 后移到 `pulled/`，所以拉取天然幂等；同一任务重复派单只保留最新一条。
 
 ## 文件位置
@@ -551,6 +559,7 @@ mo task logs <id> --tail 30
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 | 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
+| 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`（pull 后进 `pulled/`） |
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，测试与多套环境都用它隔离。
@@ -568,8 +577,8 @@ mo task logs <id> --tail 30
 
 ## P0 边界
 
-已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI、`verify` 自动执行（P2）、知识召回与注入、收件箱兜底（P3 前半）。
+已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI、`verify` 自动执行（P2）、知识召回与注入、记忆候选区与冲突裁决、收件箱兜底（P3）。
 
-未实现：MCP 端点、守护进程、watchdog/重试、`memory_propose` 与候选区、面板 UI。
+未实现：MCP 端点、守护进程、watchdog/重试、面板 UI。
 
 派单收到 `status=done` 的回执后，core 会复跑卡上的 `verify`：全部通过 → `done` + `verified`；有失败（含超时）→ `blocked` + `verified: verify_failed`；只有 `human` 项或无法判定的 `check` → `blocked(needs_human)`；卡上没有 `verify` 则保持 `done` + `unverified`。

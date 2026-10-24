@@ -5,6 +5,7 @@ import { assertReceipt, validateReceipt } from "../../core/tasks/receipt.mjs";
 import { loadCard, readReceipt, saveCard, appendEvent } from "./store.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "./verify.mjs";
 import { writeInbox } from "./inbox.mjs";
+import { proposeFromPitfalls } from "./candidates.mjs";
 
 
 const STATE_EVENT = {
@@ -81,6 +82,20 @@ export function ingest({ home, root, card, result }) {
 
   appendEvent(home, { type: "receipt.received", project: meta.project, taskId: meta.id, actor: "worker", payload: { status: checked.receipt.status } });
 
+  // B10.1：回执里的 pitfalls 只生成候选，不直接进知识库——等人裁决
+  let proposals = { created: [], skipped: [] };
+  try {
+    proposals = proposeFromPitfalls({ home, card, receipt: checked.receipt });
+    if (proposals.skipped.length) {
+      process.stderr.write(
+        "[W_MEMORY_INVALID] 回执里有 " + proposals.skipped.length + " 条避坑未收为候选：" +
+          proposals.skipped.map((item) => item.title + "（" + item.errors.join("；") + "）").join("；") + "\n",
+      );
+    }
+  } catch (error) {
+    process.stderr.write("[W_MEMORY_CANDIDATE] 候选写入失败：" + (error && error.message ? error.message : error) + "\n");
+  }
+
   // 回执说 done 只是"执行者认为做完了"；core 亲自跑验收后才决定终态。
   // 验收必须在 transition 之前算完：状态机没有 done → blocked。
   let target = RECEIPT_TO_STATE[checked.receipt.status];
@@ -129,6 +144,7 @@ export function ingest({ home, root, card, result }) {
     receipt: checked.receipt,
     receiptFile,
     verify,
+    candidates: proposals.created,
   });
 }
 

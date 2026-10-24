@@ -6,8 +6,17 @@ import { emit, table } from "../lib/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import { knowledgeDir, loadKnowledge, recallKnowledge } from "../lib/knowledge.mjs";
+import {
+  appendCandidate,
+  deleteCandidate,
+  listCandidates,
+  readCandidate,
+  saveCandidate,
+} from "../lib/candidates.mjs";
+import { detectConflict, describeConflict, normalizeCandidate, validateCandidate } from "../../core/knowledge/candidate.mjs";
+import { appendEvent } from "../lib/store.mjs";
 
-const USAGE = "可用：recall / list / init / path";
+const USAGE = "可用：recall / list / init / path / propose / candidates / accept / reject";
 
 export function memoryCommand(ctx, args) {
   const sub = args.positional[0];
@@ -16,6 +25,10 @@ export function memoryCommand(ctx, args) {
   if (sub === "list") return listCommand(args, home);
   if (sub === "init") return initCommand(args, home);
   if (sub === "path") return pathCommand(args, home);
+  if (sub === "propose") return proposeCommand(args, home);
+  if (sub === "candidates") return candidatesCommand(args, home);
+  if (sub === "accept") return acceptCommand(args, home);
+  if (sub === "reject") return rejectCommand(args, home);
   throw new MoError("E_USAGE", "未知子命令：memory " + (sub || "") + "（" + USAGE + "）");
 }
 
@@ -153,6 +166,158 @@ function initCommand(args, home) {
     { ok: true, dir, created },
     () => (created.length ? "已创建知识库：" + dir + "\n" + created.map((file) => "  + " + file).join("\n") : "知识库已存在：" + dir + "\n（没有覆盖任何文件）"),
   );
+  return 0;
+}
+
+function readInput(file) {
+  if (!file || file === true || file === "-") return fs.readFileSync(0, "utf8");
+  return fs.readFileSync(file, "utf8");
+}
+
+/** 候选既可以从 stdin/文件读 JSON，也可以用参数拼，方便人手工提一条 */
+function proposalInput(args) {
+  if (has(args.options, "title")) {
+    return {
+      scope: one(args.options, "scope", "pitfalls"),
+      title: one(args.options, "title"),
+      trigger: all(args.options, "trigger"),
+      tags: all(args.options, "tag"),
+      body: one(args.options, "body", ""),
+      source: one(args.options, "source", "agent"),
+      taskId: one(args.options, "task"),
+      project: one(args.options, "project"),
+    };
+  }
+  const raw = readInput(one(args.options, "file"));
+  if (!raw.trim()) throw new MoError("E_USAGE", "缺少候选内容", { hint: "从 stdin 或 --file 传入 JSON，或直接用 --title 等参数" });
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new MoError("E_MEMORY_INVALID", "候选不是合法 JSON");
+  }
+}
+
+function loadEntriesQuietly(home) {
+  try {
+    return loadKnowledge({ home }).entries;
+  } catch (error) {
+    if (error && error.code === "E_KNOWLEDGE_UNAVAILABLE") return [];
+    throw error;
+  }
+}
+
+function conflictLines(conflict, candidate) {
+  return [
+    "  旧   " + conflict.existing.title + (conflict.existing.path ? "（" + conflict.existing.path + "）" : ""),
+    "       " + String(conflict.existing.body || "").replace(/\s*\n\s*/g, " ").slice(0, 120),
+    "  新   " + candidate.title,
+    "       " + String(candidate.body || "").replace(/\s*\n\s*/g, " ").slice(0, 120),
+  ].join("\n");
+}
+
+function proposeCommand(args, home) {
+  const candidate = normalizeCandidate(proposalInput(args));
+  const checked = validateCandidate(candidate);
+  if (!checked.ok) {
+    throw new MoError("E_MEMORY_INVALID", checked.errors.join("；"), {
+      errors: checked.errors,
+      hint: "候选需要 scope / title / trigger / body（缺触发条件会被拒收）",
+    });
+  }
+
+  const conflict = describeConflict(detectConflict(candidate, loadEntriesQuietly(home)));
+  const saved = saveCandidate({ home, candidate, conflict });
+
+  if (saved.duplicate) {
+    emit(
+      args.options,
+      { ok: true, id: saved.id, duplicate: true, path: saved.file, conflict },
+      "已存在相同候选：" + saved.id + "（未重复记录）\n下一步（裁决）：mo memory accept " + saved.id,
+    );
+    return 0;
+  }
+
+  appendEvent(home, {
+    type: "memory.proposed",
+    project: candidate.project,
+    taskId: candidate.taskId,
+    actor: "agent",
+    payload: { candidateId: saved.id, scope: candidate.scope, title: candidate.title, source: candidate.source },
+  });
+
+  if (conflict) process.stderr.write("[W_MEMORY_CONFLICT] 与已有条目冲突，接受时会拒绝写入\n");
+
+  emit(
+    args.options,
+    { ok: true, id: saved.id, path: saved.file, conflict, candidate },
+    () => {
+      const lines = [
+        "✓ 已记入候选区",
+        "",
+        "  id     " + saved.id,
+        "  类型   " + candidate.scope,
+        "  标题   " + candidate.title,
+      ];
+      if (conflict) lines.push("", "  ⚠ 与已有条目冲突（" + conflict.label + "）", conflictLines(conflict, candidate));
+      lines.push("", "下一步（接受）：mo memory accept " + saved.id, "下一步（丢弃）：mo memory reject " + saved.id);
+      return lines.join("\n");
+    },
+  );
+  return 0;
+}
+
+function candidatesCommand(args, home) {
+  const items = listCandidates({ home });
+  emit(
+    args.options,
+    { ok: true, total: items.length, candidates: items.map(({ file, ...item }) => item) },
+    () => {
+      if (!items.length) return "候选区是空的";
+      const rows = items.map((item) => [item.id, item.scope, item.title, item.conflict ? "⚠ 冲突" : ""]);
+      return "候选区（" + items.length + " 条，等人裁决）\n\n" + table(rows, ["id", "scope", "title", "冲突"]);
+    },
+  );
+  return 0;
+}
+
+function acceptCommand(args, home) {
+  const id = args.positional[1] || one(args.options, "id");
+  if (!id) throw new MoError("E_USAGE", "缺少候选 id", { hint: "mo memory candidates" });
+
+  const candidate = readCandidate({ home, id });
+  const conflict = detectConflict(candidate, loadKnowledge({ home }).entries);
+  if (conflict) {
+    const info = describeConflict(conflict);
+    process.stderr.write("候选与已有条目冲突，未写入\n" + conflictLines(info, candidate) + "\n");
+    throw new MoError("E_MEMORY_CONFLICT", "候选与已有条目冲突：" + conflict.entry.title, {
+      hint: "改/删旧条目后重试，或 mo memory reject " + id,
+    });
+  }
+
+  const written = appendCandidate({ home, candidate });
+  deleteCandidate({ home, id });
+  appendEvent(home, {
+    type: "memory.accepted",
+    project: candidate.project,
+    taskId: candidate.taskId,
+    actor: "agent",
+    payload: { candidateId: id, scope: candidate.scope, title: candidate.title, file: written.file, entryId: written.entryId },
+  });
+
+  emit(
+    args.options,
+    { ok: true, id, entryId: written.entryId, file: written.file },
+    () => ["✓ 已写入知识库", "", "  条目   " + written.entryId, "  文件   " + written.file].join("\n"),
+  );
+  return 0;
+}
+
+function rejectCommand(args, home) {
+  const id = args.positional[1] || one(args.options, "id");
+  if (!id) throw new MoError("E_USAGE", "缺少候选 id", { hint: "mo memory candidates" });
+  const candidate = readCandidate({ home, id });
+  deleteCandidate({ home, id });
+  emit(args.options, { ok: true, id, rejected: true }, "✗ 已丢弃候选 " + id + "（" + candidate.title + "）");
   return 0;
 }
 

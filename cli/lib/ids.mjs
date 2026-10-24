@@ -27,3 +27,4 @@ export function ulid(now = Date.now()) {
 export const newTaskId = () => "t_" + ulid();
 export const newProjectId = () => "p_" + ulid();
 export const newMachineId = () => "m_" + ulid().slice(0, 8);
+export const newCandidateId = () => "c_" + ulid();

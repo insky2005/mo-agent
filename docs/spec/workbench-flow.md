@@ -1,6 +1,6 @@
 # 个人工作台：任务流转与分支（v0 设计）
 
-状态：**P0 / P2 已落地，P3 的召回与注入已落地（CLI）**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
+状态：**P0 / P2 / P3 已落地（CLI）**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
 
 ## 1. 目标与非目标
 
@@ -38,7 +38,8 @@
 ├── knowledge/                                  # 可被 MO_AGENT_KNOWLEDGE 覆盖
 │   ├── preferences.md
 │   ├── pitfalls/*.md
-│   └── decisions/*.md
+│   ├── decisions/*.md
+│   └── _candidates/*.json                      # 待裁决的候选，不进召回
 ├── ledger/2026-10.jsonl                        # 全局账本
 ├── inbox/pending/*.json  inbox/pulled/         # 待主 Agent 拉取的通知（B9.3）
 ├── projects.json                               # 项目登记表（指针）
@@ -303,7 +304,7 @@ canceled            canceled                failed                  └─> canc
 
 MCP 传输：Streamable HTTP（`/mcp`，复用本机令牌）；需要 stdio 时用 `mo mcp` 薄壳转发。
 
-CLI 入口是 [`cli/mo.mjs`](../../cli/mo.mjs)，`npm link` 后命令名即为 `mo`。目前只实现 CLI 一列：`mo memory recall|list|init` 与 `mo inbox pull` 已可用，MCP 一列全空。
+CLI 入口是 [`cli/mo.mjs`](../../cli/mo.mjs)，`npm link` 后命令名即为 `mo`。目前只实现 CLI 一列：`mo memory recall|list|init|propose|candidates|accept|reject` 与 `mo inbox pull` 已可用，MCP 一列全空。
 
 ## 10. 数据格式
 
@@ -368,7 +369,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
 | **P1** | 主 Agent 接入：skill + CLI（MCP / inbox 唤醒未做） | 主 Agent 全程不离开对话框完成一轮 | 🟡 CLI 形态已落地 |
 | **P2** | `verify` 执行器 + `blocked` 升级（watchdog 未做） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify`） |
-| **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 | 🟡 召回与注入已落地（`core/knowledge/` + `mo memory`）；propose 与候选区未做 |
+| **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 | ✅ 已落地（`core/knowledge/` + `mo memory`：recall 注入、propose、候选区、冲突裁决） |
 | **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 | ⬜ 未开始 |
 
 ### 12.1 P0 实现记录
@@ -417,7 +418,20 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 - 默认路径 `~/.mo-agent/knowledge` 不存在 → `W_KNOWLEDGE_EMPTY` 并提示 `mo memory init`；`MO_AGENT_KNOWLEDGE` 显式指定却不存在 → 直接报错；
 - 注入条数由 `MO_RECALL_LIMIT` 控制（默认 5，上限 20）。
 
-**仍未做**：`memory_propose`（B10.1–B10.4 的候选与冲突裁决）、知识库不可写时的界面告警、`blocked` 主动推送（现在只能靠 `mo inbox pull` 或被动作 `status`）。
+**记忆回流（B10.1–B10.4）**：
+
+| 动作 | 命令 | 行为 |
+|---|---|---|
+| 提案 | `mo memory propose --file -\|--title …` | 校验（缺 trigger → `E_MEMORY_INVALID`），与现有条目比对，落 `_candidates/` |
+| 查看 | `mo memory candidates` | 列出待裁决候选，冲突的直接标出来 |
+| 采纳 | `mo memory accept <id>` | 再次比对；冲突则 `E_MEMORY_CONFLICT` 拒写并给新旧对比；通过则写进知识库文件 |
+| 丢弃 | `mo memory reject <id>` | 删候选，不进账本 |
+
+- `B10.1`：回执里带 `pitfalls` 时自动生成候选（`source: receipt`），**不直接写知识库**；缺 trigger 的按 `W_MEMORY_INVALID` 拒收并汇报；
+- `B10.4`：同 scope 同标题、或正文重合度 ≥ 0.6 判为冲突，只提示不覆盖；
+- 账本记 `memory.proposed` / `memory.accepted`，被拒的候选不留账。
+
+**仍未做**：知识库不可写时的界面告警、`blocked` 主动推送（现在只能靠 `mo inbox pull` 或被动查 `status`）。
 
 ## 13. 安装与首次使用
 
