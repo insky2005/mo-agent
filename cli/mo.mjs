@@ -56,8 +56,6 @@ const ROUTES = {
   doctor: doctorCommand,
   completion: completionCommand,
   worker: workerCommand,
-  workers: workerCommand, // 旧名
-  agents: workerCommand,  // 更旧的别名
   skill: skillCommand,
   agent: agentCommand,
 };
