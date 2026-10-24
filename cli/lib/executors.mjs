@@ -43,14 +43,44 @@ export const EXECUTORS = {
   },
 };
 
-/** 从命令里取出真正要执行的程序：跳过 VAR=value 前缀与引号 */
-export function binaryOf(command) {
-  const tokens = String(command).match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-  for (const token of tokens) {
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
-    return token.replace(/^["']|["']$/g, "");
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "fish"]);
+const WRAPPERS = new Set(["env", "nohup", "command", "exec", "time", "sudo"]);
+
+function tokenize(command) {
+  return String(command).match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+}
+
+function unquote(token) {
+  return String(token).replace(/^["']|["']$/g, "");
+}
+
+function resolveTokens(tokens, depth = 0) {
+  if (!tokens.length || depth > 5) return "";
+
+  let index = 0;
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) index += 1;
+  if (index >= tokens.length) return "";
+
+  const binary = unquote(tokens[index]);
+  const base = binary.split("/").pop();
+  const rest = tokens.slice(index + 1);
+
+  // bash -lc 'claude …'：递归解析引号里的命令
+  if (SHELLS.has(base)) {
+    const flagIndex = rest.findIndex((token) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(unquote(token)));
+    if (flagIndex >= 0 && rest[flagIndex + 1]) {
+      return resolveTokens(tokenize(unquote(rest[flagIndex + 1])), depth + 1);
+    }
+    return binary;
   }
-  return "";
+
+  if (WRAPPERS.has(base)) return resolveTokens(rest, depth + 1);
+  return binary;
+}
+
+/** 从命令里取出真正要执行的程序：跳过 VAR=value、shell 包装与引号 */
+export function binaryOf(command) {
+  return resolveTokens(tokenize(command));
 }
 
 export function resolveAgent(name) {
@@ -67,6 +97,14 @@ export function resolveAgent(name) {
 
 /** 在 PATH 里找可执行文件（不执行它） */
 export function which(binary) {
+  if (String(binary).includes(path.sep) || String(binary).includes("/")) {
+    try {
+      fs.accessSync(binary, fs.constants.X_OK);
+      return binary;
+    } catch {
+      return null;
+    }
+  }
   const dirs = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
   for (const dir of dirs) {
     const candidate = path.join(dir, binary);

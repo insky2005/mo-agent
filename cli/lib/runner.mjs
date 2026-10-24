@@ -22,12 +22,13 @@ export function runExecutor({ command, cwd, env, input, timeoutMs }) {
 
     let child;
     try {
-      // 显式指定 shell：POSIX 用 /bin/sh，Windows 交给 cmd.exe。
-      // 用 /bin/sh 而不是 bash，是因为模板只依赖 POSIX 子集（$(cat)、>、&&）。
+      // 默认 /bin/sh：模板只依赖 POSIX 子集，sh 到处都有。
+      // 需要 bash 特性（[[ ]]、数组、pipefail）时用 MO_SHELL=/bin/bash 覆盖。
+      const shell = env.MO_SHELL || (process.platform === "win32" ? true : "/bin/sh");
       child = spawn(command, {
         cwd,
         env,
-        shell: process.platform === "win32" ? true : "/bin/sh",
+        shell,
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (error) {

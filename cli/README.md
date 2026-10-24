@@ -427,6 +427,8 @@ mo doctor
 
 执行者只需做一件事：**把回执写到 `MO_RECEIPT`**。
 
+命令默认由 `/bin/sh` 执行（模板只用 POSIX 子集）。需要 bash 特性时设 `MO_SHELL=/bin/bash`。
+
 ```json
 {
   "taskId": "t_01HXYZ",

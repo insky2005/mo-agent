@@ -48,6 +48,11 @@ test("binaryOf 取命令里真正执行的程序", () => {
   assert.equal(binaryOf('claude -p "$(cat)"'), "claude");
   assert.equal(binaryOf("codex exec -s workspace-write -"), "codex");
   assert.equal(binaryOf('FOO=1 BAR=2 node "x y.mjs"'), "node");
+  assert.equal(binaryOf("bash -lc 'claude -p hi'"), "claude");
+  assert.equal(binaryOf("sh -c \"codex exec -\""), "codex");
+  assert.equal(binaryOf("env FOO=1 /usr/local/bin/qwen --approval-mode auto-edit x"), "/usr/local/bin/qwen");
+  assert.equal(binaryOf("nohup node run.mjs"), "node");
+  assert.equal(binaryOf("/bin/bash script.sh"), "/bin/bash");
 });
 
 test("PATH 为空时所有模板都标为未安装", () => {
