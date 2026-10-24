@@ -256,15 +256,18 @@ if [ "$WITH_SKILL" = "1" ] && [ -z "${MO_SKIP_SKILL:-}" ]; then
   NEED_SKILL=0
 fi
 
-if [ "$IN_PATH" = "0" ] || [ -n "$SHELL_NAME" ]; then
+if [ "$IN_PATH" = "0" ]; then
   echo
-  echo "当前终端（新终端会自动生效）："
-  if [ "$IN_PATH" = "0" ]; then
-    printf '  export PATH="%s:$PATH"\n' "$(dirname "$INSTALLED")"
-  fi
-  if [ -n "$SHELL_NAME" ]; then
-    printf '  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
-  fi
+  printf 'PATH 未包含 %s，当前终端先执行：\n' "$(dirname "$INSTALLED")"
+  printf '  export PATH="%s:$PATH"\n' "$(dirname "$INSTALLED")"
+  echo "（要永久生效，把这一行加进你的 shell 配置）"
+fi
+
+if [ -n "$SHELL_NAME" ]; then
+  echo
+  printf '补全已写入 %s（新终端自动加载）\n' "$(rc_for "$SHELL_NAME")"
+  echo "当前终端立即启用："
+  printf '  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
 echo

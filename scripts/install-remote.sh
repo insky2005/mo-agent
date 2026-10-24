@@ -78,8 +78,9 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)
     echo
-    echo "当前终端（新终端会自动生效）："
+    printf 'PATH 未包含 %s，当前终端先执行：\n' "$BIN_DIR"
     printf '  export PATH="%s:$PATH"\n' "$BIN_DIR"
+    echo "（要永久生效，把这一行加进你的 shell 配置）"
     ;;
 esac
 
