@@ -20,55 +20,21 @@ import { inboxCommand } from "./commands/inbox.mjs";
 import { mcpCommand } from "./commands/mcp.mjs";
 import { agentCommand } from "./commands/agent-add.mjs";
 import { VERSION } from "./lib/version.mjs";
+import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
 
-const HELP = [
-  "mo —— 个人工作台 CLI",
-  "",
-  "用法：",
-  "  mo worker list | add | remove       执行者（含自定义与可用性检测）",
-  "  mo skill list | install | uninstall 安装 mo 技能到各 Agent 的技能目录",
-  "",
-  "  mo project init [路径]          初始化项目（.mo-agent/ + AGENTS.md）",
-  "  mo project agent [--remove]     写/删 AGENTS.md、CLAUDE.md 里的 mo 说明",
-  "  mo project list                 查看已登记项目",
-  "",
-  "  mo task create --title 标题 --deliverable 产出 [--verify \"run:命令\"] [--worker 执行者] [--exec 命令]",
-  "  mo task confirm <id>            发起确认请求（不改状态；批准由人做）",
-  "  mo task approve|reject <id>     人在终端批准 / 拒绝（需 TTY，--yes 跳过）",
-  "  mo task requests                查看待批准的确认请求",
-  "  mo task dispatch <id> [--worker 执行者] [--exec 命令]   派发并等待回执",
-  "  mo task verify <id>             对已 done 的卡重跑验收",
-  "  mo task status <id>             查看状态与最近事件",
-  "  mo task logs <id> [--tail N]    看执行者完整日志",
-  "  mo task list                    列出本项目任务",
-  "  mo task cancel <id>             取消任务",
-  "",
-  "  mo receipt submit|apply <id>    提交/应用回执（apply 走验收）",
-  "  mo ledger query [--project 项目] [--task id] [--days 30]",
-  "",
-  "  mo memory recall \"关键词\"        按记忆库召回（派单时同样会自动注入）",
-  "  mo memory list                  列出记忆库条目",
-  "  mo memory init                  创建记忆库骨架（幂等）",
-  "  mo memory path                  打印记忆库位置",
-  "  mo memory migrate [--dry-run]   把旧的 knowledge/ 搬到 memory/",
-  "  mo memory propose --file -       提一条候选（等裁决，不直接进记忆库）",
-  "  mo memory candidates            看候选区",
-  "  mo memory accept|reject <id>    采纳 / 丢弃候选（冲突时拒绝写入）",
-  "  mo inbox pull [--peek]          拉取任务通知（完成 / 阻塞 / 失败），拉完归档",
-  "",
-  "  mo mcp                          stdio MCP 服务（主 Agent 用，一行一条 JSON-RPC）",
-  "  mo agent                         怎么接：能做什么、三种接法（概览）",
-  "  mo agent describe [--json|--prompt|--skill]  契约（默认概览，--json 给机器）",
-  "  mo agent add --mcp <配置文件>     把 mo 合并进任意 mcpServers 配置（幂等 + 备份）",
-  "  mo agent add --prompt            只打印可粘贴的提示词",
-  "  mo help                         显示本帮助",
-  "  mo doctor                       自检",
-  "  mo completion bash|zsh          输出补全脚本（eval 即可）",
-  "",
-  "全局选项：--project <名称|路径>  --json  --help",
-  "",
-  "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）  MO_AGENT_MEMORY   MO_RECALL_LIMIT",
-].join("\n");
+function printHelp(topic) {
+  if (!topic) {
+    process.stdout.write(renderHelp() + "\n");
+    return 0;
+  }
+  const text = renderGroupHelp(topic);
+  if (!text) {
+    process.stderr.write("没有这个组：" + topic + "（可用：" + groupNames().join(" / ") + "）\n");
+    return 2;
+  }
+  process.stdout.write(text + "\n");
+  return 0;
+}
 
 const ROUTES = {
   project: projectCommand,
@@ -102,8 +68,14 @@ async function main(argv) {
     return 0;
   }
   if (!group || group === "help" || group === "--help" || args.options.help) {
-    process.stdout.write(HELP + "\n");
-    return 0;
+    // mo help task / mo task --help / mo help 都走同一套
+    const topic = group && group !== "help" && group !== "--help" ? group : args.positional[1];
+    return printHelp(topic);
+  }
+
+  // mo task help 等价于 mo help task
+  if (args.positional[1] === "help" && groupNames().includes(group)) {
+    return printHelp(group);
   }
 
   const ctx = { cwd: process.cwd(), env: process.env };

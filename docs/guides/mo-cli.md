@@ -149,7 +149,7 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo mcp` | stdio MCP 服务（给主 Agent 接） |
 | `mo agent describe \| add` | 输出契约 / 合并 MCP 配置 |
 | `mo doctor` | 自检 |
-| `mo help` | 帮助 |
+| `mo help [组]` | 帮助；给组名看该组子命令（如 `mo help task`） |
 
 ## 5. 任务生命周期
 

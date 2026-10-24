@@ -7,6 +7,7 @@ import { listProjects, findProjectRoot } from "./project.mjs";
 import { listCards } from "./store.mjs";
 import { listAgents } from "./executors.mjs";
 import { listCandidates } from "./candidates.mjs";
+import { groupNames } from "./help.mjs";
 
 const SPEC = {
   project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
@@ -103,6 +104,10 @@ export function complete(ctx = {}) {
   const group = tokens[0];
   if (!group) {
     return TOP_LEVEL.filter((name) => name.startsWith(current)).map((name) => item(name, ""));
+  }
+
+  if (group === "help" && !tokens[1]) {
+    return groupNames().filter(startsWith(current)).map((name) => item(name, ""));
   }
 
   const spec = SPEC[group];
