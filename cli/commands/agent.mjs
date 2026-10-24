@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { allTargets } from "./skill.mjs";
-import { resolveProject } from "../lib/project.mjs";
+import { resolveRoot } from "../lib/project.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 import { moHome, projectDir } from "../lib/paths.mjs";
@@ -73,7 +73,7 @@ export function removeAgentFile({ root, file }) {
 
 /** mo project agent [--remove] —— 维护 AGENTS.md / CLAUDE.md 里的说明 */
 export function projectAgent(ctx, args) {
-  const project = resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
+  const project = resolveRoot({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
   const file = one(args.options, "file");
 
   if (has(args.options, "remove")) {

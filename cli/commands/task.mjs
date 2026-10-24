@@ -17,8 +17,15 @@ import { applyDecision, expireOverdue, listRequests, pendingForTask, readRequest
 import { cardDigest } from "../../core/manager/approval.mjs";
 import { parseDuration } from "../lib/envelope.mjs";
 
-function resolveContext(ctx, args) {
-  return resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
+/** 默认不认领项目：读命令不该顺手创建 .mo-agent/project.json（只有建卡才认领） */
+function resolveContext(ctx, args, options = {}) {
+  return resolveProject({
+    cwd: ctx.cwd,
+    target: one(args.options, "project"),
+    home: moHome(),
+    autoAttach: false,
+    ...options,
+  });
 }
 
 /** --worker 与 --exec 二选一：前者用模板，后者是完整命令 */
@@ -79,7 +86,7 @@ export function taskCommand(ctx, args) {
 }
 
 function createTask(ctx, args, home) {
-  const resolved = resolveContext(ctx, args);
+  const resolved = resolveContext(ctx, args, { autoAttach: true });
   const title = one(args.options, "title");
   if (!title) throw new MoError("E_USAGE", "缺少 --title");
 
@@ -333,7 +340,7 @@ function rejectTask(ctx, args, home) {
 function requestsTask(ctx, args, home) {
   let root = null;
   try {
-    root = resolveProject({ cwd: ctx.cwd, home }).root;
+    root = resolveProject({ cwd: ctx.cwd, home, autoAttach: false }).root;
   } catch {
     // 不在项目里也能看待批列表，只是没法顺手把过期卡置 expired
   }

@@ -117,6 +117,8 @@ canceled            canceled                failed                  └─> canc
 | B1.4 | 会话中途 `cd` 到别处 | **不重新绑定**，归属不变 | — |
 | B1.5 | 同一会话显式说"在 X 项目" | 覆盖绑定，记一条 bind 事件 | — |
 
+> 认领只发生在**建卡**（B3）。`mo task list/status`、`mo receipt *`、`mo project agent` 这类只读或文档命令不创建 `project.json`，也不写项目注册表。
+
 ### 6.2 项目解析（B2，建卡时触发）
 
 | 编号 | 条件 | 结果 | 错误码 |

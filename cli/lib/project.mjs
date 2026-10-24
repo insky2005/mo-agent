@@ -191,6 +191,36 @@ export function resolveProject(options = {}) {
   });
 }
 
+/**
+ * 只找项目根，不认领、不登记。
+ * 给"只想写文件"的命令用（mo project agent）：在 git 根上也能工作，
+ * 但不该顺手创建 .mo-agent/project.json——那是建卡时才发生的事（B1.2）。
+ */
+export function resolveRoot(options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const home = options.home || moHome();
+  const target = options.target;
+
+  if (target && target !== true) {
+    if (looksLikePath(String(target))) {
+      const dir = path.resolve(cwd, String(target));
+      if (!exists(dir)) throw new MoError("E_PROJECT_NOT_FOUND", "路径不存在：" + dir);
+      const root = findProjectRoot(dir) || findGitRoot(dir);
+      if (!root) throw new MoError("E_PROJECT_NOT_FOUND", dir + " 既不是 git 仓库，也不是 mo 项目");
+      return { root };
+    }
+    return { root: resolveProject({ cwd, target, home, autoAttach: false }).root };
+  }
+
+  const root = findProjectRoot(cwd) || findGitRoot(cwd);
+  if (!root) {
+    throw new MoError("E_PROJECT_UNBOUND", "当前目录不属于任何项目，也不是 git 仓库", {
+      hint: "在仓库根目录执行，或用 --project <路径>",
+    });
+  }
+  return { root };
+}
+
 export function machineName() {
   const name = os.hostname().split(".")[0];
   return name || "unknown";

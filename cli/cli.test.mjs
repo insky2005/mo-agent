@@ -33,8 +33,8 @@ function run(ws, args, cwd = ws.project) {
   return result;
 }
 
-function runJson(ws, args) {
-  const result = run(ws, [...args, "--json"]);
+function runJson(ws, args, cwd = ws.project) {
+  const result = run(ws, [...args, "--json"], cwd);
   let parsed = null;
   try {
     parsed = JSON.parse(result.stdout.trim());
@@ -352,4 +352,41 @@ test("派单会留下完整日志，mo task logs 能读到执行者输出", () =
   assert.match(logs.stdout, /exec-said-hi/);
   assert.match(logs.stdout, /command:  node executor\.mjs/);
   assert.match(logs.stdout, /exit:     0/);
+});
+function gitRepo(ws, name) {
+  const dir = path.join(ws.root, name);
+  fs.mkdirSync(dir, { recursive: true });
+  spawnSync("git", ["init", "-q", "."], { cwd: dir });
+  return dir;
+}
+
+test("mo project agent 只写文档，不认领项目", () => {
+  const ws = workspace();
+  const repo = gitRepo(ws, "repo-agent");
+
+  const result = run(ws, ["project", "agent", "--mode", "inline"], repo);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(repo, ".mo-agent", "project.json")), false, "不该创建 project.json");
+  assert.match(fs.readFileSync(path.join(repo, "AGENTS.md"), "utf8"), /mo task create/);
+});
+
+test("只读命令不认领项目，也不写注册表", () => {
+  const ws = workspace();
+  const repo = gitRepo(ws, "repo-read");
+
+  const result = run(ws, ["task", "list"], repo);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /E_PROJECT_UNBOUND/);
+  assert.equal(fs.existsSync(path.join(repo, ".mo-agent", "project.json")), false);
+  assert.equal(fs.existsSync(path.join(ws.home, "projects.json")), false);
+});
+
+test("建卡仍然自动认领（B1.2）", () => {
+  const ws = workspace();
+  const repo = gitRepo(ws, "repo-create");
+
+  const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y"], repo);
+  assert.equal(created.status, 0, created.stderr);
+  assert.match(created.parsed.taskId, /^t_/);
+  assert.equal(fs.existsSync(path.join(repo, ".mo-agent", "project.json")), true);
 });

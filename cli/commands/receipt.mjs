@@ -23,7 +23,12 @@ export function receiptCommand(ctx, args) {
     throw new MoError("E_USAGE", "未知子命令：receipt " + (sub || "") + "（可用：submit / apply）");
   }
 
-  const resolved = resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
+  const resolved = resolveProject({
+    cwd: ctx.cwd,
+    target: one(args.options, "project"),
+    home: moHome(),
+    autoAttach: false,
+  });
   const taskId = args.positional[1] || one(args.options, "task");
   if (!taskId) throw new MoError("E_USAGE", "缺少 taskId");
 
