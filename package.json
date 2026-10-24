@@ -28,7 +28,8 @@
     "voice:live": "node host/voice/p0.mjs --live --kind approval --broker",
     "skill:install": "bash scripts/install-skill.sh",
     "skill:uninstall": "bash scripts/install-skill.sh --uninstall",
-    "gen:skill": "node scripts/gen-skill.mjs"
+    "gen:skill": "node scripts/gen-skill.mjs",
+    "cli:walkthrough": "bash cli/demo/walkthrough.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
