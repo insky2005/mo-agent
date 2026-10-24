@@ -265,7 +265,7 @@ fi
 
 if [ -n "$SHELL_NAME" ]; then
   echo
-  echo "当前终端立即启用补全："
+  echo "当前终端若要启用补全，请执行："
   printf '  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
