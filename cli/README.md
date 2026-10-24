@@ -439,7 +439,8 @@ mo project agent --remove          # 只删自己那段
 mo memory init                     # 建骨架（幂等），之后就是纯 markdown
 mo memory list                     # 列出条目
 mo memory recall "派单 超时"        # 召回（派单时会自动带上同一批）
-mo memory path                     # 打印知识库位置
+mo memory path                     # 打印记忆库位置
+mo memory migrate                  # 把旧的 knowledge/ 搬到 memory/（幂等，不合并）
 
 # 记忆回流：候选区 → 人裁决 → 知识库
 mo memory propose --file -         # 从 stdin 提一条候选（也可 --title/--trigger/--body）
@@ -569,12 +570,12 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 先看 mo task logs，确认是执行者卡住还是回执没写。
 ```
 
-- 目录：`~/.mo-agent/knowledge/`（`preferences.md`、`pitfalls/*.md`、`decisions/*.md`），`MO_AGENT_KNOWLEDGE` 可覆盖；
+- 目录：`~/.mo-agent/memory/`（`preferences.md`、`pitfalls/*.md`、`decisions/*.md`），`MO_AGENT_MEMORY` 可覆盖（旧变量 `MO_AGENT_KNOWLEDGE` 仍兼容）；
 - `_` 开头的文件（`_template.md`）不参与召回；没有索引，改完立即生效；
 - 注入条数 `MO_RECALL_LIMIT`（默认 5，上限 20）；
-- 读不到知识库时 `mo memory *` 报 `E_KNOWLEDGE_UNAVAILABLE`；派单不因此失败，只在 stderr 警告。
+- 读不到知识库时 `mo memory *` 报 `E_MEMORY_UNAVAILABLE`；派单不因此失败，只在 stderr 警告。
 
-**候选区**：执行者回执里的 `pitfalls`、或主 Agent 认为该记下的偏好，都先进 `_candidates/`，等人 `mo memory accept` 才写成条目。缺触发条件的直接拒收（`E_MEMORY_INVALID`）；同名或正文重合度 ≥ 0.6 判冲突，`accept` 不给写（`E_MEMORY_CONFLICT`），只给新旧对比。
+**候选区**：执行者回执里的 `pitfalls`、或主 Agent 认为该记下的偏好，都先进 `candidates/`，等人 `mo memory accept` 才写成条目。缺触发条件的直接拒收（`E_MEMORY_INVALID`）；同名或正文重合度 ≥ 0.6 判冲突，`accept` 不给写（`E_MEMORY_CONFLICT`），只给新旧对比。
 
 收件箱是 `B9.3` 的兜底：任务进入 done / blocked / failed 时 core 落一条，主 Agent 没被注入也能靠 `mo inbox pull` 补上。条目在 `~/.mo-agent/inbox/pending/`，pull 后移到 `pulled/`，所以拉取天然幂等；同一任务重复派单只保留最新一条。
 
@@ -588,9 +589,9 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 | 执行日志 | `<repo>/.mo-agent/logs/<taskId>.log`（默认 ignore） |
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
-| 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
+| 知识库 | `~/.mo-agent/memory/`（`MO_AGENT_MEMORY` 可覆盖） |
 | 确认请求 | `~/.mo-agent/approvals/<a_…>.json` |
-| 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
+| 记忆候选 | `~/.mo-agent/memory/candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`（pull 后进 `pulled/`） |
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，测试与多套环境都用它隔离。

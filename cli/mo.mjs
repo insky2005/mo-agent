@@ -46,11 +46,12 @@ const HELP = [
   "  mo receipt submit|apply <id>    提交/应用回执（apply 走验收）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "",
-  "  mo memory recall \"关键词\"        按知识库召回（派单时同样会自动注入）",
-  "  mo memory list                  列出知识库条目",
-  "  mo memory init                  创建知识库骨架（幂等）",
-  "  mo memory path                  打印知识库位置",
-  "  mo memory propose --file -       提一条候选（等裁决，不直接进知识库）",
+  "  mo memory recall \"关键词\"        按记忆库召回（派单时同样会自动注入）",
+  "  mo memory list                  列出记忆库条目",
+  "  mo memory init                  创建记忆库骨架（幂等）",
+  "  mo memory path                  打印记忆库位置",
+  "  mo memory migrate [--dry-run]   把旧的 knowledge/ 搬到 memory/",
+  "  mo memory propose --file -       提一条候选（等裁决，不直接进记忆库）",
   "  mo memory candidates            看候选区",
   "  mo memory accept|reject <id>    采纳 / 丢弃候选（冲突时拒绝写入）",
   "  mo inbox pull [--peek]          拉取任务通知（完成 / 阻塞 / 失败），拉完归档",
@@ -65,7 +66,7 @@ const HELP = [
   "",
   "全局选项：--project <名称|路径>  --json  --help",
   "",
-  "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）  MO_AGENT_KNOWLEDGE   MO_RECALL_LIMIT",
+  "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）  MO_AGENT_MEMORY   MO_RECALL_LIMIT",
 ].join("\n");
 
 const ROUTES = {

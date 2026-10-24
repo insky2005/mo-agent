@@ -24,7 +24,7 @@ const SPEC = {
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
   memory: {
-    subs: ["recall", "list", "init", "path", "propose", "candidates", "accept", "reject"],
+    subs: ["recall", "list", "init", "path", "migrate", "propose", "candidates", "accept", "reject"],
     flags: ["--limit", "--scope", "--all", "--file", "--title", "--trigger", "--tag", "--body", "--source", "--id", "--json"],
   },
   inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
@@ -38,7 +38,7 @@ const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
   "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires", "--scope", "--peek",
-  "--title", "--trigger", "--tag", "--body", "--source", "--id", "--format", "--mcp", "--name", "--from",
+  "--title", "--trigger", "--tag", "--body", "--source", "--id", "--format", "--mcp", "--name", "--from", "--dry-run",
 ]);
 
 function startsWith(prefix) {

@@ -5,8 +5,11 @@ import { parseKnowledgeFile } from "../../core/knowledge/entry.mjs";
 import { recall } from "../../core/knowledge/recall.mjs";
 
 /**
- * 知识库的 IO 边界：找目录、读文件、把系统错误翻译成稳定错误码。
- * B10.5 / I9：读不了就报 E_KNOWLEDGE_UNAVAILABLE，绝不静默返回空。
+ * 记忆库的 IO 边界：找目录、读文件、把系统错误翻译成稳定错误码。
+ * B10.5 / I9：读不了就报 E_MEMORY_UNAVAILABLE，绝不静默返回空。
+ *
+ * 目录叫 memory（跟 `mo memory` 对齐）；老版本的 knowledge/ 仍能读，
+ * 只是会带一条 W_MEMORY_LEGACY_DIR 提醒用 `mo memory migrate` 搬过来。
  */
 
 const SCOPES = {
@@ -16,19 +19,31 @@ const SCOPES = {
   "decisions": "decisions",
 };
 
-export function knowledgeDir(home, env = process.env) {
-  if (env.MO_AGENT_KNOWLEDGE) {
-    return { dir: path.resolve(env.MO_AGENT_KNOWLEDGE), explicit: true };
+export function memoryDir(home, env = process.env) {
+  if (env.MO_AGENT_MEMORY) {
+    return { dir: path.resolve(env.MO_AGENT_MEMORY), explicit: true, source: "env" };
   }
-  return { dir: path.join(home, "knowledge"), explicit: false };
+  if (env.MO_AGENT_KNOWLEDGE) {
+    return { dir: path.resolve(env.MO_AGENT_KNOWLEDGE), explicit: true, source: "legacy-env" };
+  }
+
+  const next = path.join(home, "memory");
+  const legacy = path.join(home, "knowledge");
+  // 老安装：只有 knowledge/ 时才继续用它，避免用户"换个命令就找不到记忆"
+  if (!fs.existsSync(next) && fs.existsSync(legacy)) {
+    return { dir: legacy, explicit: false, source: "legacy", target: next };
+  }
+  return { dir: next, explicit: false, source: "default" };
 }
+
+
 
 function readdirSafe(dir) {
   try {
     return fs.readdirSync(dir, { withFileTypes: true });
   } catch (error) {
     if (error.code === "ENOENT") return null;
-    throw new MoError("E_KNOWLEDGE_UNAVAILABLE", "知识库不可读：" + dir + "（" + error.code + "）", {
+    throw new MoError("E_MEMORY_UNAVAILABLE", "知识库不可读：" + dir + "（" + error.code + "）", {
       hint: "检查目录权限，或把 MO_AGENT_KNOWLEDGE 指到别处",
     });
   }
@@ -38,7 +53,7 @@ function readFileSafe(file) {
   try {
     return fs.readFileSync(file, "utf8");
   } catch (error) {
-    throw new MoError("E_KNOWLEDGE_UNAVAILABLE", "知识文件不可读：" + file + "（" + error.code + "）", {
+    throw new MoError("E_MEMORY_UNAVAILABLE", "知识文件不可读：" + file + "（" + error.code + "）", {
       hint: "检查文件权限",
     });
   }
@@ -69,31 +84,34 @@ function collect(dir, scope, prefix = "") {
  * @returns {{ok: boolean, dir: string, exists: boolean, entries: object[], warnings: string[]}}
  */
 export function loadKnowledge({ home, env = process.env }) {
-  const { dir, explicit } = knowledgeDir(home, env);
+  const { dir, explicit, source, target } = memoryDir(home, env);
   const warnings = [];
+  // 读的是老目录：能用，但要让用户知道该搬了
+  if (source === "legacy" || source === "legacy-env") warnings.push("W_MEMORY_LEGACY_DIR");
 
   let stat = null;
   try {
     stat = fs.statSync(dir);
   } catch (error) {
     if (error.code !== "ENOENT") {
-      throw new MoError("E_KNOWLEDGE_UNAVAILABLE", "知识库不可读：" + dir + "（" + error.code + "）");
+      throw new MoError("E_MEMORY_UNAVAILABLE", "知识库不可读：" + dir + "（" + error.code + "）");
     }
   }
 
   if (!stat) {
     // 显式指定的路径不存在 = 配置错了，必须吵；默认路径不存在 = 还没初始化，提示即可
     if (explicit) {
-      throw new MoError("E_KNOWLEDGE_UNAVAILABLE", "MO_AGENT_KNOWLEDGE 指向的知识库不存在：" + dir, {
+      const name = source === "legacy-env" ? "MO_AGENT_KNOWLEDGE" : "MO_AGENT_MEMORY";
+      throw new MoError("E_MEMORY_UNAVAILABLE", name + " 指向的记忆库不存在：" + dir, {
         hint: "去掉该环境变量，或先运行 mo memory init",
       });
     }
-    warnings.push("W_KNOWLEDGE_EMPTY");
-    return { ok: true, dir, exists: false, entries: [], warnings };
+    warnings.push("W_MEMORY_EMPTY");
+    return { ok: true, dir, source, exists: false, entries: [], warnings, legacyTarget: target || null };
   }
 
   if (!stat.isDirectory()) {
-    throw new MoError("E_KNOWLEDGE_UNAVAILABLE", "知识库路径不是目录：" + dir);
+    throw new MoError("E_MEMORY_UNAVAILABLE", "记忆库路径不是目录：" + dir);
   }
 
   const files = [];
@@ -114,8 +132,8 @@ export function loadKnowledge({ home, env = process.env }) {
     for (const entry of parsed) entries.push({ ...entry, path: item.file });
   }
 
-  if (!entries.length) warnings.push("W_KNOWLEDGE_EMPTY");
-  return { ok: true, dir, exists: true, entries, warnings };
+  if (!entries.length) warnings.push("W_MEMORY_EMPTY");
+  return { ok: true, dir, source, exists: true, entries, warnings, legacyTarget: target || null };
 }
 
 /** 用卡片内容当查询：标题 + 正文里的关键词都会参与打分 */

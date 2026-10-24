@@ -35,11 +35,11 @@
 ├── devices.json  notify.json  push-tokens.json
 ├── session.json  desktop.lock  voice.json      # 机器状态
 ├── config.json                                 # 解析链的配置文件
-├── knowledge/                                  # 可被 MO_AGENT_KNOWLEDGE 覆盖
+├── memory/                                     # 可被 MO_AGENT_MEMORY 覆盖
 │   ├── preferences.md
 │   ├── pitfalls/*.md
 │   ├── decisions/*.md
-│   └── _candidates/*.json                      # 待裁决的候选，不进召回
+│   └── candidates/*.json                      # 待裁决的候选，不进召回
 ├── ledger/2026-10.jsonl                        # 全局账本
 ├── inbox/pending/*.json  inbox/pulled/         # 待主 Agent 拉取的通知（B9.3）
 ├── approvals/a_*.json                          # 确认请求与裁决（B4.6）
@@ -218,7 +218,7 @@ canceled            canceled                failed                  └─> canc
 | B10.2 | 人纠正主 Agent 的做法 | `memory_propose` 一条偏好候选 | — |
 | B10.3 | 候选缺触发条件 | 拒收 | `E_MEMORY_INVALID` |
 | B10.4 | 候选与现有条目冲突 | 不自动覆盖，给出对比，等人裁决 | `E_MEMORY_CONFLICT` |
-| B10.5 | 知识库不可用 | `memory_*` 全部返回错误，界面告警，**不静默返回空** | `E_KNOWLEDGE_UNAVAILABLE` |
+| B10.5 | 知识库不可用 | `memory_*` 全部返回错误，界面告警，**不静默返回空** | `E_MEMORY_UNAVAILABLE` |
 
 ## 7. 关键分支的细节
 
@@ -288,7 +288,7 @@ canceled            canceled                failed                  └─> canc
 | `E_DISPATCH_FAILED` / `E_EXECUTOR_CRASHED` / `E_TIMEOUT` | 执行异常 | core 重试/升级 |
 | `E_NO_RECEIPT` / `E_BAD_RECEIPT` | 回执异常 | core 判 blocked |
 | `E_VERIFY_FAILED` / `E_VERIFY_TIMEOUT` | 验收失败 | 人决定重试 |
-| `E_MEMORY_*` / `E_KNOWLEDGE_UNAVAILABLE` | 记忆异常 | 人 |
+| `E_MEMORY_*` / `E_MEMORY_UNAVAILABLE` | 记忆异常 | 人 |
 
 ## 9. 接口
 
@@ -402,6 +402,8 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 派单注入（§7.2 的「卡片附带的知识」） | `cli/lib/dispatch.mjs` → `cli/lib/envelope.mjs` |
 | 收件箱写入与拉取（B9.3） | `cli/lib/inbox.mjs` + `cli/commands/inbox.mjs` |
 
+**目录命名**：数据放 `~/.mo-agent/memory/`，与 `mo memory` 命令对齐；老版本的 `knowledge/` 仍然可读（带 `W_MEMORY_LEGACY_DIR`），用 `mo memory migrate` 搬过去。`MO_AGENT_MEMORY` 覆盖路径，`MO_AGENT_KNOWLEDGE` 作为旧变量兼容。
+
 **条目格式**（人写笔记的习惯，不做 YAML 依赖）：
 
 ```markdown
@@ -420,16 +422,16 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 **降级规则**：
 
-- `mo memory *` 读不到知识库 → `E_KNOWLEDGE_UNAVAILABLE`，不静默返回空（B10.5）；
-- 派单时召回失败 → 不挡派单，stderr 打 `W_KNOWLEDGE_UNAVAILABLE`，`--json` 里 `knowledge.ok=false`；
-- 默认路径 `~/.mo-agent/knowledge` 不存在 → `W_KNOWLEDGE_EMPTY` 并提示 `mo memory init`；`MO_AGENT_KNOWLEDGE` 显式指定却不存在 → 直接报错；
+- `mo memory *` 读不到知识库 → `E_MEMORY_UNAVAILABLE`，不静默返回空（B10.5）；
+- 派单时召回失败 → 不挡派单，stderr 打 `W_MEMORY_UNAVAILABLE`，`--json` 里 `knowledge.ok=false`；
+- 默认路径 `~/.mo-agent/memory` 不存在 → `W_MEMORY_EMPTY` 并提示 `mo memory init`；`MO_AGENT_MEMORY` 显式指定却不存在 → 直接报错；
 - 注入条数由 `MO_RECALL_LIMIT` 控制（默认 5，上限 20）。
 
 **记忆回流（B10.1–B10.4）**：
 
 | 动作 | 命令 | 行为 |
 |---|---|---|
-| 提案 | `mo memory propose --file -\|--title …` | 校验（缺 trigger → `E_MEMORY_INVALID`），与现有条目比对，落 `_candidates/` |
+| 提案 | `mo memory propose --file -\|--title …` | 校验（缺 trigger → `E_MEMORY_INVALID`），与现有条目比对，落 `candidates/` |
 | 查看 | `mo memory candidates` | 列出待裁决候选，冲突的直接标出来 |
 | 采纳 | `mo memory accept <id>` | 再次比对；冲突则 `E_MEMORY_CONFLICT` 拒写并给新旧对比；通过则写进知识库文件 |
 | 丢弃 | `mo memory reject <id>` | 删候选，不进账本 |
@@ -542,8 +544,8 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 | 步骤 | 检查 | 动作 | 已存在时 |
 |---|---|---|---|
 | 1 | `~/.mo-agent/` 是否存在 | 创建目录 | 跳过，保留 |
-| 2 | `config.json` | 写默认值（端口、knowledge 路径、recall=auto） | 合并缺省键，不覆盖用户值 |
-| 3 | `knowledge/` | 建骨架：README、`preferences.md`、`pitfalls/_template.md` | 只补缺，不覆盖 |
+| 2 | `config.json` | 写默认值（端口、memory 路径、recall=auto） | 合并缺省键，不覆盖用户值 |
+| 3 | `memory/` | 建骨架：README、`preferences.md`、`pitfalls/_template.md` | 只补缺，不覆盖 |
 | 4 | `ledger/` | 创建目录 | 跳过 |
 | 5 | 单实例锁 | 检查是否有 daemon 在跑 | 复用，不重启 |
 | 6 | 端口 | 默认端口被占用则顺延并写回 config | — |
@@ -557,7 +559,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 ```
 ~/.mo-agent/
 ├── config.json                # 端口、知识库路径、召回后端
-├── knowledge/                 # 空骨架 + 模板
+├── memory/                    # 空骨架 + 模板
 ├── ledger/                    # 空目录
 ├── projects.json              # {}
 ├── scratch/tasks/             # 空
@@ -578,7 +580,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 | I6 | 主 Agent 已配过 mo-agent MCP | 更新版本，保留其它配置 | 备份 `.bak-<时间>` |
 | I7 | 主 Agent 不支持 MCP | 只写 CLI 契约（CHARTER / CLAUDE.md） | "降级为 B 档，结果需手动拉取" |
 | I8 | 当前目录不是 git 仓库 | 不自动认领 | 提示 `mo project init .` |
-| I9 | 知识库路径不可写 | 启动但不静默：`memory_*` 返回 `E_KNOWLEDGE_UNAVAILABLE` | 界面告警 |
+| I9 | 知识库路径不可写 | 启动但不静默：`memory_*` 返回 `E_MEMORY_UNAVAILABLE` | 界面告警 |
 | I10 | CLI 与 daemon 版本不一致 | 拒绝调用并提示升级 | "CLI 0.3.0 / daemon 0.2.0" |
 
 ### 13.7 五分钟金路径（验收首次使用是否成功）

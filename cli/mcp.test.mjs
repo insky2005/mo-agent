@@ -142,7 +142,7 @@ test("tools/call task_create 走 CLI 并返回 draft 卡", async () => {
 test("tools/call memory_recall 读到知识库", async () => {
   const ws = workspace();
   run(ws, ["memory", "init"]);
-  fs.writeFileSync(path.join(ws.home, "knowledge", "pitfalls", "x.md"), "## 回执超时先看日志\n\n- trigger: 回执, 超时\n\n先看 logs。\n", "utf8");
+  fs.writeFileSync(path.join(ws.home, "memory", "pitfalls", "x.md"), "## 回执超时先看日志\n\n- trigger: 回执, 超时\n\n先看 logs。\n", "utf8");
 
   const s = session(ws);
   await handshake(s);

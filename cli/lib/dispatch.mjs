@@ -28,8 +28,8 @@ function recallForDispatch({ home, card }) {
       },
     };
   } catch (error) {
-    if (!error || error.code !== "E_KNOWLEDGE_UNAVAILABLE") throw error;
-    process.stderr.write("[W_KNOWLEDGE_UNAVAILABLE] " + error.message + "（本次没有注入知识）\n");
+    if (!error || error.code !== "E_MEMORY_UNAVAILABLE") throw error;
+    process.stderr.write("[W_MEMORY_UNAVAILABLE] " + error.message + "（本次没有注入知识）\n");
     return { block: "", info: { ok: false, error: { code: error.code, message: error.message } } };
   }
 }

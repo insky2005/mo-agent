@@ -141,7 +141,8 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo worker list \| add \| remove` | 查看/注册执行者 |
 | `mo skill list \| install \| uninstall` | 给 Agent 装 mo 技能 |
 | `mo memory recall "关键词"` | 召回知识条目（派单时自动注入同一批） |
-| `mo memory list \| init \| path` | 列出 / 建骨架 / 打印知识库位置 |
+| `mo memory list \| init \| path` | 列出 / 建骨架 / 打印记忆库位置 |
+| `mo memory migrate` | 把旧的 `knowledge/` 搬到 `memory/` |
 | `mo memory candidates` | 待裁决的候选条目 |
 | `mo memory accept \| reject <id>` | 采纳 / 丢弃候选（冲突时拒绝写入） |
 | `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
@@ -355,13 +356,13 @@ mo agent describe --json          # 让 Agent 自己读能力清单
 
 | 位置 | 作用 |
 |---|---|
-| `~/.mo-agent/knowledge/preferences.md` | 我的偏好 |
-| `~/.mo-agent/knowledge/pitfalls/*.md` | 避坑 |
-| `~/.mo-agent/knowledge/decisions/*.md` | 已定的决策 |
+| `~/.mo-agent/memory/preferences.md` | 我的偏好 |
+| `~/.mo-agent/memory/pitfalls/*.md` | 避坑 |
+| `~/.mo-agent/memory/decisions/*.md` | 已定的决策 |
 
 `mo memory init` 建骨架（幂等，不覆盖），之后拿编辑器改就行。`_` 开头的文件不参与召回；没有索引和缓存，改完下一次派单就生效。
 
-**候选区**：执行者回执里带的 `pitfalls`，或主 Agent 觉得该记下的偏好，都先落进 `knowledge/_candidates/`，等人裁决，不会自动写进知识库：
+**候选区**：执行者回执里带的 `pitfalls`，或主 Agent 觉得该记下的偏好，都先落进 `memory/candidates/`，等人裁决，不会自动写进知识库：
 
 ```bash
 mo memory propose --title "派单超时先看日志" --trigger 派单 --trigger 超时 --body "先看 logs"
@@ -393,8 +394,8 @@ mo inbox pull --task t_x # 只拉这一条
 | 自定义执行者 | `~/.mo-agent/workers.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 | 确认请求 | `~/.mo-agent/approvals/<a_…>.json` |
-| 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
-| 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
+| 知识库 | `~/.mo-agent/memory/`（`MO_AGENT_MEMORY` 可覆盖） |
+| 记忆候选 | `~/.mo-agent/memory/candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`、`inbox/pulled/` |
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，用于隔离测试环境。

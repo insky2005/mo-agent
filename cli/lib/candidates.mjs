@@ -11,19 +11,24 @@ import {
   describeConflict,
 } from "../../core/knowledge/candidate.mjs";
 import { ensureDir, listFiles, readJsonSafe, writeJsonAtomic } from "./fsx.mjs";
-import { knowledgeDir, loadKnowledge } from "./knowledge.mjs";
+import { loadKnowledge, memoryDir } from "./knowledge.mjs";
 import { newCandidateId } from "./ids.mjs";
 import { appendEvent } from "./store.mjs";
 
 /**
- * 候选区：拟入知识库但还没被人拍板的条目（B10.1–B10.4）。
- * 存在 knowledge/_candidates/ 下，`_` 前缀让它天然不会被召回。
+ * 候选区：拟入记忆库但还没被人拍板的条目（B10.1–B10.4）。
+ * 存在 memory/candidates/ 下；老版本是 knowledge/_candidates/，读的时候两边都看。
  */
 
 const ID_PATTERN = /^c_[0-9A-Z]+$/;
 
 export function candidatesDir(home, env = process.env) {
-  return path.join(knowledgeDir(home, env).dir, "_candidates");
+  return path.join(memoryDir(home, env).dir, "candidates");
+}
+
+/** 老的候选目录（下划线前缀那版），只读兼容 */
+function legacyCandidatesDir(home, env = process.env) {
+  return path.join(memoryDir(home, env).dir, "_candidates");
 }
 
 function candidateFile(home, id, env = process.env) {
@@ -35,16 +40,22 @@ function candidateFile(home, id, env = process.env) {
 
 export function listCandidates({ home, env = process.env }) {
   const items = [];
-  for (const file of listFiles(candidatesDir(home, env), ".json").sort()) {
-    const item = readJsonSafe(file, null);
-    if (item && item.id) items.push({ ...item, file });
+  const seen = new Set();
+  for (const dir of [candidatesDir(home, env), legacyCandidatesDir(home, env)]) {
+    for (const file of listFiles(dir, ".json").sort()) {
+      const item = readJsonSafe(file, null);
+      if (!item || !item.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      items.push({ ...item, file });
+    }
   }
   return items;
 }
 
 export function readCandidate({ home, env = process.env, id }) {
   const file = candidateFile(home, id, env);
-  const item = readJsonSafe(file, null);
+  let item = readJsonSafe(file, null);
+  if (!item) item = readJsonSafe(path.join(legacyCandidatesDir(home, env), id + ".json"), null);
   if (!item) {
     throw new MoError("E_MEMORY_NOT_FOUND", "没有这个候选：" + id, { hint: "mo memory candidates 查看待裁决列表" });
   }
@@ -53,6 +64,7 @@ export function readCandidate({ home, env = process.env, id }) {
 
 export function deleteCandidate({ home, env = process.env, id }) {
   fs.rmSync(candidateFile(home, id, env), { force: true });
+  fs.rmSync(path.join(legacyCandidatesDir(home, env), id + ".json"), { force: true });
 }
 
 /** 同 scope 同标题的待裁决候选只留一条，避免回执重复上报刷屏 */
@@ -78,7 +90,7 @@ export function saveCandidate({ home, env = process.env, candidate, conflict = n
 
 /** 接受后的落盘：偏好追加到 preferences.md，避坑/决策一条一个文件 */
 export function appendCandidate({ home, env = process.env, candidate }) {
-  const { dir } = knowledgeDir(home, env);
+  const { dir } = memoryDir(home, env);
   const relative = targetFileName(candidate);
   const file = path.join(dir, relative);
   ensureDir(path.dirname(file));

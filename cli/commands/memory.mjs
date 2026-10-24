@@ -5,7 +5,7 @@ import { all, one, has } from "../lib/args.mjs";
 import { emit, table } from "../lib/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
-import { knowledgeDir, loadKnowledge, recallKnowledge } from "../lib/knowledge.mjs";
+import { memoryDir, loadKnowledge, recallKnowledge } from "../lib/knowledge.mjs";
 import {
   appendCandidate,
   deleteCandidate,
@@ -16,7 +16,7 @@ import {
 import { detectConflict, describeConflict, normalizeCandidate, validateCandidate } from "../../core/knowledge/candidate.mjs";
 import { appendEvent } from "../lib/store.mjs";
 
-const USAGE = "可用：recall / list / init / path / propose / candidates / accept / reject";
+const USAGE = "可用：recall / list / init / path / migrate / propose / candidates / accept / reject";
 
 export function memoryCommand(ctx, args) {
   const sub = args.positional[0];
@@ -25,6 +25,7 @@ export function memoryCommand(ctx, args) {
   if (sub === "list") return listCommand(args, home);
   if (sub === "init") return initCommand(args, home);
   if (sub === "path") return pathCommand(args, home);
+  if (sub === "migrate") return migrateCommand(args, home);
   if (sub === "propose") return proposeCommand(args, home);
   if (sub === "candidates") return candidatesCommand(args, home);
   if (sub === "accept") return acceptCommand(args, home);
@@ -63,20 +64,26 @@ function recallCommand(args, home) {
 
   emit(args.options, payload, () => {
     if (!result.matched.length) {
-      return "没有命中条目（知识库共 " + result.total + " 条）" + hintFor(result.warnings);
+      return "没有命中条目（记忆库共 " + result.total + " 条）" + hintFor(result);
     }
     const lines = result.matched.map((entry) => {
       const meta = [entry.scope, entry.id, "score=" + entry.score].join(" · ");
       const body = String(entry.body || "").replace(/\s*\n\s*/g, " ").trim();
       return meta + "\n  " + entry.title + (body ? "\n  " + body : "");
     });
-    return lines.join("\n\n") + hintFor(result.warnings);
+    return lines.join("\n\n") + hintFor(result);
   });
   return 0;
 }
 
-function hintFor(warnings) {
-  return warnings.includes("W_KNOWLEDGE_EMPTY") ? "\n（知识库是空的，先运行 mo memory init）" : "";
+function hintFor(result) {
+  const warnings = result.warnings || [];
+  const lines = [];
+  if (warnings.includes("W_MEMORY_EMPTY")) lines.push("（记忆库是空的，先运行 mo memory init）");
+  if (warnings.includes("W_MEMORY_LEGACY_DIR")) {
+    lines.push("（正在用旧目录 " + result.dir + "；mo memory migrate 可搬到 " + (result.legacyTarget || "memory/") + "）");
+  }
+  return lines.length ? "\n" + lines.join("\n") : "";
 }
 
 function listCommand(args, home) {
@@ -88,22 +95,75 @@ function listCommand(args, home) {
     args.options,
     { ok: true, dir: loaded.dir, total: entries.length, entries: entries.map(stripForJson) },
     () => {
-      if (!entries.length) return "知识库是空的（" + loaded.dir + "）\n先运行 mo memory init";
+      if (!entries.length) return "记忆库是空的（" + loaded.dir + "）\n先运行 mo memory init";
       const rows = entries.map((entry) => [entry.scope, entry.id, entry.title]);
-      return "知识库：" + loaded.dir + "\n\n" + table(rows, ["scope", "id", "title"]);
+      return "记忆库：" + loaded.dir + "\n\n" + table(rows, ["scope", "id", "title"]);
     },
   );
   return 0;
 }
 
 function pathCommand(args, home) {
-  const { dir, explicit } = knowledgeDir(home);
-  emit(args.options, { ok: true, dir, explicit }, dir);
+  const { dir, explicit, source, target } = memoryDir(home);
+  const legacy = source === "legacy" || source === "legacy-env";
+  emit(
+    args.options,
+    { ok: true, dir, explicit, source, ...(target ? { target } : {}) },
+    () => dir + (legacy ? "\n（旧目录；mo memory migrate 可搬到 " + (target || path.join(home, "memory")) + "）" : ""),
+  );
+  return 0;
+}
+
+/**
+ * 把老目录搬到 ~/.mo-agent/memory。
+ * 不覆盖、不合并：目标已存在就拒绝，交给用户自己处理。
+ */
+function migrateCommand(args, home) {
+  const { dir, source, target } = memoryDir(home);
+  const to = target || path.join(home, "memory");
+
+  if (source === "env" || source === "legacy-env") {
+    throw new MoError("E_USAGE", "当前用环境变量指定了记忆库（" + dir + "），不迁移", {
+      hint: "去掉 MO_AGENT_MEMORY / MO_AGENT_KNOWLEDGE 后再迁移",
+    });
+  }
+  if (dir === to) {
+    // memory 已经在用，但旧的 knowledge/ 还有东西：只提示，不替用户合并
+    const legacy = path.join(home, "knowledge");
+    if (fs.existsSync(legacy) && fs.readdirSync(legacy).length) {
+      throw new MoError("E_USAGE", "两个目录都有内容：" + to + " 与 " + legacy, {
+        hint: "memory 已在用；把 knowledge/ 里的条目手动合并过去，或删掉旧目录",
+      });
+    }
+    emit(args.options, { ok: true, dir, migrated: false }, "已经在用 memory 目录：" + dir);
+    return 0;
+  }
+  if (fs.existsSync(to) && fs.readdirSync(to).length) {
+    throw new MoError("E_USAGE", "目标目录已存在且不是空的：" + to, {
+      hint: "先自己合并或删掉它，再运行 mo memory migrate",
+    });
+  }
+
+  const dryRun = has(args.options, "dry-run");
+  if (!dryRun) {
+    fs.renameSync(dir, to);
+    const legacyCandidates = path.join(to, "_candidates");
+    if (fs.existsSync(legacyCandidates)) fs.renameSync(legacyCandidates, path.join(to, "candidates"));
+  }
+
+  emit(
+    args.options,
+    { ok: true, from: dir, to, migrated: !dryRun },
+    () =>
+      dryRun
+        ? "将把 " + dir + " 搬到 " + to + "（--dry-run，没有动文件）"
+        : "✓ 已迁移\n\n  从   " + dir + "\n  到   " + to,
+  );
   return 0;
 }
 
 const README = [
-  "# 知识库",
+  "# 记忆库",
   "",
   "这里的条目会在派单时按任务卡内容召回，注入执行者拿到的信封。全部是本地纯文本。",
   "",
@@ -112,6 +172,7 @@ const README = [
   "- \`preferences.md\` — 我的偏好",
   "- \`pitfalls/*.md\` — 避坑",
   "- \`decisions/*.md\` — 已定的决策",
+  "- \`candidates/*.json\` — 待裁决的候选（不会进召回）",
   "",
   "## 条目格式",
   "",
@@ -145,9 +206,10 @@ const TEMPLATE = [
 ].join("\n");
 
 function initCommand(args, home) {
-  const { dir } = knowledgeDir(home);
+  const { dir } = memoryDir(home);
   ensureDir(path.join(dir, "pitfalls"));
   ensureDir(path.join(dir, "decisions"));
+  ensureDir(path.join(dir, "candidates"));
 
   const created = [];
   const ensure = (file, content) => {
@@ -164,7 +226,7 @@ function initCommand(args, home) {
   emit(
     args.options,
     { ok: true, dir, created },
-    () => (created.length ? "已创建知识库：" + dir + "\n" + created.map((file) => "  + " + file).join("\n") : "知识库已存在：" + dir + "\n（没有覆盖任何文件）"),
+    () => (created.length ? "已创建记忆库：" + dir + "\n" + created.map((file) => "  + " + file).join("\n") : "记忆库已存在：" + dir + "\n（没有覆盖任何文件）"),
   );
   return 0;
 }
@@ -201,7 +263,7 @@ function loadEntriesQuietly(home) {
   try {
     return loadKnowledge({ home }).entries;
   } catch (error) {
-    if (error && error.code === "E_KNOWLEDGE_UNAVAILABLE") return [];
+    if (error && error.code === "E_MEMORY_UNAVAILABLE") return [];
     throw error;
   }
 }
@@ -307,7 +369,7 @@ function acceptCommand(args, home) {
   emit(
     args.options,
     { ok: true, id, entryId: written.entryId, file: written.file },
-    () => ["✓ 已写入知识库", "", "  条目   " + written.entryId, "  文件   " + written.file].join("\n"),
+    () => ["✓ 已写入记忆库", "", "  条目   " + written.entryId, "  文件   " + written.file].join("\n"),
   );
   return 0;
 }

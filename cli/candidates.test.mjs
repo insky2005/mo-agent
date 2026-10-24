@@ -44,7 +44,7 @@ function runJson(ws, args, extra = {}) {
   return { ...result, parsed };
 }
 
-const knowledge = (ws, ...parts) => path.join(ws.home, "knowledge", ...parts);
+const knowledge = (ws, ...parts) => path.join(ws.home, "memory", ...parts);
 
 test("propose → candidates → accept：进知识库并可按关键词召回", () => {
   const ws = workspace();
