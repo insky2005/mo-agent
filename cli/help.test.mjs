@@ -41,6 +41,25 @@ test("mo help <组> 给出该组子命令与说明", () => {
   assert.match(memory.stdout, /mo memory migrate/);
 });
 
+test("组帮助带选项，而不是只列子命令", () => {
+  const project = run(["help", "project"]);
+  assert.match(project.stdout, /--mode auto\|skill\|ref\|inline/);
+  assert.match(project.stdout, /--no-agent-file/);
+  assert.match(project.stdout, /--remove/);
+
+  const inbox = run(["help", "inbox"]);
+  assert.match(inbox.stdout, /--wait 60s/);
+  assert.match(inbox.stdout, /--peek/);
+
+  const task = run(["help", "task"]);
+  assert.match(task.stdout, /--verify run:\|check:\|human:/);
+});
+
+test("主帮助列出 inbox 组", () => {
+  const result = run(["help"]);
+  assert.match(result.stdout, /inbox\s+pull/);
+});
+
 test("mo <组> --help 与 mo <组> help 等价", () => {
   const direct = run(["help", "task"]).stdout;
   assert.equal(run(["task", "--help"]).stdout, direct);

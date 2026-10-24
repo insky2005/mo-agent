@@ -89,11 +89,77 @@ export const GROUPS = [
     ],
   },
   {
+    name: "inbox",
+    title: "收件箱",
+    subs: [["pull", "拉任务通知（done / blocked / failed），拉完归档", "没有就等，见 --wait"]],
+  },
+  {
     name: "mcp",
     title: "MCP",
     subs: [["", "stdio MCP 服务，一行一条 JSON-RPC", "给支持 MCP 的 Agent 当后端"]],
   },
 ];
+
+/** 每个组的选项。help 只做索引，具体语义仍由命令负责。 */
+const OPTIONS = {
+  task: [
+    ["--title <标题> --deliverable <产出>", "create 必填，产出可重复"],
+    ["--verify run:|check:|human:", "验收项，可重复；缺了会警告 W_NO_VERIFY"],
+    ["--boundary / --constraint / --background", "写进卡的正文段落，可重复"],
+    ["--worker <名> | --exec <命令>", "执行者，二选一"],
+    ["--timeout 45m", "执行超时（默认 45m）"],
+    ["--assignee auto|<名>", "建卡时记下意向执行者"],
+    ["--from <id>", "这张卡是谁派的（缺省取 MO_AGENT_ID）"],
+    ["--wait 60s / --ttl 24h", "confirm：等批准 / 请求有效期"],
+    ["--yes / --note <说明>", "approve | reject：非 TTY 的显式逃生口与备注"],
+    ["--tail 50", "logs：只看最后 N 行"],
+  ],
+  project: [
+    ["--mode auto|skill|ref|inline", "init / agent：写 AGENTS.md 的方式，默认 auto"],
+    ["--no-agent-file", "init：只认领项目，不碰 AGENTS.md"],
+    ["--file <路径>", "指定 AGENTS.md / CLAUDE.md，默认自动找一个"],
+    ["--name <名称>", "init：项目名，默认目录名"],
+    ["--remove", "agent：删掉 mo 写的那一段"],
+  ],
+  memory: [
+    ["--scope preferences|pitfalls|decisions", "recall / list / propose：限定范围"],
+    ["--limit N / --all", "recall：条数上限 / 不截断"],
+    ["--file - | --title --trigger --body", "propose：从 stdin 读 JSON，或直接给字段"],
+    ["--tag <词> --source <来源> --task <id>", "propose：补充元数据"],
+    ["--dry-run", "migrate：只打印要搬什么"],
+    ["--id <候选 id>", "accept / reject 的另一种写法"],
+  ],
+  agent: [
+    ["--json", "describe：机器可读的契约"],
+    ["--mcp <配置文件>", "add：合并 mcpServers，幂等 + 备份"],
+    ["--name <服务名>", "add：写进配置的服务名，默认 mo"],
+    ["--prompt", "add：只打印可粘贴的提示词"],
+  ],
+  inbox: [
+    ["--wait 60s", "没有消息就等到超时，有就立刻返回"],
+    ["--peek", "只看，不归档"],
+    ["--task <id> / --limit N", "只拉某条 / 限制条数"],
+  ],
+  ledger: [
+    ["--project <名称|路径>", "按项目过滤"],
+    ["--task <id>", "按任务过滤"],
+    ["--type task.", "按事件类型前缀过滤"],
+    ["--days 30 / --limit 50", "时间窗与条数"],
+  ],
+  receipt: [
+    ["--file -", "submit：从 stdin 读回执 JSON"],
+    ["--dry-run", "submit：只校验，不写盘"],
+  ],
+  worker: [
+    ["--command <命令>", "add：这个执行者怎么启动"],
+    ["--description <说明> --requires <能力>", "add：给人看的说明与能力要求"],
+    ["--project <名称|路径>", "add：只在某个项目里可用"],
+  ],
+  skill: [
+    ["--target <名|路径>", "指定要装到哪，默认探测已安装的 Agent"],
+    ["--yes", "install：跳过交互，装到全部可用目标"],
+  ],
+};
 
 const EXTRA = [
   ["doctor", "自检：Node、目录、记忆库、项目", ""],
@@ -101,14 +167,25 @@ const EXTRA = [
   ["help [组]", "本帮助；给个组名看该组子命令", "例如 mo help task"],
 ];
 
+/** 中文占两列，按显示宽度补空格才对齐 */
+const WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+
+function displayWidth(text) {
+  let width = 0;
+  for (const char of String(text)) width += WIDE.test(char) ? 2 : 1;
+  return width;
+}
+
+function padDisplay(text, target) {
+  return text + " ".repeat(Math.max(2, target - displayWidth(text)));
+}
+
 function subLine(name, desc, note) {
-  const left = "  mo " + name;
-  const pad = Math.max(2, 40 - left.length);
-  return left + " ".repeat(pad) + desc + (note ? "  · " + note : "");
+  return padDisplay("  mo " + name, 40) + desc + (note ? "  · " + note : "");
 }
 
 export function renderHelp() {
-  const row = (left, right) => left + " ".repeat(Math.max(2, 40 - left.length)) + right;
+  const row = (left, right) => padDisplay(left, 40) + right;
   const lines = [
     "mo —— 个人工作台：想法 → 任务卡 → 人批准 → 派单 → 按账本汇报",
     "",
@@ -116,6 +193,7 @@ export function renderHelp() {
     row("  mo doctor", "自检（Node / 目录 / 记忆库 / 项目）"),
     row("  mo project init [路径]", "认领当前目录，写 AGENTS.md"),
     row("  mo agent", "接一个 Agent 时看这个"),
+    row("  mo help <组>", "某组的子命令与选项（--mode、--wait 这些）"),
     "",
     "一次派活",
     row("  mo task create --title … --deliverable … --verify …", "建卡（draft）"),
@@ -154,6 +232,13 @@ export function renderGroupHelp(name) {
     for (const [sub, desc, note] of group.subs) {
       lines.push(subLine((group.name + " " + sub).trim(), desc, note));
     }
+
+    const options = OPTIONS[group.name] || [];
+    if (options.length) {
+      lines.push("", "  选项");
+      for (const [flag, desc] of options) lines.push("  " + padDisplay(flag, 38) + desc);
+    }
+
     lines.push("", "全部命令：mo help");
     return lines.join("\n");
   }
