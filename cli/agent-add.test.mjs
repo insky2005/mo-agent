@@ -36,6 +36,28 @@ function runJson(ws, args) {
   return { ...result, parsed };
 }
 
+test("describe 只暴露 prompt / skill 两种格式", () => {
+  const ws = workspace();
+  const listed = run(ws, ["agent", "describe", "--format", "list"]);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, /--format prompt/);
+  assert.match(listed.stdout, /--format skill/);
+  assert.match(listed.stdout, /mo project init/);
+  assert.doesNotMatch(listed.stdout, /--format agent-block/);
+
+  const denied = run(ws, ["agent", "describe", "--format", "agent-block"]);
+  assert.equal(denied.status, 2);
+  assert.match(denied.stderr, /E_USAGE/);
+});
+
+test("describe --format skill 与仓库里的 SKILL.md 完全一致", () => {
+  const ws = workspace();
+  const file = fileURLToPath(new URL("../skills/mo/SKILL.md", import.meta.url));
+  const rendered = run(ws, ["agent", "describe", "--format", "skill"]);
+  assert.equal(rendered.status, 0, rendered.stderr);
+  assert.equal(rendered.stdout, fs.readFileSync(file, "utf8"));
+});
+
 test("describe --json 给出工具、禁止项与规则", () => {
   const ws = workspace();
   const result = runJson(ws, ["agent", "describe"]);

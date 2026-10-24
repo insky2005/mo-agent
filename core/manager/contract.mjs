@@ -392,7 +392,19 @@ export function renderPointer(where) {
   );
 }
 
+/**
+ * FORMATS 是"能渲染的全部"；DESCRIBE_FORMATS 才是 mo agent describe 暴露的。
+ * agent-block / mo-doc / pointer 是 mo project init 落盘用的 payload，
+ * 对着终端打印没有意义（它们本来就靠"引用技能/MO.md"来补全细节）。
+ */
 export const FORMATS = ["skill", "agent-block", "mo-doc", "prompt", "pointer"];
+export const DESCRIBE_FORMATS = ["prompt", "skill"];
+
+/** describe 的输出说明：格式 + 一句话用途，直接给 --format list 用 */
+export const DESCRIBE_GUIDE = [
+  ["prompt", "直接粘进 Agent 的系统提示 / 对话（= describe 默认）"],
+  ["skill", "技能文件内容，与 skills/mo/SKILL.md 完全一致"],
+];
 
 const finish = (text) => (text.endsWith("\n") ? text : text + "\n");
 

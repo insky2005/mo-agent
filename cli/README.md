@@ -465,6 +465,7 @@ mo mcp                             # 一行一条 JSON-RPC，工具调用转发�
 mo agent describe                  # 契约（人看，等同 --format prompt）
 mo agent describe --json           # 契约（机器读）
 mo agent describe --format skill   # 与 skills/mo/SKILL.md 完全一致
+mo agent describe --format list    # 看这两种格式各用在哪
 mo agent add --mcp ./mcp.json      # 合并 mcpServers，幂等 + 备份
 mo agent add --prompt              # 只打印提示词
 ```

@@ -337,6 +337,10 @@ npx skills add insky2005/mo-agent
 mo agent add --mcp ./mcp.json    # 合并进任意 mcpServers 配置，幂等 + 备份
 mo agent describe --format prompt # 只能读文字的 Agent，直接粘这段
 mo agent describe --json          # 让 Agent 自己读能力清单
+mo agent describe --format skill  # 技能文件内容（与 SKILL.md 一致）
+mo agent describe --format list   # 看这两种格式各自用在哪
+
+项目里的 `AGENTS.md` / `.mo-agent/MO.md` 不从这里出——那是 `mo project init` 的产物；`describe` 只给"能直接贴给 Agent"的两种。
 ```
 
 **故意没有** `task_approve` / `task_reject`（批准得你来）和 `memory_accept`（记忆入库得你拍板）。`task_confirm` 只发请求，不改变卡片状态。每个工具调用是一次 `mo … --json` 子进程，所以 `task_dispatch` 会一直阻塞到执行者跑完。

@@ -5,7 +5,7 @@ import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 import { isJson } from "../lib/output.mjs";
 import { VERSION } from "../lib/version.mjs";
-import { FORBIDDEN, FORMATS, RULES, TOOLS, render } from "../../core/manager/contract.mjs";
+import { DESCRIBE_FORMATS, DESCRIBE_GUIDE, FORBIDDEN, RULES, TOOLS, render } from "../../core/manager/contract.mjs";
 
 /**
  * 通用接入：mo 不认识任何具体 Agent，只产出三种可粘贴物——
@@ -34,16 +34,34 @@ function describeCommand(args) {
       tools: TOOLS.map(({ name, description, schema }) => ({ name, description, schema })),
       forbidden: FORBIDDEN,
       rules: RULES,
-      formats: FORMATS,
+      formats: DESCRIBE_FORMATS,
     });
     return 0;
   }
 
   if (format === "list") {
     const rows = TOOLS.map((tool) => [tool.name, tool.description]);
-    emit(args.options, { formats: FORMATS, tools: TOOLS.map((tool) => tool.name) }, () =>
-      "可用格式：" + FORMATS.join(" / ") + "\n\n" + rows.map(([name, desc]) => name.padEnd(18) + desc).join("\n"));
+    emit(args.options, { formats: DESCRIBE_FORMATS, tools: TOOLS.map((tool) => tool.name) }, () =>
+      [
+        "这个命令给你的是「怎么接我」，能贴的只有两种：",
+        "",
+        ...DESCRIBE_GUIDE.map(([name, purpose]) => "  " + ("--format " + name).padEnd(18) + purpose),
+        "",
+        "（项目内 AGENTS.md / MO.md 由 mo project init 写入，不是这里的产物）",
+        "",
+        "能调用的工具：",
+        "",
+        ...rows.map(([name, desc]) => "  " + name.padEnd(18) + desc),
+      ].join("\n"),
+    );
     return 0;
+  }
+
+  if (!DESCRIBE_FORMATS.includes(format)) {
+    throw new MoError("E_USAGE", "describe 只输出接入契约：" + DESCRIBE_FORMATS.join(" / "), {
+      hint:
+        "agent-block / mo-doc / pointer 是 mo project init 落盘用的短块（要的话：mo project agent --mode inline）；describe 不给它们",
+    });
   }
 
   process.stdout.write(render(format));
