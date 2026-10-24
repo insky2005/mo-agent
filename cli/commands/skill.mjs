@@ -104,7 +104,7 @@ async function chooseTargets() {
     const note = target.installed ? "（已装）" : target.available ? "" : "（未安装）";
     lines.push("  " + (index + 1) + ") " + mark + " " + target.name.padEnd(11) + target.dir + note);
   });
-  lines.push("", "选择：1,3 收尾 | a 全选可用 | 回车 用默认 | q 取消");
+  lines.push("", "选择：输入编号后回车（如 1,3）| a 全选可用 | 直接回车用默认 | q 取消");
   process.stdout.write(lines.join("\n") + "\n> ");
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
