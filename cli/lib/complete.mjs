@@ -28,9 +28,10 @@ const SPEC = {
     flags: ["--limit", "--scope", "--all", "--file", "--title", "--trigger", "--tag", "--body", "--source", "--id", "--json"],
   },
   inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
+  mcp: { subs: [], flags: ["--json"] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",

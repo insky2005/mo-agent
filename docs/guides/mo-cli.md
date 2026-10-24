@@ -143,6 +143,7 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo memory candidates` | 待裁决的候选条目 |
 | `mo memory accept \| reject <id>` | 采纳 / 丢弃候选（冲突时拒绝写入） |
 | `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
+| `mo mcp` | stdio MCP 服务（给主 Agent 接） |
 | `mo doctor` | 自检 |
 | `mo help` | 帮助 |
 
@@ -311,6 +312,22 @@ npx skills add insky2005/mo-agent
 ```
 
 装完新开一个 Agent 会话才会加载。
+
+### 10.1 用 MCP（stdio）
+
+支持 stdio MCP 的客户端（Claude Code、DSH 等）可以直接把 `mo` 当 MCP 服务挂上：
+
+```json
+{
+  "mcpServers": {
+    "mo": { "command": "/path/to/mo", "args": ["mcp"] }
+  }
+}
+```
+
+挂上之后，主 Agent 能用的工具是：`task_create`、`task_dispatch`、`task_status`、`inbox_pull`、`ledger_query`、`memory_recall`、`memory_propose`。
+
+**故意没有** `task_confirm`（确认得你来）和 `memory_accept`（记忆入库得你拍板）。每个工具调用是一次 `mo … --json` 子进程，所以 `task_dispatch` 会一直阻塞到执行者跑完。
 
 ## 11. 知识与收件箱
 

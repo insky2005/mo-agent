@@ -453,6 +453,9 @@ mo receipt submit <id> --file -    # 手工写入回执（不改状态）
 mo receipt apply <id>              # 应用已有回执：跑验收并更新状态
 mo ledger query [--project 项目] [--task id] [--type task.] [--days 30] [--limit 50]
 mo doctor
+
+# 给主 Agent 用（MCP stdio）
+mo mcp                             # 一行一条 JSON-RPC，工具调用转发给上面的命令
 ```
 
 全局选项：`--project <名称|路径>`、`--json`、`--help`。
@@ -525,6 +528,22 @@ mo task logs <id> --tail 30
 | 2 | 用法错误（`E_USAGE`） |
 
 错误以 `[E_CODE] 消息` 输出到 stderr，码表见 spec §8。
+
+## 接到 Agent（MCP，stdio）
+
+`mo mcp` 在 stdio 上讲 MCP，把 `task_create` / `task_dispatch` / `task_status` / `inbox_pull` / `ledger_query` / `memory_recall` / `memory_propose` 转发成对应的 `mo … --json`。**不暴露** `task_confirm`（确认权属于人）和 `memory_accept`（裁决属于人）。
+
+Claude Code / DSH 这类支持 stdio MCP 的客户端，配置里写：
+
+```json
+{
+  "mcpServers": {
+    "mo": { "command": "/path/to/mo", "args": ["mcp"] }
+  }
+}
+```
+
+MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一个子进程，所以 `task_dispatch` 会阻塞到执行结束。
 
 ## 知识库与收件箱
 

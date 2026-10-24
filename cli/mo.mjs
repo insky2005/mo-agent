@@ -17,6 +17,7 @@ import { workerCommand } from "./commands/worker.mjs";
 import { skillCommand } from "./commands/skill.mjs";
 import { memoryCommand } from "./commands/memory.mjs";
 import { inboxCommand } from "./commands/inbox.mjs";
+import { mcpCommand } from "./commands/mcp.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -51,6 +52,7 @@ const HELP = [
   "  mo memory accept|reject <id>    采纳 / 丢弃候选（冲突时拒绝写入）",
   "  mo inbox pull [--peek]          拉取任务通知（完成 / 阻塞 / 失败），拉完归档",
   "",
+  "  mo mcp                          stdio MCP 服务（主 Agent 用，一行一条 JSON-RPC）",
   "  mo help                         显示本帮助",
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
@@ -71,6 +73,7 @@ const ROUTES = {
   skill: skillCommand,
   memory: memoryCommand,
   inbox: inboxCommand,
+  mcp: mcpCommand,
 };
 
 async function main(argv) {
