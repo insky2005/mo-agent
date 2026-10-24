@@ -475,6 +475,16 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 唤醒 | `mo inbox pull --wait 60s` | 有就立刻返回，没有就等到超时；不依赖推送与 hook |
 | 身份 | `mo task create --from <id>` / `MO_AGENT_ID` | 写进卡片 `from` 与账本 `task.created.payload.from` |
 
+**渲染矩阵**：五份产物里，**行为段（边界 / 流程 / 铁律 / 失败表）逐字相同**，只有包装不同；`contract.test.mjs` 会断言 skill 与 prompt 的行为段完全一致，防止再次分叉。
+
+| 格式 | 包装 | 给谁 |
+|---|---|---|
+| `skill` | frontmatter + 安装说明 | `npx skills add`、`mo skill install` |
+| `prompt` | 标题 + 工具表（MCP 名） | 只能读文字的 Agent |
+| `agent-block` | 4 步精简 | 项目 `AGENTS.md` |
+| `mo-doc` | 命令表 | `.mo-agent/MO.md` |
+| `pointer` | 一句话 | 技能已装时的指针 |
+
 **文案真源**：`core/manager/contract.mjs`。`skills/mo/SKILL.md`、`AGENTS.md` 内联块、`.mo-agent/MO.md`、`--format prompt` 全部由它渲染，`scripts/gen-skill.mjs` 负责生成 SKILL.md 与代码内联副本。`core/manager/contract.test.mjs` 会拦住两类腐化：工具漏写、文案里写死 Agent 名字。
 
 **确认权（B4）**：

@@ -25,6 +25,28 @@ test("文案里不写死具体 Agent 名字（防腐化）", () => {
   }
 });
 
+test("边界段出现在每一份行为渲染里", () => {
+  for (const format of ["skill", "prompt", "mo-doc"]) {
+    assert.match(render(format), /## 不能做的|批准\/拒绝任务卡/, format + " 缺少边界说明");
+  }
+  const skill = render("skill");
+  const prompt = render("prompt");
+  for (const item of FORBIDDEN) {
+    assert.ok(prompt.includes(item.cli), "prompt 缺少禁止项 " + item.cli);
+    assert.ok(skill.includes(item.cli), "skill 缺少禁止项 " + item.cli);
+  }
+  assert.equal((skill.match(/## 不能做的/g) || []).length, 1, "skill 里边界段重复了");
+});
+
+test("skill 与 prompt 的行为段逐字相同（只允许包装不同）", () => {
+  const marker = "## 不能做的";
+  const skill = render("skill");
+  const prompt = render("prompt");
+  const skillTail = skill.slice(skill.indexOf(marker));
+  const promptTail = prompt.slice(prompt.indexOf(marker));
+  assert.equal(skillTail, promptTail);
+});
+
 test("prompt 明确 confirm 只是请求、批准由人做", () => {
   const prompt = render("prompt");
   assert.match(prompt, /task_confirm/);

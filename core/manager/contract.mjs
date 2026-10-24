@@ -100,12 +100,12 @@ export const TOOLS = [
   },
 ];
 
-/** 禁止动作：写进文案，也用来校验"不暴露" */
+/** 禁止动作：写进文案，也用来校验"不暴露"。cli 是同一件事的 CLI 说法 */
 export const FORBIDDEN = [
-  { action: "task_approve", why: "批准任务卡属于人" },
-  { action: "task_reject", why: "拒绝任务卡属于人" },
-  { action: "memory_accept", why: "记忆入库属于人的裁决" },
-  { action: "receipt_submit", why: "回执属于执行者，伪造等于把系统变摆设" },
+  { action: "task_approve", cli: "mo task approve", why: "批准任务卡属于人" },
+  { action: "task_reject", cli: "mo task reject", why: "拒绝任务卡属于人" },
+  { action: "memory_accept", cli: "mo memory accept / mo memory reject", why: "记忆入库属于人的裁决" },
+  { action: "receipt_submit", cli: "mo receipt submit", why: "回执属于执行者，伪造等于把系统变摆设" },
 ];
 
 export const TRIGGERS = [
@@ -205,7 +205,17 @@ const INSTALL = [
   "",
 ];
 
+/** 边界段：所有渲染都带，不允许哪个通道缺一块 */
+const BOUNDARY = () => [
+  "## 不能做的",
+  "",
+  ...FORBIDDEN.map((item) => "- " + item.cli + "（" + item.why + "）"),
+  "- 手改 .mo-agent/tasks/*.md，除非用户明确要求",
+  "",
+];
+
 const BEHAVIOR = () => [
+  ...BOUNDARY(),
   "## 什么时候动手",
   "",
   "用户提到本技能、或在相关话题里跟你说话——**默认就是\"聊\"**：正常对话，不建卡、不派单、不碰任何 `mo` 命令。技能被加载不代表要立刻执行动作。",
@@ -347,6 +357,7 @@ export function renderMoDoc() {
       "## 铁律",
       "",
       ...RULES.map((rule) => "- " + rule + "；"),
+      "- 批准/拒绝任务卡（mo task approve / mo task reject）、采纳记忆（mo memory accept）、替执行者写回执，都不是你的事；",
       "",
     ].join("\n"),
   );
@@ -364,10 +375,6 @@ export function renderPrompt() {
       "## 你能调用的",
       "",
       ...TOOLS.map((tool) => "- " + tool.name + " —— " + tool.description),
-      "",
-      "## 你不能做的",
-      "",
-      ...FORBIDDEN.map((item) => "- " + item.action + "（" + item.why + "）"),
       "",
       ...BEHAVIOR(),
     ].join("\n"),

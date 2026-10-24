@@ -61,6 +61,14 @@ bash scripts/install-cli.sh
 
 **不要 `curl … | bash` 一把梭**：先把脚本下到临时文件，让用户有机会先看一眼再执行。
 
+## 不能做的
+
+- mo task approve（批准任务卡属于人）
+- mo task reject（拒绝任务卡属于人）
+- mo memory accept / mo memory reject（记忆入库属于人的裁决）
+- mo receipt submit（回执属于执行者，伪造等于把系统变摆设）
+- 手改 .mo-agent/tasks/*.md，除非用户明确要求
+
 ## 什么时候动手
 
 用户提到本技能、或在相关话题里跟你说话——**默认就是"聊"**：正常对话，不建卡、不派单、不碰任何 `mo` 命令。技能被加载不代表要立刻执行动作。
