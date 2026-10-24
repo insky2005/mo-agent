@@ -138,6 +138,9 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo ledger query [--task id]` | 查账本 |
 | `mo worker list \| add \| remove` | 查看/注册执行者 |
 | `mo skill list \| install \| uninstall` | 给 Agent 装 mo 技能 |
+| `mo memory recall "关键词"` | 召回知识条目（派单时自动注入同一批） |
+| `mo memory list \| init \| path` | 列出 / 建骨架 / 打印知识库位置 |
+| `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
 | `mo doctor` | 自检 |
 | `mo help` | 帮助 |
 
@@ -307,7 +310,36 @@ npx skills add insky2005/mo-agent
 
 装完新开一个 Agent 会话才会加载。
 
-## 11. 文件位置
+## 11. 知识与收件箱
+
+**知识库**：纯 markdown，一个 `## 标题` 一个条目；派单时按任务卡内容召回，命中条目的正文直接嵌进执行者拿到的信封，执行者不用再去翻文件。
+
+```markdown
+## 派单超时不要直接重试
+
+- trigger: 派单, 超时, retry
+- tags: 任务
+
+先看 mo task logs，确认是执行者卡住还是回执没写。
+```
+
+| 位置 | 作用 |
+|---|---|
+| `~/.mo-agent/knowledge/preferences.md` | 我的偏好 |
+| `~/.mo-agent/knowledge/pitfalls/*.md` | 避坑 |
+| `~/.mo-agent/knowledge/decisions/*.md` | 已定的决策 |
+
+`mo memory init` 建骨架（幂等，不覆盖），之后拿编辑器改就行。`_` 开头的文件不参与召回；没有索引和缓存，改完下一次派单就生效。
+
+**收件箱**：任务进入 `done` / `blocked` / `failed` 时，core 会落一条通知。主 Agent 拿不到推送时，用 `mo inbox pull` 主动拉——条目在 `~/.mo-agent/inbox/pending/`，拉完移到 `pulled/`，所以重复拉不会拿到旧消息。
+
+```bash
+mo inbox pull            # 拉取并归档
+mo inbox pull --peek     # 只看不归档
+mo inbox pull --task t_x # 只拉这一条
+```
+
+## 12. 文件位置
 
 | 内容 | 路径 |
 |---|---|
@@ -318,10 +350,12 @@ npx skills add insky2005/mo-agent
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 自定义执行者 | `~/.mo-agent/workers.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
+| 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
+| 收件箱 | `~/.mo-agent/inbox/pending/`、`inbox/pulled/` |
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，用于隔离测试环境。
 
-## 12. 退出码与错误
+## 13. 退出码与错误
 
 | 退出码 | 含义 |
 |---|---|
@@ -342,7 +376,7 @@ npx skills add insky2005/mo-agent
 | `E_CARD_INVALID` / `E_CARD_TOO_LARGE` | 卡不合法 / 超过 8KB |
 | `E_TRANSITION` | 状态机不允许这次转换 |
 
-## 13. 常见问题
+## 14. 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|
@@ -354,9 +388,10 @@ npx skills add insky2005/mo-agent
 | 补全不生效 | 当前终端没执行 `hash -r; eval "$(mo completion zsh)"` |
 | 命令找不到 | `~/.local/bin` 不在 PATH |
 
-## 14. 限制
+## 15. 限制
 
 - 只支持 macOS / Linux；Windows 未验证。
 - 派单是同步阻塞的：执行者跑多久，命令就等多久。
 - 确认权目前是流程约定；daemon 持有确认权在 P4。
-- 人调 dispatch 时主 Agent 不会收到通知，需要它主动查 `status` / `ledger`。
+- 没有 daemon，也没有推送：任务的结束通知落在收件箱，主 Agent 需要主动 `mo inbox pull`，或查 `status` / `ledger`。
+- 知识只进不审：现在只有召回与注入，`memory_propose` 的候选区与冲突裁决还没做。

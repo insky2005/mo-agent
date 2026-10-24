@@ -70,7 +70,7 @@ bash scripts/install-cli.sh
 | 信号 | 动作 |
 |---|---|
 | 要落地（"开始做 / 落地 / 派给 X / 就这么办"） | 建卡 → 回显 → 等确认 → 派单 |
-| 问进度（"怎么样了 / 做完了吗"） | 读 `mo task status`，按事实汇报 |
+| 问进度（"怎么样了 / 做完了吗"） | 先 `mo inbox pull` 看有没有到期的通知，再 `mo task status` 按事实汇报 |
 | 纠正你的做法 | 问用户要不要改，不自己改卡 |
 | 其它情况（默认） | 只聊 |
 
@@ -118,11 +118,13 @@ mo task dispatch <taskId> --json
 只引用工具返回的事实，不要替执行者说"完成了"。
 
 ```bash
+mo inbox pull --json              # 任务结束/阻塞的通知，拉完归档
 mo task status <taskId> --json
 mo ledger query --task <taskId> --json
 ```
 
-- `done` + `verified: unverified` → 说"执行者交付了，验收还没跑"（verify 自动执行尚未实现）；
+- `done` + `verified: verified` → 才算真的完成；
+- `done` + `verified: unverified` → 卡上没有能自动跑的验收项，转述给用户确认；
 - `blocked` → 说清 `reason`、`exitCode`、`outputTail`；
 - `failed` → 同样转述，不要美化。
 

@@ -15,6 +15,8 @@ import { doctorCommand } from "./commands/doctor.mjs";
 import { completionCommand, completeCommand } from "./commands/completion.mjs";
 import { workerCommand } from "./commands/worker.mjs";
 import { skillCommand } from "./commands/skill.mjs";
+import { memoryCommand } from "./commands/memory.mjs";
+import { inboxCommand } from "./commands/inbox.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -40,13 +42,19 @@ const HELP = [
   "  mo receipt submit|apply <id>    提交/应用回执（apply 走验收）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "",
+  "  mo memory recall \"关键词\"        按知识库召回（派单时同样会自动注入）",
+  "  mo memory list                  列出知识库条目",
+  "  mo memory init                  创建知识库骨架（幂等）",
+  "  mo memory path                  打印知识库位置",
+  "  mo inbox pull [--peek]          拉取任务通知（完成 / 阻塞 / 失败），拉完归档",
+  "",
   "  mo help                         显示本帮助",
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
   "",
   "全局选项：--project <名称|路径>  --json  --help",
   "",
-  "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）",
+  "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）  MO_AGENT_KNOWLEDGE   MO_RECALL_LIMIT",
 ].join("\n");
 
 const ROUTES = {
@@ -58,6 +66,8 @@ const ROUTES = {
   completion: completionCommand,
   worker: workerCommand,
   skill: skillCommand,
+  memory: memoryCommand,
+  inbox: inboxCommand,
 };
 
 async function main(argv) {

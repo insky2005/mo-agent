@@ -7,6 +7,32 @@ import { receiptDir } from "./paths.mjs";
 import { appendEvent, loadCard } from "./store.mjs";
 import { ingest, transition } from "./ingest.mjs";
 import { writeRunLog } from "./logs.mjs";
+import { recallKnowledge, cardQuery } from "./knowledge.mjs";
+import { formatKnowledgeBlock } from "../../core/knowledge/recall.mjs";
+
+/**
+ * 召回是"尽力而为"：读不到知识库不能挡住派单，但必须吵一声（B10.5 / I9）。
+ */
+function recallForDispatch({ home, card }) {
+  try {
+    const recalled = recallKnowledge({ home, query: cardQuery(card) });
+    return {
+      block: formatKnowledgeBlock(recalled.matched),
+      info: {
+        ok: true,
+        dir: recalled.dir,
+        count: recalled.matched.length,
+        total: recalled.total,
+        ids: recalled.matched.map((entry) => entry.id),
+        warnings: recalled.warnings,
+      },
+    };
+  } catch (error) {
+    if (!error || error.code !== "E_KNOWLEDGE_UNAVAILABLE") throw error;
+    process.stderr.write("[W_KNOWLEDGE_UNAVAILABLE] " + error.message + "（本次没有注入知识）\n");
+    return { block: "", info: { ok: false, error: { code: error.code, message: error.message } } };
+  }
+}
 
 export function resolveReceiptFile(root, meta) {
   if (meta.receipt) {
@@ -49,7 +75,14 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
   const receiptFile = resolveReceiptFile(root, meta);
   // 回执目录由 core 准备好：执行者只该关心"写这个文件"，不该操心建目录
   ensureDir(receiptDir(root));
-  const envelope = buildEnvelope({ meta, body: card.body, root, receiptFile });
+  const knowledge = recallForDispatch({ home, card });
+  const envelope = buildEnvelope({
+    meta,
+    body: card.body,
+    root,
+    receiptFile,
+    knowledge: knowledge.block,
+  });
 
   const env = {
     ...process.env,
@@ -82,5 +115,5 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
   });
 
   const summary = ingest({ home, root, card: loadCard(root, taskId), result });
-  return { ...summary, executor: String(command), logFile };
+  return { ...summary, executor: String(command), logFile, knowledge: knowledge.info };
 }

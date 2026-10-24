@@ -22,14 +22,16 @@ const SPEC = {
   worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
+  memory: { subs: ["recall", "list", "init", "path"], flags: ["--limit", "--scope", "--all", "--json"] },
+  inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
+  "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires", "--scope", "--peek",
 ]);
 
 function startsWith(prefix) {

@@ -1,6 +1,6 @@
 # 个人工作台：任务流转与分支（v0 设计）
 
-状态：**P0 已落地（CLI）**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
+状态：**P0 / P2 已落地，P3 的召回与注入已落地（CLI）**　日期：2026-10-23　关联：`docs/spec/event-contract.md`、ADR-0001（观察优先）、ADR-0003（事件契约）
 
 ## 1. 目标与非目标
 
@@ -40,6 +40,7 @@
 │   ├── pitfalls/*.md
 │   └── decisions/*.md
 ├── ledger/2026-10.jsonl                        # 全局账本
+├── inbox/pending/*.json  inbox/pulled/         # 待主 Agent 拉取的通知（B9.3）
 ├── projects.json                               # 项目登记表（指针）
 └── scratch/tasks/                              # 无项目兜底（慎用）
 
@@ -302,7 +303,7 @@ canceled            canceled                failed                  └─> canc
 
 MCP 传输：Streamable HTTP（`/mcp`，复用本机令牌）；需要 stdio 时用 `mo mcp` 薄壳转发。
 
-CLI 入口是 [`cli/mo.mjs`](../../cli/mo.mjs)，`npm link` 后命令名即为 `mo`。P0 只实现 CLI 一列。
+CLI 入口是 [`cli/mo.mjs`](../../cli/mo.mjs)，`npm link` 后命令名即为 `mo`。目前只实现 CLI 一列：`mo memory recall|list|init` 与 `mo inbox pull` 已可用，MCP 一列全空。
 
 ## 10. 数据格式
 
@@ -367,8 +368,8 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
 | **P1** | 主 Agent 接入：skill + CLI（MCP / inbox 唤醒未做） | 主 Agent 全程不离开对话框完成一轮 | 🟡 CLI 形态已落地 |
 | **P2** | `verify` 执行器 + `blocked` 升级（watchdog 未做） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify`） |
-| **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 |
-| **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 |
+| **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 | 🟡 召回与注入已落地（`core/knowledge/` + `mo memory`）；propose 与候选区未做 |
+| **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 | ⬜ 未开始 |
 
 ### 12.1 P0 实现记录
 
@@ -379,6 +380,44 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 - 测试：`core/tasks/*.test.mjs`（17 项）+ `cli/cli.test.mjs`（5 项，含端到端建卡→派单→done）。
 
 **已知偏差**：P0 期间 `verified` 一律为 `unverified`；P2 已补上 `verify` 自动执行（`cli/lib/verify.mjs`），收到 `status=done` 的回执后由 core 决定 `done` / `blocked`。
+
+### 12.2 P3 召回与注入实现记录（2026-11）
+
+**已落地**：知识库解析、召回打分、派单信封注入、收件箱兜底（B9.3 的 pull 一侧）。
+
+| 内容 | 位置 |
+|---|---|
+| 条目解析（`## 标题` 切段、`- trigger:` / `- tags:` 元数据） | `core/knowledge/entry.mjs` |
+| 召回打分（标题 4 / trigger·tags 3 / 正文 1，中文按二元组切词） | `core/knowledge/recall.mjs` |
+| 目录解析与错误映射（B10.5 / I9） | `cli/lib/knowledge.mjs` |
+| `mo memory recall\|list\|init\|path` | `cli/commands/memory.mjs` |
+| 派单注入（§7.2 的「卡片附带的知识」） | `cli/lib/dispatch.mjs` → `cli/lib/envelope.mjs` |
+| 收件箱写入与拉取（B9.3） | `cli/lib/inbox.mjs` + `cli/commands/inbox.mjs` |
+
+**条目格式**（人写笔记的习惯，不做 YAML 依赖）：
+
+```markdown
+## 派单超时不要直接重试
+
+- trigger: 派单, 超时, retry
+- tags: 任务
+
+先看 mo task logs，确认是执行者卡住还是回执没写。
+```
+
+- 一个 `## 标题` 就是一个条目；没有二级标题时整个文件算一条，标题取 `# 一级标题` 或文件名；
+- `trigger` / `tags` 只用于加权，正文与标题同样参与匹配；
+- 文件名以 `_` 开头（如 `_template.md`）不参与召回，可放模板；
+- 无索引、无缓存，改完立即生效。
+
+**降级规则**：
+
+- `mo memory *` 读不到知识库 → `E_KNOWLEDGE_UNAVAILABLE`，不静默返回空（B10.5）；
+- 派单时召回失败 → 不挡派单，stderr 打 `W_KNOWLEDGE_UNAVAILABLE`，`--json` 里 `knowledge.ok=false`；
+- 默认路径 `~/.mo-agent/knowledge` 不存在 → `W_KNOWLEDGE_EMPTY` 并提示 `mo memory init`；`MO_AGENT_KNOWLEDGE` 显式指定却不存在 → 直接报错；
+- 注入条数由 `MO_RECALL_LIMIT` 控制（默认 5，上限 20）。
+
+**仍未做**：`memory_propose`（B10.1–B10.4 的候选与冲突裁决）、知识库不可写时的界面告警、`blocked` 主动推送（现在只能靠 `mo inbox pull` 或被动作 `status`）。
 
 ## 13. 安装与首次使用
 
@@ -502,7 +541,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 
 1. 回执是否进 git（建议默认 ignore，可选提交摘要版）；
 2. 账本轮转与保留期；
-3. 记忆检索后端默认值（内置 vs 自动检测 qmd）；
+3. 记忆检索后端：已按内置纯文本落地（§12.2）；qmd 作为可选后端仍待评估；
 4. `assignee: auto` 的排序权重（空闲度 / 历史成功率 / 最近使用）；
 5. 人不在场时，`blocked` 的默认超时与升级路径（手机推送？）；
 6. 主 Agent 的工具隔离在 DSH 侧的具体配置方式；

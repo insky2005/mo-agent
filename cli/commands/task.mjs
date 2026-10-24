@@ -343,6 +343,10 @@ export function runDispatch(args, { home, root, taskId }) {
         "  验收   " + (result.verify && result.verify.results.length ? verifyLabel(result.verify) : result.verified),
       ];
 
+      if (result.knowledge && result.knowledge.count) {
+        lines.push("  知识   " + result.knowledge.count + " 条（" + result.knowledge.ids.join(", ") + "）");
+      }
+      if (result.knowledge && result.knowledge.ok === false) lines.push("  知识   未注入（知识库不可读）");
       if (result.receipt && result.receipt.summary) lines.push("  结论   " + result.receipt.summary);
       if (result.reason && result.reason !== "receipt") lines.push("  原因   " + result.reason);
       if (result.exitCode !== undefined && result.exitCode !== null) lines.push("  退出码 " + result.exitCode);
