@@ -19,6 +19,10 @@ command -v bun >/dev/null 2>&1 || {
   exit 1
 }
 
+# 单文件二进制里内联的是 cli/lib/skill-content.mjs，它和 SKILL.md 都是生成物。
+# 这里只校验、不生成：构建不应该悄悄改工作区。
+node "$ROOT/scripts/gen-skill.mjs" --check
+
 PLATFORM="${TARGET#bun-}"
 [ -n "$PLATFORM" ] || PLATFORM="$(node -p 'process.platform + "-" + process.arch')"
 
