@@ -68,7 +68,7 @@ export function attachProject(root, options = {}) {
     writeJsonAtomic(projectFile(absolute), meta);
     writeAtomic(
       path.join(projectDir(absolute), ".gitignore"),
-      "# 回执默认不入库（含日志，按需 git add -f）\nreceipts/\n",
+      "# 回执与执行日志默认不入库（按需 git add -f）\nreceipts/\nlogs/\n",
     );
     writeAtomic(
       path.join(projectDir(absolute), "README.md"),
@@ -79,7 +79,8 @@ export function attachProject(root, options = {}) {
         "",
         "- project.json：项目身份证，**要提交**；",
         "- tasks/：任务卡，**要提交**；",
-        "- receipts/：执行回执，默认不入库。",
+        "- receipts/：执行回执，默认不入库；",
+        "- logs/：每次派单的完整日志，默认不入库。",
         "",
       ].join("\n"),
     );

@@ -6,6 +6,7 @@ import { ensureDir } from "./fsx.mjs";
 import { receiptDir } from "./paths.mjs";
 import { appendEvent, loadCard } from "./store.mjs";
 import { ingest, transition } from "./ingest.mjs";
+import { writeRunLog } from "./logs.mjs";
 
 export function resolveReceiptFile(root, meta) {
   if (meta.receipt) {
@@ -59,6 +60,7 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
   };
 
   const timeoutMs = timeout !== undefined ? parseDuration(timeout, 45 * 60 * 1000) : parseDuration(meta.timeout, 45 * 60 * 1000);
+  const startedAt = Date.now();
 
   const result = await runExecutor({
     command: String(command),
@@ -68,6 +70,17 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
     timeoutMs,
   });
 
+  // 不管成败都留全量日志，调试/优化时有据可查
+  const logFile = writeRunLog({
+    root,
+    taskId,
+    command: String(command),
+    cwd: root,
+    timeoutMs,
+    startedAt,
+    result,
+  });
+
   const summary = ingest({ home, root, card: loadCard(root, taskId), result });
-  return { ...summary, executor: String(command) };
+  return { ...summary, executor: String(command), logFile };
 }

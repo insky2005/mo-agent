@@ -33,6 +33,7 @@ const HELP = [
   "  mo task dispatch <id> [--worker 执行者] [--exec 命令]   派发并等待回执",
   "  mo task verify <id>             对已 done 的卡重跑验收",
   "  mo task status <id>             查看状态与最近事件",
+  "  mo task logs <id> [--tail N]    看执行者完整日志",
   "  mo task list                    列出本项目任务",
   "  mo task cancel <id>             取消任务",
   "",

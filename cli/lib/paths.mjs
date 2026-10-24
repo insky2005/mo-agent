@@ -29,6 +29,14 @@ export function receiptPath(root, taskId) {
   return path.join(receiptDir(root), taskId + ".json");
 }
 
+export function logDir(root) {
+  return path.join(projectDir(root), "logs");
+}
+
+export function logPath(root, taskId) {
+  return path.join(logDir(root), taskId + ".log");
+}
+
 export function ledgerDir(home) {
   return path.join(home, "ledger");
 }

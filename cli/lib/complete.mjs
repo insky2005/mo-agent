@@ -10,7 +10,7 @@ import { listAgents } from "./executors.mjs";
 const SPEC = {
   project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
   task: {
-    subs: ["create", "confirm", "cancel", "status", "list", "dispatch", "verify"],
+    subs: ["create", "confirm", "cancel", "status", "list", "dispatch", "verify", "logs"],
     flags: [
       "--title", "--deliverable", "--verify", "--boundary", "--constraint",
       "--background", "--assignee", "--worker", "--exec", "--timeout", "--json",
@@ -29,7 +29,7 @@ const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--worker", "--type", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
+  "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
 ]);
 
 function startsWith(prefix) {

@@ -9,6 +9,7 @@ import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/s
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
+import { readRunLog } from "../lib/logs.mjs";
 import { resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 
@@ -65,8 +66,9 @@ export function taskCommand(ctx, args) {
   if (sub === "list") return listTask(ctx, args, home);
   if (sub === "dispatch") return dispatchCommand(ctx, args, home);
   if (sub === "verify") return verifyTask(ctx, args, home);
+  if (sub === "logs") return logsTask(ctx, args);
 
-  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / cancel / status / list / dispatch / verify）");
+  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / cancel / status / list / dispatch / verify / logs）");
 }
 
 function createTask(ctx, args, home) {
@@ -208,6 +210,23 @@ function listTask(ctx, args) {
  * 对已 done 的卡重跑验收：只更新 verified 与账本，不改状态。
  * 用于执行者说 done、但人想复核；失败时建议取消或重派。
  */
+function logsTask(ctx, args) {
+  const { resolved, taskId } = loadTarget(ctx, args);
+  const found = readRunLog(resolved.root, taskId);
+  if (!found) {
+    throw new MoError("E_NOT_FOUND", "还没有这个任务的执行日志：" + taskId, {
+      hint: "日志在派单时生成，先 mo task dispatch " + taskId,
+    });
+  }
+
+  const tail = Number(one(args.options, "tail", "0"));
+  const text = Number.isFinite(tail) && tail > 0 ? found.text.split("\n").slice(-tail).join("\n") : found.text;
+
+  emit(args.options, { ok: true, taskId, path: path.relative(resolved.root, found.file), log: text }, () =>
+    "── " + path.relative(resolved.root, found.file) + " ──\n" + text.replace(/\n$/, ""));
+  return 0;
+}
+
 function verifyTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   if (card.meta.status !== "done") {
@@ -328,6 +347,7 @@ export function runDispatch(args, { home, root, taskId }) {
       if (result.reason && result.reason !== "receipt") lines.push("  原因   " + result.reason);
       if (result.exitCode !== undefined && result.exitCode !== null) lines.push("  退出码 " + result.exitCode);
       if (result.errors) lines.push("  问题   " + result.errors.join("；"));
+      if (result.logFile) lines.push("  日志   " + path.relative(root, result.logFile));
       if (result.receiptFile) lines.push("  回执   " + path.relative(root, result.receiptFile));
 
       const failedItems = ((result.verify && result.verify.results) || []).filter((entry) => !entry.ok);

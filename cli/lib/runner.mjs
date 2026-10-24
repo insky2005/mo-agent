@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 const TAIL_LIMIT = 4000;
+const OUTPUT_LIMIT = 2 * 1024 * 1024;
 
 /**
  * 起一个执行者进程：shell 执行，prompt 从 stdin 进。
@@ -14,10 +15,23 @@ export function runExecutor({ command, cwd, env, input, timeoutMs }) {
     let timer = null;
     let killTimer = null;
     let tail = "";
+    let full = "";
+    let outputTruncated = false;
+    const startedAt = Date.now();
 
     const collect = (chunk) => {
-      tail += chunk.toString();
+      const text = chunk.toString();
+      tail += text;
       if (tail.length > TAIL_LIMIT) tail = tail.slice(-TAIL_LIMIT);
+
+      if (outputTruncated) return;
+      const room = OUTPUT_LIMIT - full.length;
+      if (text.length > room) {
+        full += text.slice(0, room);
+        outputTruncated = true;
+      } else {
+        full += text;
+      }
     };
 
     let child;
@@ -32,7 +46,7 @@ export function runExecutor({ command, cwd, env, input, timeoutMs }) {
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (error) {
-      resolve({ spawnError: error, code: null, signal: null, timedOut: false, outputTail: "" });
+      resolve({ spawnError: error, code: null, signal: null, timedOut: false, outputTail: "", output: "", outputTruncated: false, durationMs: 0 });
       return;
     }
 
@@ -41,7 +55,14 @@ export function runExecutor({ command, cwd, env, input, timeoutMs }) {
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
-      resolve({ ...result, timedOut, outputTail: tail.trim() });
+      resolve({
+        ...result,
+        timedOut,
+        outputTail: tail.trim(),
+        output: full,
+        outputTruncated,
+        durationMs: Date.now() - startedAt,
+      });
     };
 
     if (timeoutMs > 0) {

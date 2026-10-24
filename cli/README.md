@@ -421,6 +421,7 @@ mo task create --title "给面板加筛选" \
 mo task confirm <id>
 mo task dispatch <id> [--exec 命令] [--timeout 45m]
 mo task verify <id>                # 对已 done 的卡重跑验收，只更新 verified 与账本
+mo task logs <id> [--tail 50]      # 看执行者完整日志（命令、输出、退出码、耗时）
 mo task status <id>
 mo task list
 mo task cancel <id>
@@ -499,6 +500,7 @@ mo receipt apply t_01HXYZ     # 应用它：跑验收、更新状态
 | 项目身份 | `<repo>/.mo-agent/project.json`（要提交） |
 | 任务卡 | `<repo>/.mo-agent/tasks/<taskId>.md`（要提交） |
 | 回执 | `<repo>/.mo-agent/receipts/<taskId>.json`（默认 ignore） |
+| 执行日志 | `<repo>/.mo-agent/logs/<taskId>.log`（默认 ignore） |
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 

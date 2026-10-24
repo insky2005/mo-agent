@@ -314,3 +314,20 @@ test("账本记录发起者：cli 动作记 agent，确认记 human", () => {
   assert.equal(actors["task.created"], "agent");
   assert.equal(actors["task.confirmed"], "human");
 });
+test("派单会留下完整日志，mo task logs 能读到执行者输出", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, 'console.log("exec-said-hi");\n' + DONE_EXECUTOR);
+  run(ws, ["project", "init", ".", "--no-agent-file"]);
+
+  const created = runJson(ws, ["task", "create", "--title", "log", "--deliverable", "y", "--exec", "node executor.mjs"]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+
+  const logs = run(ws, ["task", "logs", taskId]);
+  assert.equal(logs.status, 0, logs.stderr);
+  assert.match(logs.stdout, /exec-said-hi/);
+  assert.match(logs.stdout, /command:  node executor\.mjs/);
+  assert.match(logs.stdout, /exit:     0/);
+});
