@@ -3,6 +3,8 @@ import { MoError } from "../../core/errors.mjs";
 import { RECEIPT_TO_STATE, assertTransition } from "../../core/tasks/model.mjs";
 import { assertReceipt, validateReceipt } from "../../core/tasks/receipt.mjs";
 import { loadCard, readReceipt, saveCard, appendEvent } from "./store.mjs";
+import { hasVerifyFailure, runVerify, verifyPayload } from "./verify.mjs";
+
 
 const STATE_EVENT = {
   confirmed: "task.confirmed",
@@ -78,24 +80,54 @@ export function ingest({ home, root, card, result }) {
 
   appendEvent(home, { type: "receipt.received", project: meta.project, taskId: meta.id, actor: "executor", payload: { status: checked.receipt.status } });
 
-  const target = RECEIPT_TO_STATE[checked.receipt.status];
-  const next = transition({
-    home, root, card, to: target,
-    payload: {
-      reason: "receipt",
-      status: checked.receipt.status,
-      summary: checked.receipt.summary,
-      deviations: checked.receipt.deviations,
-      pitfalls: checked.receipt.pitfalls,
-    },
-  });
-  next.meta.verified = "unverified";
+  // 回执说 done 只是"执行者认为做完了"；core 亲自跑验收后才决定终态。
+  // 验收必须在 transition 之前算完：状态机没有 done → blocked。
+  let target = RECEIPT_TO_STATE[checked.receipt.status];
+  let reason = "receipt";
+  let verified = "unverified";
+  let verify = null;
+
+  if (checked.receipt.status === "done") {
+    verify = runVerify({ card, root });
+    if (verify.results.length) {
+      if (verify.ok) {
+        verified = "verified";
+      } else if (hasVerifyFailure(verify.results)) {
+        target = "blocked";
+        reason = "verify_failed";
+        verified = "verify_failed";
+      } else {
+        target = "blocked";
+        reason = "needs_human";
+      }
+    }
+  }
+
+  const payload = {
+    reason,
+    status: checked.receipt.status,
+    summary: checked.receipt.summary,
+    deviations: checked.receipt.deviations,
+    pitfalls: checked.receipt.pitfalls,
+  };
+  if (verify && verify.results.length) payload.verify = verifyPayload(verify);
+
+  const next = transition({ home, root, card, to: target, payload });
+  next.meta.verified = verified;
   saveCard(root, next.meta, next.body);
+
+  if (verify && verify.results.length && verified === "verified") {
+    appendEvent(home, { type: "task.verified", project: meta.project, taskId: meta.id, payload: verifyPayload(verify) });
+  } else if (verify && verify.results.length && verified === "verify_failed") {
+    appendEvent(home, { type: "task.verify_failed", project: meta.project, taskId: meta.id, payload: verifyPayload(verify) });
+  }
+
   return summary(next, {
     status: target,
-    reason: "receipt",
+    reason,
     receipt: checked.receipt,
     receiptFile,
+    verify,
   });
 }
 

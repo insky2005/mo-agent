@@ -10,7 +10,7 @@ import { listAgents } from "./executors.mjs";
 const SPEC = {
   project: { subs: ["init", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file"] },
   task: {
-    subs: ["create", "confirm", "cancel", "status", "list", "dispatch"],
+    subs: ["create", "confirm", "cancel", "status", "list", "dispatch", "verify"],
     flags: [
       "--title", "--deliverable", "--verify", "--boundary", "--constraint",
       "--background", "--assignee", "--worker", "--exec", "--timeout", "--json",
@@ -109,7 +109,7 @@ export function complete(ctx = {}) {
   const positionals = tokens.slice(2);
   if (positionals.length > 0) return [];
 
-  if (group === "task" && ["confirm", "cancel", "status", "dispatch"].includes(sub)) {
+  if (group === "task" && ["confirm", "cancel", "status", "dispatch", "verify"].includes(sub)) {
     return taskItems(cwd).filter(startsWith(current));
   }
   if (group === "receipt" && sub === "submit") return taskItems(cwd).filter(startsWith(current));

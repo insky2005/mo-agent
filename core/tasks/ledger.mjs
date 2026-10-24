@@ -11,6 +11,8 @@ export const EVENT_TYPES = [
   "task.blocked",
   "task.canceled",
   "task.expired",
+  "task.verified",
+  "task.verify_failed",
   "receipt.received",
   "receipt.amended",
   "memory.proposed",

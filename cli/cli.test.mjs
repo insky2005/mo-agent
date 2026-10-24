@@ -93,7 +93,7 @@ test("建卡 → 确认 → 派单 → done，账本可查", () => {
   const status = runJson(ws, ["task", "status", taskId]);
   assert.equal(status.status, 0, status.stderr);
   assert.equal(status.parsed.status, "done");
-  assert.equal(status.parsed.verified, "unverified");
+  assert.equal(status.parsed.verified, "verified");
 
   const receiptFile = path.join(ws.project, ".mo-agent", "receipts", taskId + ".json");
   assert.equal(fs.existsSync(receiptFile), true);
@@ -163,4 +163,110 @@ test("回执不合法 → blocked(bad_receipt)", () => {
   const dispatched = runJson(ws, ["task", "dispatch", created.parsed.taskId]);
   assert.equal(dispatched.parsed.status, "blocked");
   assert.equal(dispatched.parsed.reason, "bad_receipt");
+});
+test("验收 run:false → blocked + verify_failed，账本留下 task.verify_failed", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, DONE_EXECUTOR);
+  run(ws, ["project", "add", "."]);
+
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "故意失败",
+    "--deliverable", "x",
+    "--verify", "run:false",
+    "--exec", "node executor.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.status, 1);
+  assert.equal(dispatched.parsed.status, "blocked");
+  assert.equal(dispatched.parsed.reason, "verify_failed");
+  assert.equal(dispatched.parsed.verified, "verify_failed");
+
+  const status = runJson(ws, ["task", "status", taskId]);
+  assert.equal(status.parsed.status, "blocked");
+  assert.equal(status.parsed.verified, "verify_failed");
+
+  const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
+  const types = ledger.parsed.events.map((event) => event.type);
+  assert.ok(types.includes("task.verify_failed"), "账本缺少 task.verify_failed，实际：" + types.join(","));
+  const failed = ledger.parsed.events.find((event) => event.type === "task.verify_failed");
+  assert.equal(failed.payload.ok, false);
+  assert.equal(failed.payload.results[0].item, "run: false");
+});
+
+test("验收 run:true → done + verified，账本留下 task.verified", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, DONE_EXECUTOR);
+  run(ws, ["project", "add", "."]);
+
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "验收通过",
+    "--deliverable", "x",
+    "--verify", "run:true",
+    "--exec", "node executor.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+  assert.equal(dispatched.parsed.status, "done");
+  assert.equal(dispatched.parsed.verified, "verified");
+
+  const status = runJson(ws, ["task", "status", taskId]);
+  assert.equal(status.parsed.status, "done");
+  assert.equal(status.parsed.verified, "verified");
+
+  const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
+  const types = ledger.parsed.events.map((event) => event.type);
+  assert.ok(types.includes("task.verified"), "账本缺少 task.verified，实际：" + types.join(","));
+});
+
+test("mo task verify 对已 done 的卡重跑验收，失败只改 verified 不改状态", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, DONE_EXECUTOR);
+  run(ws, ["project", "add", "."]);
+
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "手动重跑",
+    "--deliverable", "x",
+    "--verify", "run:true",
+    "--exec", "node executor.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.parsed.verified, "verified");
+
+  const passed = runJson(ws, ["task", "verify", taskId]);
+  assert.equal(passed.status, 0, passed.stderr);
+  assert.equal(passed.parsed.status, "done");
+  assert.equal(passed.parsed.verified, "verified");
+  assert.equal(passed.parsed.verify.ok, true);
+  const passedText = run(ws, ["task", "verify", taskId]);
+  assert.equal(passedText.status, 0, passedText.stderr);
+  assert.match(passedText.stdout, /验收: verified 1\/1/);
+  assert.match(passedText.stdout, /run: true/);
+
+  // 把卡上的验收改成必然失败，再重跑：状态保持 done，只把 verified 改成 verify_failed
+  const cardText = fs.readFileSync(created.parsed.path, "utf8");
+  fs.writeFileSync(created.parsed.path, cardText.replace("run: true", "run: false"));
+
+  const failed = runJson(ws, ["task", "verify", taskId]);
+  assert.equal(failed.status, 1);
+  assert.equal(failed.parsed.status, "done");
+  assert.equal(failed.parsed.verified, "verify_failed");
+  const failedText = run(ws, ["task", "verify", taskId]);
+  assert.equal(failedText.status, 1);
+  assert.match(failedText.stdout, /验收失败 1\/1/);
+  assert.match(failedText.stdout, /建议取消或重派/);
+
+  const status = runJson(ws, ["task", "status", taskId]);
+  assert.equal(status.parsed.status, "done");
+  assert.equal(status.parsed.verified, "verify_failed");
 });

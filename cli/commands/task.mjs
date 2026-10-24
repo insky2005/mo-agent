@@ -9,6 +9,7 @@ import { moHome, cardPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
+import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
 import { resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 
@@ -64,8 +65,9 @@ export function taskCommand(ctx, args) {
   if (sub === "status") return statusTask(ctx, args, home);
   if (sub === "list") return listTask(ctx, args, home);
   if (sub === "dispatch") return dispatchCommand(ctx, args, home);
+  if (sub === "verify") return verifyTask(ctx, args, home);
 
-  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / cancel / status / list / dispatch）");
+  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / cancel / status / list / dispatch / verify）");
 }
 
 function createTask(ctx, args, home) {
@@ -200,6 +202,75 @@ function listTask(ctx, args) {
   return 0;
 }
 
+
+/**
+ * 对已 done 的卡重跑验收：只更新 verified 与账本，不改状态。
+ * 用于执行者说 done、但人想复核；失败时建议取消或重派。
+ */
+function verifyTask(ctx, args, home) {
+  const { resolved, taskId, card } = loadTarget(ctx, args);
+  if (card.meta.status !== "done") {
+    throw new MoError("E_NOT_DONE", "只有 done 的卡能重跑验收，当前状态是 " + card.meta.status, {
+      hint: "派单时会自动验收；卡在 blocked 时先 mo task dispatch 重试",
+    });
+  }
+
+  const outcome = runVerify({ card, root: resolved.root });
+  if (!outcome.results.length) {
+    throw new MoError("E_NO_VERIFY", "这张卡没有验收标准，无法重跑", {
+      hint: "建卡时用 --verify \"run:<命令>\" / \"check:<条件>\" / \"human:<说明>\" 补上",
+    });
+  }
+
+  let verified = "unverified";
+  let eventType = null;
+  if (outcome.ok) {
+    verified = "verified";
+    eventType = "task.verified";
+  } else if (hasVerifyFailure(outcome.results)) {
+    verified = "verify_failed";
+    eventType = "task.verify_failed";
+  }
+
+  card.meta.verified = verified;
+  card.meta.updated = new Date().toISOString();
+  saveCard(resolved.root, card.meta, card.body);
+  if (eventType) {
+    appendEvent(home, { type: eventType, project: card.meta.project, taskId, payload: verifyPayload(outcome) });
+  }
+
+  const failed = outcome.results.filter((result) => !result.ok && result.kind !== "human" && result.kind !== "unknown");
+  emit(
+    args.options,
+    { ok: outcome.ok, taskId, status: card.meta.status, verified, verify: outcome },
+    () => {
+      const lines = [
+        taskId + "  [" + card.meta.status + "]  验收重跑",
+        verifyLabel(outcome),
+        "",
+        ...outcome.results.map((result) => "  " + (result.ok ? "✓" : result.kind === "human" || result.kind === "unknown" ? "?" : "✗") + " " + result.item + (result.detail ? "  — " + result.detail : "")),
+      ];
+      if (failed.length) {
+        lines.push("", "建议取消或重派：mo task cancel " + taskId + " / mo task dispatch " + taskId);
+      } else if (!outcome.ok) {
+        lines.push("", "需要人工确认后才能算完成。");
+      }
+      return lines.join("\n");
+    },
+  );
+  return outcome.ok ? 0 : 1;
+}
+
+function verifyLabel(outcome) {
+  const total = outcome.results.length;
+  const passed = outcome.results.filter((result) => result.ok).length;
+  if (!total) return "验收: unverified";
+  if (outcome.ok) return "验收: verified " + passed + "/" + total;
+  const failed = outcome.results.filter((result) => !result.ok && result.kind !== "human" && result.kind !== "unknown").length;
+  if (failed) return "验收失败 " + failed + "/" + total;
+  return "验收: 需要人工确认 " + (total - passed) + "/" + total;
+}
+
 function dispatchCommand(ctx, args, home) {
   const resolved = resolveContext(ctx, args);
   const taskId = args.positional[1] || one(args.options, "task");
@@ -225,8 +296,14 @@ export function runDispatch(args, { home, root, taskId }) {
       const lines = [
         taskId + " → " + result.status,
         "执行者: " + (result.executor || "-"),
-        "验收: " + result.verified,
+        result.verify && result.verify.results.length ? verifyLabel(result.verify) : "验收: " + result.verified,
       ];
+      if (result.verify && !result.verify.ok && result.verify.results.length) {
+        for (const item of result.verify.results.filter((entry) => !entry.ok)) {
+          const mark = item.kind === "human" || item.kind === "unknown" ? "  ? " : "  ✗ ";
+          lines.push(mark + item.item + (item.detail ? "  — " + item.detail : ""));
+        }
+      }
       if (result.receipt && result.receipt.summary) lines.push("结论: " + result.receipt.summary);
       if (result.reason && result.reason !== "receipt") lines.push("原因: " + result.reason);
       if (result.exitCode !== undefined && result.exitCode !== null) lines.push("执行者退出码: " + result.exitCode);

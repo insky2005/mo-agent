@@ -183,14 +183,16 @@ canceled            canceled                failed                  └─> canc
 
 ### 6.8 校验（B8）
 
+`dispatch` 收到合法回执且 `status=done` 时，先由 core 复跑卡上的 `verify`，再决定终态。验收发生在写入终态**之前**，状态机没有 `done → blocked`。
+
 | 编号 | 条件 | 结果 | 错误码 |
 |---|---|---|---|
-| B8.1 | 全部 `verify` 通过 | `done` + `verified` | — |
-| B8.2 | 有失败且重试次数未用尽 | `blocked(verify_failed)`，问人是否重试 | `E_VERIFY_FAILED` |
-| B8.3 | 有失败且重试用尽 | `failed` | `E_VERIFY_FAILED` |
-| B8.4 | 只有 `human` 项 | `blocked(needs_human)`，推给人确认 | — |
-| B8.5 | 产物路径解析不到 | 标 `stale_artifact`，不算失败 | `W_STALE_ARTIFACT` |
-| B8.6 | 命令执行超时 | `blocked(verify_timeout)` | `E_VERIFY_TIMEOUT` |
+| B8.1 | 全部 `verify` 项通过 | `done` + `verified: verified`，账本记 `task.verified` | — |
+| B8.2 | 有支持项失败（含 `run` 超时、`check` 不成立） | `blocked(verify_failed)` + `verified: verify_failed`，账本记 `task.verify_failed`，问人重试/取消 | `E_VERIFY_FAILED` |
+| B8.3 | 只有 `human` 项，或 `check` 无法判定 | `blocked(needs_human)`，`verified` 保持 `unverified` | — |
+| B8.4 | 卡上 `verify` 为空 | 保持 `done` + `verified: unverified` | `W_NO_VERIFY` |
+| B8.5 | `run` 项超时（默认 60s，`MO_VERIFY_TIMEOUT_MS` 可覆盖） | 按失败处理，`blocked(verify_failed)` | `E_VERIFY_FAILED` |
+| B8.6 | 已 `done` 的卡人工重跑 `mo task verify <id>` | 只更新 `verified` 与账本，不改状态；失败时提示取消或重派 | — |
 
 ### 6.9 汇报（B9）
 
@@ -364,7 +366,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 |---|---|---|---|
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + `mo run` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
 | **P1** | 主 Agent 接入：skill + CLI（MCP / inbox 唤醒未做） | 主 Agent 全程不离开对话框完成一轮 | 🟡 CLI 形态已落地 |
-| **P2** | `verify` 执行器 + watchdog + `blocked` 升级 | 失败/超时能正确转给人 |
+| **P2** | `verify` 执行器 + `blocked` 升级（watchdog 未做） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify`） |
 | **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 |
 | **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 |
 
@@ -376,7 +378,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 - 账本：`~/.mo-agent/ledger/YYYY-MM.jsonl`，按 taskId 可查；
 - 测试：`core/tasks/*.test.mjs`（17 项）+ `cli/cli.test.mjs`（5 项，含端到端建卡→派单→done）。
 
-**已知偏差**：`verified` 一律为 `unverified`——`verify` 自动执行属于 P2，P0 只校验回执里的自检结果格式。
+**已知偏差**：P0 期间 `verified` 一律为 `unverified`；P2 已补上 `verify` 自动执行（`cli/lib/verify.mjs`），收到 `status=done` 的回执后由 core 决定 `done` / `blocked`。
 
 ## 13. 安装与首次使用
 

@@ -394,7 +394,7 @@ echo 'eval "$(mo completion bash)"' >> ~/.bashrc
 重开终端后：
 
 ```text
-mo task <TAB>              create confirm cancel status list dispatch
+mo task <TAB>              create confirm cancel status list dispatch verify
 mo task confirm <TAB>      t_01M5…:draft 任务面板加筛选
 mo task create --ti<TAB>   --title --timeout
 mo ledger query --project <TAB>   demo  other-project
@@ -420,6 +420,7 @@ mo task create --title "给面板加筛选" \
   --timeout 45m
 mo task confirm <id>
 mo task dispatch <id> [--exec 命令] [--timeout 45m]
+mo task verify <id>                # 对已 done 的卡重跑验收，只更新 verified 与账本
 mo task status <id>
 mo task list
 mo task cancel <id>
@@ -503,8 +504,8 @@ JSON
 
 ## P0 边界
 
-已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI。
+已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI、`verify` 自动执行（P2）。
 
-未实现（按 spec 属于 P1–P3）：MCP 端点、守护进程、`verify` 自动执行、watchdog/重试、记忆检索与注入、面板 UI。
+未实现（按 spec 属于 P1–P3）：MCP 端点、守护进程、watchdog/重试、记忆检索与注入、面板 UI。
 
-因此：`verified` 目前一律是 `unverified`——回执里的自检**没有被 core 复跑**，这是 P2 的事。
+派单收到 `status=done` 的回执后，core 会复跑卡上的 `verify`：全部通过 → `done` + `verified`；有失败（含超时）→ `blocked` + `verified: verify_failed`；只有 `human` 项或无法判定的 `check` → `blocked(needs_human)`；卡上没有 `verify` 则保持 `done` + `unverified`。
