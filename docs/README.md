@@ -9,7 +9,7 @@ Mo Agent 的全部文档。先看「怎么读」，再按需跳转。
 | 想了解这是什么产品 | [README](../README.md) → [architecture.md](architecture.md) → [adr/](adr/) |
 | 要接入一个新 Agent | [architecture.md](architecture.md) §6 → [adapters/README.md](../adapters/README.md) → [reference/capabilities.md](reference/capabilities.md) |
 | 要改事件 / 状态 / 通知 | [spec/event-contract.md](spec/event-contract.md) → [adr/adr-0003](adr/adr-0003-event-contract.md) |
-| 要用或排障 | [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
+| 要用或排障 | [guides/mo-cli.md](guides/mo-cli.md) → [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
 | 在做 workbench（个人工作台） | [spec/workbench-flow.md](spec/workbench-flow.md) |
 
 ## 目录
@@ -48,6 +48,7 @@ docs/
 
 | 文档 | 内容 |
 |---|---|
+| [mo-cli.md](guides/mo-cli.md) | **mo CLI 使用说明**：概念、上手、命令速查、验收、日志排障 |
 | [agent-hooks.md](guides/agent-hooks.md) | 一键配置各家 Agent 的 hooks：写什么、怎么回退、安全边界 |
 | [voice.md](guides/voice.md) | 语音批准与口述：用法、口令、排障 |
 

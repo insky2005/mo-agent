@@ -4,6 +4,8 @@
 
 设计见 [docs/spec/workbench-flow.md](../docs/spec/workbench-flow.md)，架构见 [docs/architecture.md](../docs/architecture.md)。
 
+> 完整使用说明：[docs/guides/mo-cli.md](../docs/guides/mo-cli.md)。本文档偏安装与实现细节。
+
 ## 安装
 
 > **平台**：当前只支持 macOS 与 Linux（POSIX shell）。Windows 的差距与改造计划见
@@ -482,6 +484,21 @@ JSON
 
 mo receipt apply t_01HXYZ     # 应用它：跑验收、更新状态
 ```
+
+## 调试与日志
+
+执行者的输出会边跑边打到终端（stderr），同时每次派单都会落一份完整日志：
+
+```bash
+mo task logs <id>              # 命令、cwd、超时、退出码、耗时、完整输出
+mo task logs <id> --tail 30
+```
+
+日志头部有定位问题需要的上下文（`command` / `cwd` / `timeout` / `exit` / `duration`）。
+执行者在非交互模式下往往只打印最终答复——想看它的中间工具调用，需换成执行者自己的详细模式，
+例如 `--exec 'claude -p "$(cat)" --output-format stream-json --verbose'`。
+
+完整说明见 [docs/guides/mo-cli.md](../docs/guides/mo-cli.md)。
 
 ## 退出码
 
