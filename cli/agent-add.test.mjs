@@ -49,25 +49,22 @@ test("mo agent 默认给「怎么接」的概览，不是一坨契约", () => {
   }
 });
 
-test("--prompt / --skill 才打印契约文本", () => {
+test("一条路一个命令：describe 不输出可粘贴内容", () => {
   const ws = workspace();
-  const prompt = run(ws, ["agent", "describe", "--prompt"]);
+  for (const flag of ["--prompt", "--skill", "--format"]) {
+    const denied = run(ws, ["agent", "describe", flag]);
+    assert.equal(denied.status, 2, flag);
+    assert.match(denied.stderr, /E_USAGE/, flag);
+    assert.match(denied.stderr, /mo agent add --prompt/, flag);
+  }
+});
+
+test("提示词只从 add --prompt 出，且带 stderr 提示", () => {
+  const ws = workspace();
+  const prompt = run(ws, ["agent", "add", "--prompt"]);
   assert.equal(prompt.status, 0, prompt.stderr);
   assert.match(prompt.stdout, /^# mo 任务派发契约/);
   assert.match(prompt.stderr, /可粘贴/);
-
-  const file = fileURLToPath(new URL("../skills/mo/SKILL.md", import.meta.url));
-  const skill = run(ws, ["agent", "describe", "--skill"]);
-  assert.equal(skill.stdout, fs.readFileSync(file, "utf8"));
-});
-
-test("--format 已取消，直接报错指路", () => {
-  const ws = workspace();
-  const denied = run(ws, ["agent", "describe", "--format", "prompt"]);
-  assert.equal(denied.status, 2);
-  assert.match(denied.stderr, /E_USAGE/);
-  assert.match(denied.stderr, /--prompt/);
-  assert.match(denied.stderr, /mo project/);
 });
 
 test("describe --json 给出工具、禁止项与规则", () => {
@@ -85,7 +82,7 @@ test("describe --json 给出工具、禁止项与规则", () => {
 
 test("契约文本不写死具体 Agent 名字", () => {
   const ws = workspace();
-  const result = run(ws, ["agent", "describe", "--prompt"]);
+  const result = run(ws, ["agent", "add", "--prompt"]);
   assert.match(result.stdout, /mo task approve/);
   assert.doesNotMatch(result.stdout, /claude|codex|qoder|workbuddy/i);
 });

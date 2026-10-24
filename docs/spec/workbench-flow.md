@@ -479,7 +479,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 | 格式 | 入口 | 落在哪 |
 |---|---|---|
-| `skill` | `mo agent describe --skill` / `mo skill install` | 技能目录（与 `skills/mo/SKILL.md` 逐字节一致） |
+| `skill` | `mo skill install` | 技能目录（与 `skills/mo/SKILL.md` 逐字节一致） |
 | `prompt` | `mo agent describe`（默认）/ `mo agent add --prompt` | 粘进 Agent 的系统提示 |
 | `agent-block` | `mo project init` / `mo project agent --mode inline` | `<repo>/AGENTS.md` |
 | `mo-doc` | `mo project init --mode ref` | `.mo-agent/MO.md` |

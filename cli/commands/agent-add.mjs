@@ -57,7 +57,6 @@ function overview() {
     "       mo project init       # 或者只给这个仓库写 AGENTS.md",
     "",
     "机器可读的契约：mo agent describe --json",
-    "完整的契约文本：mo agent describe --prompt",
   ].join("\n");
 }
 
@@ -74,22 +73,10 @@ function describeCommand(args) {
     return 0;
   }
 
-  if (has(args.options, "prompt")) {
-    process.stderr.write("[mo] 已输出可粘贴的契约文本\n");
-    process.stdout.write(render("prompt"));
-    return 0;
-  }
-
-  if (has(args.options, "skill")) {
-    process.stderr.write("[mo] 已输出技能文件内容（与 skills/mo/SKILL.md 一致）\n");
-    process.stdout.write(render("skill"));
-    return 0;
-  }
-
-  // --format 已经取消：不保留静默别名，免得又变成"猜命令"
-  if (has(args.options, "format")) {
-    throw new MoError("E_USAGE", "--format 已取消：用 --prompt / --skill", {
-      hint: "要项目内的短块（AGENTS.md / MO.md）用 mo project init 或 mo project agent --mode inline",
+  // 一条路只留一个命令：要提示词去 add --prompt，要项目块去 project init
+  if (has(args.options, "prompt") || has(args.options, "skill") || has(args.options, "format")) {
+    throw new MoError("E_USAGE", "describe 只做「说明」，不输出可粘贴内容", {
+      hint: "要提示词：mo agent add --prompt；要项目内 AGENTS.md / MO.md：mo project init",
     });
   }
 

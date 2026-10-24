@@ -337,7 +337,7 @@ npx skills add insky2005/mo-agent
 mo agent add --mcp ./mcp.json    # 合并进任意 mcpServers 配置，幂等 + 备份
 mo agent add --prompt            # 只能读文字的 Agent，直接粘这段
 mo agent describe --json          # 让 Agent 自己读能力清单
-mo agent describe --skill         # 技能文件内容（与 SKILL.md 一致）
+mo skill install                  # 装技能（技能内容由 contract 生成）
 mo agent describe --json          # 机器可读的能力清单
 
 项目里的 `AGENTS.md` / `.mo-agent/MO.md` 不从这里出——那是 `mo project init` 的产物；`describe` 只给"能直接贴给 Agent"的两种。
