@@ -240,7 +240,6 @@ fi
 
 echo
 "$INSTALLED" --version | sed 's/^/✓ mo /'
-echo
 
 IN_PATH=0
 case ":$PATH:" in
@@ -256,16 +255,20 @@ if [ "$NO_SKILL" = "0" ] && [ -z "${MO_SKIP_SKILL:-}" ]; then
   fi
 fi
 
-if [ "$IN_PATH" = "0" ]; then
-  printf 'PATH 未包含，先执行：\n  export PATH="%s:$PATH"\n' "$(dirname "$INSTALLED")"
+if [ "$IN_PATH" = "0" ] || [ -n "$SHELL_NAME" ]; then
+  echo
+  echo "当前终端（新终端会自动生效）："
+  if [ "$IN_PATH" = "0" ]; then
+    printf '  export PATH="%s:$PATH"\n' "$(dirname "$INSTALLED")"
+  fi
+  if [ -n "$SHELL_NAME" ]; then
+    printf '  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
+  fi
 fi
 
-if [ -n "$SHELL_NAME" ]; then
-  printf '当前终端启用补全（新终端会自动生效）：\n  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
-fi
-
+echo
 if [ "$NEED_SKILL" = "1" ]; then
-  echo "下一步：mo skill install && mo project init ."
+  echo "下一步：mo skill install && mo project init"
 else
-  echo "下一步：mo project init ."
+  echo "下一步：在项目目录执行 mo project init"
 fi

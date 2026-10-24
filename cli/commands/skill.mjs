@@ -187,7 +187,7 @@ export async function skillCommand(ctx, args) {
     }
     emit(args.options, { ok: true, written, moOnPath: Boolean(which("mo")) }, () => {
       const lines = written.map((item) => "✓ " + item.path);
-      lines.push("新开会话后生效。");
+      lines.push("技能已装，新开会话后生效。");
       if (!which("mo")) lines.push("提示：mo 不在 PATH。");
       return lines.join("\n");
     });
