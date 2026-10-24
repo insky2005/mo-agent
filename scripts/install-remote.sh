@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 从 GitHub Releases 安装 mo（不需要源码、不需要 Node）。
 #   curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
+#   ... | bash -s -- --with-skill    # 顺带安装 Agent 技能
 #   MO_VERSION=v0.2.0 bash scripts/install-remote.sh      # 指定版本
 #   MO_CLI_BASE_URL=file:///path/to/dist bash scripts/install-remote.sh   # 本地验证
 set -euo pipefail
@@ -51,19 +52,40 @@ chmod +x "$TMP/$ASSET"
 mkdir -p "$BIN_DIR"
 mv "$TMP/$ASSET" "$BIN_DIR/mo"
 
-echo "已安装：$BIN_DIR/mo"
+echo
+echo "✓ 已安装 $BIN_DIR/mo"
 "$BIN_DIR/mo" --version
 
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) echo "注意：$BIN_DIR 不在 PATH 中，加进去并重开终端" ;;
-esac
+WITH_SKILL="${MO_WITH_SKILL:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --with-skill) WITH_SKILL=1 ;;
+    --no-skill) WITH_SKILL=0 ;;
+  esac
+done
 
-# 技能：默认一起装（--no-skill 或 MO_SKIP_SKILL=1 可跳过）
-if [ "${MO_SKIP_SKILL:-0}" != "1" ] && [ "${1:-}" != "--no-skill" ]; then
-  if "$BIN_DIR/mo" skill install --yes >/dev/null 2>&1; then
+if [ "$WITH_SKILL" = "1" ]; then
+  if [ -t 0 ]; then
+    "$BIN_DIR/mo" skill install || true
+  elif "$BIN_DIR/mo" skill install --yes >/dev/null 2>&1; then
     echo "✓ 技能"
   else
     echo "技能未安装，可稍后执行：mo skill install"
   fi
+fi
+
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *)
+    echo
+    echo "当前终端（新终端会自动生效）："
+    printf '  export PATH="%s:$PATH"\n' "$BIN_DIR"
+    ;;
+esac
+
+echo
+if [ "$WITH_SKILL" = "1" ]; then
+  echo "下一步：在项目目录执行 mo project init"
+else
+  echo "下一步：mo skill install && mo project init"
 fi

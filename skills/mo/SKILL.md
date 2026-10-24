@@ -48,7 +48,7 @@ bash "$TMP"
 给出两条命令，然后停下：
 
 ```bash
-# Release 单文件二进制（不需要 Node，装完同时装技能）
+# Release 单文件二进制（不需要 Node；加 --with-skill 会顺带装技能）
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 
 # 源码（需要 git 与 Node 18+）
