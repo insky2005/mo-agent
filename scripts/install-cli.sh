@@ -265,8 +265,7 @@ fi
 
 if [ -n "$SHELL_NAME" ]; then
   echo
-  printf '补全已写入 %s（新终端自动加载）\n' "$(rc_for "$SHELL_NAME")"
-  echo "当前终端立即启用："
+  echo "当前终端立即启用补全："
   printf '  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
