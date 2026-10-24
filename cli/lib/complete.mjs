@@ -37,6 +37,7 @@ const SPEC = {
       init: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
       agent: { flags: ["--file", "--mode", "--remove"] },
       list: { flags: [] },
+      remove: { flags: ["--path", "--purge", "--dry-run", "--yes", "--id"] },
     },
   },
   memory: {

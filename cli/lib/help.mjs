@@ -55,6 +55,7 @@ export const GROUPS = [
       ["init [路径]", "认领项目，写 .mo-agent/ 与 AGENTS.md", ""],
       ["agent [--remove]", "只写/删 AGENTS.md、CLAUDE.md 那段", ""],
       ["list", "已登记项目", ""],
+      ["remove [名称|路径]", "从本机注册表移除；默认不碰仓库文件", "加 --purge 才删 .mo-agent/"],
     ],
   },
   {
@@ -120,6 +121,10 @@ const OPTIONS = {
     ["--file <路径>", "指定 AGENTS.md / CLAUDE.md，默认自动找一个"],
     ["--name <名称>", "init：项目名，默认目录名"],
     ["--remove", "agent：删掉 mo 写的那一段"],
+    ["--path <路径>", "remove：只移除这一个登记位置"],
+    ["--purge", "remove：连 <repo>/.mo-agent/ 一起删（需确认）"],
+    ["--dry-run", "remove：只打印计划，不动手"],
+    ["--yes", "remove：非 TTY 下跳过确认（谨慎）"],
   ],
   memory: [
     ["--scope preferences|pitfalls|decisions", "recall / list / propose：限定范围"],

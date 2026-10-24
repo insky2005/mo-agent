@@ -302,6 +302,7 @@ canceled            canceled                failed                  └─> canc
 | 发起确认请求 | `mo task confirm t_x` | `task_confirm`（只发请求） |
 | 批准 / 拒绝 | `mo task approve\|reject t_x` | **不暴露给任何 Agent** |
 | 待批列表 | `mo task requests` | — |
+| 移除项目登记 | `mo project remove <名称\\|路径> [--purge]` | — |
 | 派单 | `mo task dispatch t_x --exec "claude -p"` | `task_dispatch` |
 | 状态 | `mo task status t_x` | `task_status` |
 | 收件箱 | `mo inbox pull` | `inbox_pull` |

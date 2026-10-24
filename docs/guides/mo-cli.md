@@ -125,6 +125,7 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo project init [路径]` | 初始化项目（`.mo-agent/` + `AGENTS.md`） |
 | `mo project agent [--remove]` | 只写/删 Agent 说明文件 |
 | `mo project list` | 已登记项目 |
+| `mo project remove [名称\|路径]` | 从本机注册表移除；`--purge` 才删 `.mo-agent/` |
 | `mo task create …` | 建卡（draft） |
 | `mo task confirm <id>` | 发起确认请求（不改状态） |
 | `mo task approve \| reject <id>` | 人批准 / 拒绝（需 TTY） |

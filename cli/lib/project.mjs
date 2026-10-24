@@ -236,3 +236,122 @@ export function listProjects(home = moHome()) {
     lastSeen: entry.lastSeen,
   }));
 }
+/**
+ * 找一条已登记的项目；只查注册表，不认领、不登记。
+ * 目标可以是 id、名称、或路径；缺省用 cwd 所属项目。
+ */
+/** macOS 下 /var 与 /private/var 指同一处，比较路径前先归一 */
+function canonical(value) {
+  try {
+    return fs.realpathSync(path.resolve(value));
+  } catch {
+    return path.resolve(value);
+  }
+}
+
+export function findRegisteredProject(options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const home = options.home || moHome();
+  const target = options.target;
+  const registry = readRegistry(home);
+
+  if (target && target !== true) {
+    if (looksLikePath(String(target))) {
+      const dir = path.resolve(cwd, String(target));
+      const root = findProjectRoot(dir) || (exists(dir) ? dir : null);
+      const meta = root ? readProjectMeta(root) : null;
+      if (meta && registry.projects[meta.id]) {
+        return { root, id: meta.id, entry: registry.projects[meta.id], registry, home };
+      }
+      const want = canonical(dir);
+      const hit = Object.entries(registry.projects).find(([, entry]) =>
+        (entry.paths || []).some((candidate) => canonical(candidate) === want),
+      );
+      if (hit) return { root: dir, id: hit[0], entry: hit[1], registry, home };
+      throw new MoError("E_PROJECT_NOT_FOUND", "没有登记这个路径：" + dir, {
+        hint: "mo project list 看已登记项目",
+      });
+    }
+
+    const needle = String(target).toLowerCase();
+    const matches = Object.entries(registry.projects).filter(
+      ([id, entry]) => id.toLowerCase() === needle || String(entry.name || "").toLowerCase() === needle,
+    );
+    if (!matches.length) {
+      throw new MoError("E_PROJECT_NOT_FOUND", "找不到项目：" + target, {
+        hint: "mo project list 看已登记项目",
+      });
+    }
+    if (matches.length > 1) {
+      throw new MoError("E_PROJECT_AMBIGUOUS", "项目名 " + target + " 命中多个，请改用 id", {
+        candidates: matches.map(([id, entry]) => ({ id, name: entry.name, paths: entry.paths })),
+      });
+    }
+    return { root: null, id: matches[0][0], entry: matches[0][1], registry, home };
+  }
+
+  const root = findProjectRoot(cwd);
+  const meta = root ? readProjectMeta(root) : null;
+  if (!meta || !registry.projects[meta.id]) {
+    throw new MoError("E_PROJECT_UNBOUND", "当前目录不属于任何已登记项目", {
+      hint: "mo project list 看已登记项目，或指定名称 / 路径",
+    });
+  }
+  return { root, id: meta.id, entry: registry.projects[meta.id], registry, home };
+}
+
+/**
+ * 移除登记。
+ * 默认只动注册表（~/.mo-agent/projects.json），不碰仓库里的任何文件；
+ * purge=true 才会删 <repo>/.mo-agent/——这一步由命令层做安全确认。
+ */
+export function removeProject(options = {}) {
+  const found = findRegisteredProject(options);
+  const requested = options.pathOnly
+    ? canonical(path.resolve(options.cwd || process.cwd(), String(options.pathOnly)))
+    : null;
+  const paths = found.entry.paths || [];
+  const matched = requested ? paths.find((candidate) => canonical(candidate) === requested) : null;
+
+  if (requested && !matched) {
+    throw new MoError("E_PROJECT_NOT_FOUND", "这个路径没有登记在项目 " + found.id + " 下：" + options.pathOnly, {
+      hint: "登记的位置：" + (paths.join(", ") || "（无）"),
+    });
+  }
+  if (options.purge && !requested && paths.length > 1) {
+    throw new MoError("E_USAGE", "这个项目登记了 " + paths.length + " 个位置，--purge 需要配合 --path 指定一个", {
+      hint: paths.join("\n"),
+    });
+  }
+
+  const removedPaths = matched ? [matched] : paths.slice();
+  const remainingPaths = paths.filter((candidate) => !removedPaths.includes(candidate));
+  const dryRun = Boolean(options.dryRun);
+
+  if (!dryRun) {
+    if (remainingPaths.length) {
+      found.entry.paths = remainingPaths;
+      found.entry.lastSeen = new Date().toISOString();
+    } else {
+      delete found.registry.projects[found.id];
+    }
+    writeRegistry(found.registry, found.home);
+  }
+
+  return {
+    id: found.id,
+    name: found.entry.name || null,
+    removedPaths,
+    remainingPaths,
+    dryRun,
+    purged: false,
+  };
+}
+
+/** 删掉一个仓库里的 .mo-agent/（由命令层确认后再调） */
+export function purgeProjectDir(root) {
+  const dir = projectDir(root);
+  if (!exists(dir)) return false;
+  fs.rmSync(dir, { recursive: true, force: true });
+  return true;
+}

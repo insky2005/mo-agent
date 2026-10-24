@@ -414,6 +414,7 @@ mo ledger query --project <TAB>   demo  other-project
 # 项目
 mo project init [路径] [--name 名称] [--no-agent-file] [--mode auto|skill|ref|inline] [--file 文件]
 mo project list
+mo project remove [名称|id|路径] [--path 路径] [--purge] [--dry-run]   # 默认只移登记，--purge 才删 .mo-agent/
 
 # 任务
 mo task create --title "给面板加筛选" \
