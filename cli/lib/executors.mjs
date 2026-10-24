@@ -87,7 +87,7 @@ export function resolveAgent(name) {
   const key = String(name).trim();
   const preset = EXECUTORS[key];
   if (!preset) {
-    throw new MoError("E_USAGE", "未知执行者模板：" + key, {
+    throw new MoError("E_USAGE", "未知执行者：" + key, {
       hint: "可用：" + Object.keys(EXECUTORS).join(" / ") + "；自定义命令请用 --exec",
     });
   }

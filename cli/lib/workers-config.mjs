@@ -63,7 +63,7 @@ export function resolveWorker(name, ctx = {}) {
   const workers = listWorkers(ctx);
   const found = workers.find((worker) => worker.name === String(name).trim());
   if (!found) {
-    throw new MoError("E_USAGE", "未知执行者模板：" + name, {
+    throw new MoError("E_USAGE", "未知执行者：" + name, {
       hint: "可用：mo worker list",
     });
   }
@@ -81,7 +81,7 @@ export function addWorker({ name, command, description = "", requires = "", proj
     throw new MoError("E_USAGE", "缺少 --command");
   }
   if (EXECUTORS[key]) {
-    throw new MoError("E_USAGE", key + " 与内置模板同名，换一个名称");
+    throw new MoError("E_USAGE", key + " 与内置执行者同名，换一个名称");
   }
   if (project && !projectRoot) {
     throw new MoError("E_PROJECT_UNBOUND", "使用 --project 时需要项目上下文");
@@ -101,7 +101,7 @@ export function addWorker({ name, command, description = "", requires = "", proj
 export function removeWorker({ name, project = false, home, projectRoot }) {
   const key = String(name || "").trim();
   if (EXECUTORS[key]) {
-    throw new MoError("E_USAGE", key + " 是内置模板，不能删除");
+    throw new MoError("E_USAGE", key + " 是内置执行者，不能删除");
   }
 
   const primary = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);

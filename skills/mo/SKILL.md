@@ -89,7 +89,7 @@ mo task create \
   --json
 ```
 
-`--worker` 用内置模板（`mo worker list` 看清单和本机是否安装）；需要额外参数时改用 `--exec "<完整命令>"`，两者互斥。
+`--worker` 用内置执行者（`mo worker list` 看清单和本机是否安装）；需要额外参数时改用 `--exec "<完整命令>"`，两者互斥。
 
 ## 派单前必须回显
 

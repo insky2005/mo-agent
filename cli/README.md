@@ -146,12 +146,12 @@ mo project init .          # 认领项目，写 .mo-agent/project.json
 常用 Agent 有内置模板，用 `--worker` 选，不用记完整命令：
 
 ```bash
-mo worker list                        # 列出模板
+mo worker list                        # 列出执行者
 mo task create --worker claude …  # 展开成 claude -p "$(cat)"
 mo task create --worker codex …
 ```
 
-| 模板 | 展开为 | 说明 |
+| 执行者 | 展开为 | 说明 |
 |---|---|---|
 | `claude` | `claude -p "$(cat)" --permission-mode acceptEdits` | Claude Code |
 | `codex` | `codex exec -s workspace-write -` | Codex CLI |
@@ -160,9 +160,9 @@ mo task create --worker codex …
 | `pi` | `pi -p "$(cat)"` | pi |
 | `qwen` | `qwen --approval-mode auto-edit "$(cat)"` | Qwen Code |
 
-`mo worker list` 会标出每个模板在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
+`mo worker list` 会标出每个执行者在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
 
-模板都选了"能写文件"的模式——执行者必须能写 `$MO_RECEIPT`，只读模式跑出来的任务永远到不了 `done`。
+内置执行者都选了"能写文件"的模式——执行者必须能写 `$MO_RECEIPT`，只读模式跑出来的任务永远到不了 `done`。
 
 需要别的参数就用 `--exec` 写完整命令（两者互斥）：
 
@@ -172,7 +172,7 @@ mo task create --worker codex …
 | 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
 | 先演示 | `node /…/cli/demo/executor.mjs` | 仓库自带的假执行者，不花钱 |
 
-模板只是建卡时的默认值：派单时 `--worker` / `--exec` 可以覆盖卡里的命令。
+这只在没显式指定 `--exec` 时作为默认值：派单时 `--worker` / `--exec` 可以覆盖卡里的命令。
 
 **执行者能不能用，先手动验一次**：
 
@@ -356,7 +356,7 @@ mo agent remove               # 只删自己那段
 
 ## 自定义 worker
 
-内置模板不够用时，注册自己的执行者：
+内置的不够用时，注册自己的执行者：
 
 ```bash
 mo worker add mine --command 'claude -p "$(cat)" --model sonnet'

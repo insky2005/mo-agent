@@ -38,13 +38,13 @@ function list(ctx, args) {
 
   emit(args.options, { workers }, () => {
     const lines = [
-      table(rows, ["模板", "来源", "已装", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
+      table(rows, ["执行者", "来源", "已装", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
       "",
-      "用法：mo task create --worker <模板>",
+      "用法：mo task create --worker <执行者>",
       "自定义：mo worker add <名称> --command '<命令>'",
     ];
     if (missing.length) {
-      lines.push("不可用：" + [...new Set(missing)].join(" / ") + "（对应模板选不了）");
+      lines.push("不可用：" + [...new Set(missing)].join(" / ") + "（对应执行者选不了）");
     }
     return lines.join("\n");
   });
