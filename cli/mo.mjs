@@ -23,7 +23,7 @@ const HELP = [
   "",
   "用法：",
   "  mo worker list|add|remove       执行者（含自定义与可用性检测）",
-  "  mo skill install|uninstall|list 安装 mo 技能到各 Agent 的技能目录",
+  "  mo skill list|install|uninstall 安装 mo 技能到各 Agent 的技能目录",
   "",
   "  mo project init [路径]          初始化项目（.mo-agent/ + AGENTS.md）",
   "  mo project agent [--remove]     写/删 AGENTS.md、CLAUDE.md 里的 mo 说明",

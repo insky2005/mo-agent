@@ -213,5 +213,5 @@ export async function skillCommand(ctx, args) {
     return 0;
   }
 
-  throw new MoError("E_USAGE", "未知子命令：skill " + sub + "（可用：install / uninstall / list）");
+  throw new MoError("E_USAGE", "未知子命令：skill " + sub + "（可用：list / install / uninstall）");
 }
