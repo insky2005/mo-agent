@@ -65,6 +65,18 @@ test("所有格式都非空且以换行结尾", () => {
   }
 });
 
+test("渲染结果里的代码围栏完整，没有占位符残留", () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  for (const format of FORMATS) {
+    const text = render(format);
+    const fences = text.split(fence).length - 1;
+    assert.equal(fences % 2, 0, format + " 的代码围栏不成对");
+    assert.doesNotMatch(text, /%%BT%%|%%FENCE%%/, format + " 残留占位符");
+    assert.doesNotMatch(text, new RegExp(String.fromCharCode(96) + "BT" + String.fromCharCode(96)), format + " 围栏被转义坏了");
+  }
+  assert.ok(render("skill").includes(fence + "bash"), "skill 里应该有 bash 代码块");
+});
+
 test("未知格式直接报错", () => {
   assert.throws(() => render("nope"), /未知格式/);
 });
