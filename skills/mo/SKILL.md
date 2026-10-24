@@ -126,10 +126,16 @@ mo ledger query --task <taskId> --json
 - `blocked` → 说清 `reason`、`exitCode`、`outputTail`；
 - `failed` → 同样转述，不要美化。
 
-## 身份与确认
+## 账本里的发起者
 
-- 自己发起的命令带上身份：`--actor agent:<你的名字>`，或先 `export MO_ACTOR=agent:mo`。这样账本里能区分人和 Agent。
-- **确认只能由用户执行**。带 `agent:` 身份调用 `mo task confirm` 会被直接拒绝（E_HUMAN_ONLY）——这是有意的，不要绕过。
+账本的 `发起` 列只有四种值：
+
+- `agent`：通过 `mo task ...` 发起的动作（建卡、派单、取消）
+- `human`：确认（`mo task confirm`），只有这一种动作强制由人拍板
+- `core`：内核自己的判定（完成、阻塞、验收）
+- `worker`：执行者交回执
+
+不要替用户执行确认——不是怕记录，是确认权在用户手里。
 
 ## 铁律
 

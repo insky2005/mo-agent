@@ -78,7 +78,7 @@ export function ingest({ home, root, card, result }) {
     return summary(next, { status: "blocked", reason: "bad_receipt", errors: checked.errors, receipt: checked.receipt, receiptFile });
   }
 
-  appendEvent(home, { type: "receipt.received", project: meta.project, taskId: meta.id, actor: "executor", payload: { status: checked.receipt.status } });
+  appendEvent(home, { type: "receipt.received", project: meta.project, taskId: meta.id, actor: "worker", payload: { status: checked.receipt.status } });
 
   // 回执说 done 只是"执行者认为做完了"；core 亲自跑验收后才决定终态。
   // 验收必须在 transition 之前算完：状态机没有 done → blocked。

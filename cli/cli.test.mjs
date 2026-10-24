@@ -300,22 +300,17 @@ test("回执可以后补：submit + apply 把 blocked 救回 done", () => {
   assert.equal(applied.parsed.status, "done");
   assert.equal(applied.parsed.verified, "verified");
 });
-test("账本记录发起者，Agent 不能替人确认", () => {
+test("账本记录发起者：cli 动作记 agent，确认记 human", () => {
   const ws = workspace();
   run(ws, ["project", "init", ".", "--no-agent-file"]);
 
-  const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y", "--actor", "agent:mo"]);
+  const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y"]);
   const taskId = created.parsed.taskId;
-
-  const rejected = run(ws, ["task", "confirm", taskId, "--actor", "agent:mo"]);
-  assert.notEqual(rejected.status, 0);
-  assert.match(rejected.stderr, /E_HUMAN_ONLY/);
-
   const ok = run(ws, ["task", "confirm", taskId]);
   assert.equal(ok.status, 0, ok.stderr);
 
   const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
   const actors = Object.fromEntries(ledger.parsed.events.map((event) => [event.type, event.actor]));
-  assert.equal(actors["task.created"], "agent:mo");
-  assert.equal(actors["task.confirmed"], "cli");
+  assert.equal(actors["task.created"], "agent");
+  assert.equal(actors["task.confirmed"], "human");
 });
