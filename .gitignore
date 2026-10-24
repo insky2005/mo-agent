@@ -54,5 +54,3 @@ docs/private/
 cli/dist/
 dist/
 
-# ---- mo 本地状态（不提交）----
-.mo-agent/
