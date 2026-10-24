@@ -164,6 +164,7 @@ export function renderGroupHelp(name) {
   return null;
 }
 
+/** mo help 能接的话题：分组 + 单命令（doctor / completion / help） */
 export function groupNames() {
-  return GROUPS.map((group) => group.name);
+  return [...GROUPS.map((group) => group.name), ...EXTRA.map(([label]) => label.split(" ")[0])];
 }

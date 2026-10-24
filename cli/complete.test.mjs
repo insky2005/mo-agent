@@ -78,3 +78,17 @@ test("describe 把冒号换成中点", () => {
   assert.equal(describe({ value: "t_1", description: "draft: 标题" }), "t_1:draft· 标题");
   assert.equal(describe({ value: "t_1", description: "" }), "t_1");
 });
+test("help 的补全：列出所有话题，按前缀过滤", () => {
+  const ws = workspace();
+  const all = values(complete({ cwd: ws.project, words: ["help", ""] }));
+  for (const name of ["task", "memory", "agent", "project", "doctor", "completion", "help"]) {
+    assert.ok(all.includes(name), "缺少话题 " + name);
+  }
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["help", "t"] })), ["task"]);
+});
+
+test("每个组都补出 help 子命令", () => {
+  const ws = workspace();
+  const items = values(complete({ cwd: ws.project, words: ["task", ""] }));
+  assert.ok(items.includes("help"), "task 组缺 help 子命令");
+});

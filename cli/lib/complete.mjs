@@ -107,7 +107,9 @@ export function complete(ctx = {}) {
   }
 
   if (group === "help" && !tokens[1]) {
-    return groupNames().filter(startsWith(current)).map((name) => item(name, ""));
+    return groupNames()
+      .map((name) => item(name, "看这组命令"))
+      .filter((entry) => entry.value.startsWith(current));
   }
 
   const spec = SPEC[group];
@@ -121,7 +123,10 @@ export function complete(ctx = {}) {
   }
 
   if (!sub) {
-    return [...spec.subs.map((name) => item(name, "")), ...flagItems(GLOBAL_FLAGS)].filter(startsWith(current));
+    // help 是每个组都支持的写法（mo task help），一并补出来
+    return [...spec.subs.map((name) => item(name, "")), item("help", "看这组命令"), ...flagItems(GLOBAL_FLAGS)].filter(
+      startsWith(current),
+    );
   }
 
   const positionals = tokens.slice(2);
