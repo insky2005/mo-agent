@@ -1,7 +1,6 @@
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { cardSections, renderCard, validateCard, verifyItems } from "../../core/tasks/card.mjs";
-import { STATES } from "../../core/tasks/model.mjs";
 import { newTaskId } from "../lib/ids.mjs";
 import { all, one } from "../lib/args.mjs";
 import { emit, table } from "../lib/output.mjs";
@@ -179,12 +178,12 @@ function statusTask(ctx, args, home) {
   emit(args.options, payload, () =>
     [
       taskId + "  [" + card.meta.status + "]  " + card.meta.title,
-      "项目: " + card.meta.project + "  (" + resolved.root + ")",
-      "验收: " + (payload.verify.length ? payload.verify.length + " 项" : "无"),
-      "状态: " + STATES.join(" / "),
       "",
-      "最近事件:",
-      ...events.map((event) => "  " + event.at + "  " + event.type),
+      "  项目   " + card.meta.project + "  (" + resolved.root + ")",
+      "  验收   " + (payload.verify.length ? payload.verify.length + " 项 · " + payload.verified : "无"),
+      "",
+      "  最近事件",
+      ...events.map((event) => "    " + event.at + "  " + event.type),
     ].join("\n"));
   return 0;
 }
@@ -245,8 +244,10 @@ function verifyTask(ctx, args, home) {
     { ok: outcome.ok, taskId, status: card.meta.status, verified, verify: outcome },
     () => {
       const lines = [
-        taskId + "  [" + card.meta.status + "]  验收重跑",
-        verifyLabel(outcome),
+        outcome.ok ? "✓ 验收通过" : "⚠ 验收未通过",
+        "",
+        "  id     " + taskId,
+        "  验收   " + verifyLabel(outcome),
         "",
         ...outcome.results.map((result) => "  " + (result.ok ? "✓" : result.kind === "human" || result.kind === "unknown" ? "?" : "✗") + " " + result.item + (result.detail ? "  — " + result.detail : "")),
       ];
@@ -264,11 +265,11 @@ function verifyTask(ctx, args, home) {
 function verifyLabel(outcome) {
   const total = outcome.results.length;
   const passed = outcome.results.filter((result) => result.ok).length;
-  if (!total) return "验收: unverified";
-  if (outcome.ok) return "验收: verified " + passed + "/" + total;
+  if (!total) return "unverified";
+  if (outcome.ok) return "verified " + passed + "/" + total;
   const failed = outcome.results.filter((result) => !result.ok && result.kind !== "human" && result.kind !== "unknown").length;
-  if (failed) return "验收失败 " + failed + "/" + total;
-  return "验收: 需要人工确认 " + (total - passed) + "/" + total;
+  if (failed) return "失败 " + failed + "/" + total;
+  return "需人工确认 " + (total - passed) + "/" + total;
 }
 
 function dispatchCommand(ctx, args, home) {
@@ -293,26 +294,42 @@ export function runDispatch(args, { home, root, taskId }) {
     timeout: one(args.options, "timeout"),
   }).then((result) => {
     emit(args.options, { ok: result.status === "done", ...result }, () => {
+      const head = {
+        done: "✓ 已派发",
+        blocked: "⚠ 已阻塞",
+        failed: "✗ 已失败",
+        canceled: "✗ 已取消",
+      }[result.status] || "✓ " + result.status;
+
       const lines = [
-        taskId + " → " + result.status,
-        "执行者: " + (result.executor || "-"),
-        result.verify && result.verify.results.length ? verifyLabel(result.verify) : "验收: " + result.verified,
+        head,
+        "",
+        "  id     " + taskId,
+        "  状态   " + result.status,
+        "  执行者 " + (result.executor || "-"),
+        "  验收   " + (result.verify && result.verify.results.length ? verifyLabel(result.verify) : result.verified),
       ];
-      if (result.verify && !result.verify.ok && result.verify.results.length) {
-        for (const item of result.verify.results.filter((entry) => !entry.ok)) {
-          const mark = item.kind === "human" || item.kind === "unknown" ? "  ? " : "  ✗ ";
-          lines.push(mark + item.item + (item.detail ? "  — " + item.detail : ""));
+
+      if (result.receipt && result.receipt.summary) lines.push("  结论   " + result.receipt.summary);
+      if (result.reason && result.reason !== "receipt") lines.push("  原因   " + result.reason);
+      if (result.exitCode !== undefined && result.exitCode !== null) lines.push("  退出码 " + result.exitCode);
+      if (result.errors) lines.push("  问题   " + result.errors.join("；"));
+      if (result.receiptFile) lines.push("  回执   " + path.relative(root, result.receiptFile));
+
+      const failedItems = ((result.verify && result.verify.results) || []).filter((entry) => !entry.ok);
+      if (failedItems.length) {
+        lines.push("");
+        for (const item of failedItems) {
+          const mark = item.kind === "human" || item.kind === "unknown" ? "?" : "✗";
+          lines.push("  " + mark + " " + item.item + (item.detail ? "  — " + item.detail : ""));
         }
       }
-      if (result.receipt && result.receipt.summary) lines.push("结论: " + result.receipt.summary);
-      if (result.reason && result.reason !== "receipt") lines.push("原因: " + result.reason);
-      if (result.exitCode !== undefined && result.exitCode !== null) lines.push("执行者退出码: " + result.exitCode);
-      if (result.errors) lines.push("问题: " + result.errors.join("；"));
-      if (result.receiptFile) lines.push("回执: " + result.receiptFile);
+
       if (result.outputTail) {
-        const tail = String(result.outputTail).split("\n").slice(-8).join("\n");
-        lines.push("", "执行者最后的输出：", tail);
+        lines.push("", "  输出");
+        for (const line of String(result.outputTail).split("\n").slice(-8)) lines.push("    " + line);
       }
+
       return lines.join("\n");
     });
     return result.status === "done" ? 0 : 1;

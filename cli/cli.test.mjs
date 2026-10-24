@@ -250,7 +250,7 @@ test("mo task verify 对已 done 的卡重跑验收，失败只改 verified 不�
   assert.equal(passed.parsed.verify.ok, true);
   const passedText = run(ws, ["task", "verify", taskId]);
   assert.equal(passedText.status, 0, passedText.stderr);
-  assert.match(passedText.stdout, /验收: verified 1\/1/);
+  assert.match(passedText.stdout, /验收\s+verified 1\/1/);
   assert.match(passedText.stdout, /run: true/);
 
   // 把卡上的验收改成必然失败，再重跑：状态保持 done，只把 verified 改成 verify_failed
@@ -263,7 +263,7 @@ test("mo task verify 对已 done 的卡重跑验收，失败只改 verified 不�
   assert.equal(failed.parsed.verified, "verify_failed");
   const failedText = run(ws, ["task", "verify", taskId]);
   assert.equal(failedText.status, 1);
-  assert.match(failedText.stdout, /验收失败 1\/1/);
+  assert.match(failedText.stdout, /验收\s+失败 1\/1/);
   assert.match(failedText.stdout, /建议取消或重派/);
 
   const status = runJson(ws, ["task", "status", taskId]);
