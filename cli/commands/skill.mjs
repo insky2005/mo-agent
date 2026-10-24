@@ -96,28 +96,27 @@ export function allTargets() {
  */
 async function chooseTargets() {
   const targets = allTargets();
-  const selected = new Set(targets.filter((t) => t.available).map((t) => t.name));
+  const available = targets.filter((target) => target.available);
 
   const lines = ["为哪些 Agent 安装 mo 技能？", ""];
   targets.forEach((target, index) => {
-    const mark = selected.has(target.name) ? "[x]" : "[ ]";
-    const note = target.installed ? "（已装）" : target.available ? "" : "（未安装）";
-    lines.push("  " + (index + 1) + ") " + mark + " " + target.name.padEnd(11) + target.dir + note);
+    const mark = target.installed ? "[✓]" : target.available ? "[x]" : "[ ]";
+    const state = target.installed ? "已装" : target.available ? "未装" : "不可用";
+    lines.push("  " + (index + 1) + ") " + mark + " " + target.name.padEnd(11) + target.dir.padEnd(34) + state);
   });
-  lines.push("", "[x] 是默认项：直接回车就装这 " + selected.size + " 项（通用位置 + 本机已装的 Agent）");
-  lines.push("选择：输入编号后回车（如 1,3）| a 选所有可用项 | q 取消");
+  lines.push("", "[✓] 已装（重装会覆盖） [x] 可装 [ ] 不可用（对应 Agent 目录不存在）");
+  lines.push("回车：处理全部可用的 " + available.length + " 项 | 输入编号（如 1,3）：只处理这些 | q 取消");
   process.stdout.write(lines.join("\n") + "\n> ");
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
     const answer = (await rl.question("")).trim().toLowerCase();
     if (answer === "q") return [];
-    if (answer === "a") return targets.filter((t) => t.available);
-    if (answer === "" || answer === "d") return targets.filter((t) => selected.has(t.name));
+    if (answer === "") return available;
     const picked = new Set(
       answer.split(/[,\s]+/).map((part) => Number(part)).filter((n) => Number.isInteger(n) && n >= 1 && n <= targets.length),
     );
-    return targets.filter((target, index) => picked.has(index + 1));
+    return targets.filter((target, index) => picked.has(index + 1) && target.available);
   } finally {
     rl.close();
   }
