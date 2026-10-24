@@ -40,7 +40,7 @@ function list(ctx, args) {
     const lines = [
       table(rows, ["模板", "来源", "已装", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
       "",
-      "用法：mo task create --agent <模板>",
+      "用法：mo task create --worker <模板>",
       "自定义：mo worker add <名称> --command '<命令>'",
     ];
     if (missing.length) {

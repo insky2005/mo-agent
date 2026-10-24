@@ -143,12 +143,12 @@ mo project init .          # 认领项目，写 .mo-agent/project.json
 
 > 从 stdin 读任务卡，把回执写到 `$MO_RECEIPT`。
 
-常用 Agent 有内置模板，用 `--agent` 选，不用记完整命令：
+常用 Agent 有内置模板，用 `--worker` 选，不用记完整命令：
 
 ```bash
 mo worker list                        # 列出模板
-mo task create --agent claude …  # 展开成 claude -p "$(cat)"
-mo task create --agent codex …
+mo task create --worker claude …  # 展开成 claude -p "$(cat)"
+mo task create --worker codex …
 ```
 
 | 模板 | 展开为 | 说明 |
@@ -172,7 +172,7 @@ mo task create --agent codex …
 | 纯 shell | `bash -lc 'cat >/dev/null; printf ... > $MO_RECEIPT'` | 应急 |
 | 先演示 | `node /…/cli/demo/executor.mjs` | 仓库自带的假执行者，不花钱 |
 
-模板只是建卡时的默认值：派单时 `--agent` / `--exec` 可以覆盖卡里的命令。
+模板只是建卡时的默认值：派单时 `--worker` / `--exec` 可以覆盖卡里的命令。
 
 **执行者能不能用，先手动验一次**：
 
@@ -345,7 +345,7 @@ mo agent remove               # 只删自己那段
 
 ```text
 要把讨论落地时，用 mo CLI：
-1) 先补齐交付物、验收标准、边界，再 mo task create --agent <claude|codex|qodercli|qoderclicn|pi|qwen>；
+1) 先补齐交付物、验收标准、边界，再 mo task create --worker <claude|codex|qodercli|qoderclicn|pi|qwen>；
 2) 把卡摘要给用户，等确认；
 3) 确认后 mo task confirm，再 mo task dispatch；
 4) 只按 mo task status / mo ledger 的实际结果汇报，不要替执行者宣称完成。
@@ -375,7 +375,7 @@ mo worker remove mine
 
 `--requires` 用来声明**命令里看不出来的依赖**：比如命令是 `node run.mjs`，但脚本内部调用 claude，就写 `--requires claude`，这样 `worker list` 会同时检查 node 和 claude。
 
-用 `--agent <名称>` 建卡时，命令会被展开写进卡片的 `exec:`，之后改 worker 不会改变历史任务的含义。
+用 `--worker <名称>` 建卡时，命令会被展开写进卡片的 `exec:`，之后改 worker 不会改变历史任务的含义。
 
 ## Tab 补全
 

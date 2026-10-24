@@ -85,11 +85,11 @@ mo task create \
   --verify "run:npm test -- --filter x" \
   --verify "check:dist/index.html 存在" \
   --boundary "不要改后端接口" \
-  --agent claude \
+  --worker claude \
   --json
 ```
 
-`--agent` 用内置模板（`mo worker list` 看清单和本机是否安装）；需要额外参数时改用 `--exec "<完整命令>"`，两者互斥。
+`--worker` 用内置模板（`mo worker list` 看清单和本机是否安装）；需要额外参数时改用 `--exec "<完整命令>"`，两者互斥。
 
 ## 派单前必须回显
 
@@ -142,7 +142,7 @@ mo ledger query --task <taskId> --json
 |---|---|---|
 | `E_NOT_CONFIRMED` | 卡还没确认 | "还差确认，要现在确认吗？" |
 | `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问是否 `mo project init .` |
-| `E_NO_EXECUTOR` | 卡里没执行者 | 问用哪个 `--agent` |
+| `E_NO_EXECUTOR` | 卡里没执行者 | 问用哪个 `--worker` |
 | `blocked(missing_receipt)` | 执行者没写回执 | 转述 `outputTail`（常见：未登录） |
 | `blocked(bad_receipt)` | 回执不合法 | 转述 `errors` |
 | `blocked(timeout)` | 超时 | 问重试还是换执行者 |

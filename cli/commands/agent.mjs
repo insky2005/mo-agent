@@ -12,7 +12,7 @@ const BEGIN = "<!-- >>> mo >>> -->";
 const END = "<!-- <<< mo <<< -->";
 
 const STEPS = [
-  "1. 补齐交付物、验收标准、边界，再 `mo task create --agent <claude|codex|qodercli|qoderclicn|pi|qwen>`",
+  "1. 补齐交付物、验收标准、边界，再 `mo task create --worker <claude|codex|qodercli|qoderclicn|pi|qwen>`",
   "2. 把卡摘要给用户，等确认",
   "3. `mo task confirm` → `mo task dispatch`",
   "4. 只按 `mo task status` / `mo ledger query` 汇报，不要替执行者宣称完成",

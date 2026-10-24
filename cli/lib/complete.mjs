@@ -13,12 +13,12 @@ const SPEC = {
     subs: ["create", "confirm", "cancel", "status", "list", "dispatch"],
     flags: [
       "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-      "--background", "--assignee", "--agent", "--exec", "--timeout", "--json",
+      "--background", "--assignee", "--worker", "--exec", "--timeout", "--json",
     ],
   },
   receipt: { subs: ["submit"], flags: ["--file", "--dry-run"] },
   ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
-  run: { subs: [], flags: ["--agent", "--exec", "--timeout"] },
+  run: { subs: [], flags: ["--worker", "--exec", "--timeout"] },
   doctor: { subs: [], flags: ["--json"] },
   worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
@@ -31,7 +31,7 @@ const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--agent", "--type", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
+  "--background", "--assignee", "--worker", "--type", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
 ]);
 
 function startsWith(prefix) {
@@ -61,7 +61,7 @@ function projectItems() {
 function valuesFor(flag, ctx) {
   if (flag === "--project") return projectItems();
   if (flag === "--task") return taskItems(ctx.cwd);
-  if (flag === "--agent") return listAgents().map((agent) => item(agent.name, agent.description));
+  if (flag === "--worker") return listAgents().map((agent) => item(agent.name, agent.description));
   return [];
 }
 

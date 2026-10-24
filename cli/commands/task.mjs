@@ -15,14 +15,17 @@ function resolveContext(ctx, args) {
   return resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
 }
 
-/** --agent 与 --exec 二选一：前者用内置模板，后者是完整命令 */
+/** --worker 与 --exec 二选一：前者用模板，后者是完整命令 */
 function pickExecutor(options, ctx) {
-  const agentName = one(options, "agent");
-  const command = one(options, "exec");
-  if (agentName && command) {
-    throw new MoError("E_USAGE", "--agent 与 --exec 只能二选一");
+  if (one(options, "agent") !== undefined) {
+    throw new MoError("E_USAGE", "--agent 已改名为 --worker");
   }
-  if (agentName) return resolveWorker(agentName, ctx);
+  const workerName = one(options, "worker");
+  const command = one(options, "exec");
+  if (workerName && command) {
+    throw new MoError("E_USAGE", "--worker 与 --exec 只能二选一");
+  }
+  if (workerName) return resolveWorker(workerName, ctx);
   return null;
 }
 
@@ -90,7 +93,7 @@ function createTask(ctx, args, home) {
     updated: now,
     from: "cli",
     assignee: one(args.options, "assignee", "auto"),
-    agent: chosen ? chosen.name : undefined,
+    worker: chosen ? chosen.name : undefined,
     exec: chosen ? chosen.command : one(args.options, "exec"),
     workdir: ".",
     verify,
@@ -194,7 +197,7 @@ export function runDispatch(args, { home, root, taskId }) {
   const chosen = pickExecutor(args.options, { home, projectRoot: root });
   if (chosen && !chosen.installed) {
     throw new MoError("E_ASSIGNEE_UNSUPPORTED", "执行者 " + chosen.binary + " 未安装", {
-      hint: "先装好它，或换一个 --agent / 用 --exec",
+      hint: "先装好它，或换一个 --worker / 用 --exec",
     });
   }
   return dispatchTask({
