@@ -93,7 +93,7 @@ echo "  mo project init         在项目目录初始化 .mo-agent/ 并写入 Ag
 echo
 echo "基本用法（在项目里）："
 echo "  mo worker list           看可用的执行者模板"
-echo '  mo task create --title hello --deliverable "print hello world" --worker claude'
+echo '  mo task create --title hello --deliverable "print hello world" --verify "run:echo hello world" --worker claude'
 echo "  mo task confirm <id>     人确认；确认前不能派单"
 echo "  mo task dispatch <id>    派给执行者并等回执"
 echo "  mo task list             看本项目的任务"

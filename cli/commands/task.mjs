@@ -104,7 +104,7 @@ function createTask(ctx, args, home) {
     on_fail: "ask_human",
   };
   if (!verify.length) {
-    process.stderr.write("[W_NO_VERIFY] 没有验收标准，这张卡完成后无法判定\n");
+    process.stderr.write("[W_NO_VERIFY] 没有验收标准，完成后无法判定；加 --verify \"run:<命令>\" 或者 --verify \"check:<条件>\"\n");
   }
 
   const body = buildBody({
