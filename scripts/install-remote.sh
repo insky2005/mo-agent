@@ -90,3 +90,9 @@ if [ "$WITH_SKILL" != "1" ]; then
   echo "  mo skill install        给 Claude / Codex / Qoder 等安装 mo 技能（交互选择）"
 fi
 echo "  mo project init         在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
+echo
+echo "基本用法（在项目里）："
+echo "  mo task create --title 标题 --deliverable 产出 --agent claude"
+echo "  mo task confirm <id>     人确认；确认前不能派单"
+echo "  mo task dispatch <id>    派给执行者并等回执"
+echo "  mo task list             看本项目的任务"
