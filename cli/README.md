@@ -106,7 +106,7 @@ bash cli/demo/run.sh
 
 | 顺序 | 做法 | 结果 |
 |---|---|---|
-| **先 CLI** | `bash scripts/install-cli.sh` 或远端 `install-remote.sh` | 命令就位，终端里顺带装技能 |
+| **先 CLI** | `bash scripts/install-cli.sh` 或远端 `install-remote.sh` | 命令就位；技能用 `mo skill install`（或加 `--with-skill`） |
 | **先技能** | `npx skills add insky2005/mo-agent` | 技能就位，首次使用时 Agent 引导你装 CLI |
 
 ### 2. 初始化项目

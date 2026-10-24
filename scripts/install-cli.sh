@@ -3,7 +3,7 @@
 #   bash scripts/install-cli.sh            # 复用/构建单文件二进制，拷到 ~/.local/bin/mo
 #   bash scripts/install-cli.sh --link     # 开发模式：软链到源码，改完立即生效
 #   bash scripts/install-cli.sh --rebuild  # 强制重新构建
-#   bash scripts/install-cli.sh --no-skill # 不装主 Agent 技能
+#   bash scripts/install-cli.sh --with-skill # 顺带安装 Agent 技能
 #   bash scripts/install-cli.sh --no-completion
 #   bash scripts/install-cli.sh --uninstall
 #   MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh
@@ -22,7 +22,7 @@ END_MARK="# <<< mo completion <<<"
 MODE="binary"
 UNINSTALL=0
 REBUILD=0
-NO_SKILL=0
+WITH_SKILL=0
 WANT_COMPLETION="auto"
 WANT_SHELL="${MO_SHELL:-}"
 
@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
     --link) MODE="link" ;;
     --binary) MODE="binary" ;;
     --rebuild) REBUILD=1 ;;
-    --no-skill) NO_SKILL=1 ;;
+    --with-skill) WITH_SKILL=1 ;;
     --no-completion) WANT_COMPLETION="none" ;;
     --completion) WANT_COMPLETION="yes"; shift; WANT_SHELL="${1:-}" ;;
     --completion=*) WANT_COMPLETION="yes"; WANT_SHELL="${1#--completion=}" ;;
@@ -246,13 +246,14 @@ case ":$PATH:" in
   *":$(dirname "$INSTALLED"):"*) IN_PATH=1 ;;
 esac
 
-NEED_SKILL=0
-if [ "$NO_SKILL" = "0" ] && [ -z "${MO_SKIP_SKILL:-}" ]; then
+NEED_SKILL=1
+if [ "$WITH_SKILL" = "1" ] && [ -z "${MO_SKIP_SKILL:-}" ]; then
   if [ -t 0 ]; then
     "$INSTALLED" skill install || true
   else
-    NEED_SKILL=1
+    "$INSTALLED" skill install --yes || true
   fi
+  NEED_SKILL=0
 fi
 
 if [ "$IN_PATH" = "0" ] || [ -n "$SHELL_NAME" ]; then
