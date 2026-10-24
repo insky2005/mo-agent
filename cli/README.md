@@ -195,7 +195,10 @@ mo task create \
 ```
 
 ```bash
-mo task confirm <id>      # 人确认
+mo task confirm <id>      # 发起确认请求（不改状态）
+mo task approve <id>      # 人批准（需 TTY；--yes 是显式逃生口）
+mo task reject <id>       # 人拒绝，卡保持 draft
+mo task requests          # 看待批准的请求
 mo task dispatch <id>     # 派单，等回执
 ```
 
@@ -349,7 +352,7 @@ mo project agent --remove     # 只删自己那段
 要把讨论落地时，用 mo CLI：
 1) 先补齐交付物、验收标准、边界，再 mo task create --worker <claude|codex|qodercli|qoderclicn|pi|qwen>；
 2) 把卡摘要给用户，等确认；
-3) 确认后 mo task confirm，再 mo task dispatch；
+3) 发起 mo task confirm，等用户 mo task approve，再 mo task dispatch；
 4) 只按 mo task status / mo ledger 的实际结果汇报，不要替执行者宣称完成。
 执行者没写回执（missing_receipt）一律视为未完成。
 ```
@@ -456,6 +459,12 @@ mo doctor
 
 # 给主 Agent 用（MCP stdio）
 mo mcp                             # 一行一条 JSON-RPC，工具调用转发给上面的命令
+
+# 通用接入：不认识具体的 Agent，只产出可粘贴物
+mo agent describe                  # 契约（人看）
+mo agent describe --json           # 契约（机器读）
+mo agent add --mcp ./mcp.json      # 合并 mcpServers，幂等 + 备份
+mo agent add --prompt              # 只打印提示词
 ```
 
 全局选项：`--project <名称|路径>`、`--json`、`--help`。
@@ -531,7 +540,9 @@ mo task logs <id> --tail 30
 
 ## 接到 Agent（MCP，stdio）
 
-`mo mcp` 在 stdio 上讲 MCP，把 `task_create` / `task_dispatch` / `task_status` / `inbox_pull` / `ledger_query` / `memory_recall` / `memory_propose` 转发成对应的 `mo … --json`。**不暴露** `task_confirm`（确认权属于人）和 `memory_accept`（裁决属于人）。
+`mo mcp` 在 stdio 上讲 MCP，把 `task_create` / `task_confirm` / `task_dispatch` / `task_status` / `inbox_pull` / `ledger_query` / `memory_recall` / `memory_propose` 转发成对应的 `mo … --json`。
+
+**不暴露** `task_approve` / `task_reject`（批准权属于人）、`memory_accept`（裁决属于人）。`task_confirm` 暴露，但它只发起请求，不改变卡片状态。
 
 Claude Code / DSH 这类支持 stdio MCP 的客户端，配置里写：
 
@@ -578,6 +589,7 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 | 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
+| 确认请求 | `~/.mo-agent/approvals/<a_…>.json` |
 | 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`（pull 后进 `pulled/`） |
 
@@ -588,7 +600,7 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 | 值 | 什么时候 |
 |---|---|
 | `agent` | 通过 `mo task ...` 发起的动作（建卡、派单、取消） |
-| `human` | 确认（`mo task confirm`），唯一强制由人执行的动作 |
+| `human` | 批准（`mo task approve`），唯一强制由人执行的动作 |
 | `core` | 内核自己的判定（完成、阻塞、验收） |
 | `worker` | 执行者交回执 |
 
@@ -598,6 +610,6 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 
 已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI、`verify` 自动执行（P2）、知识召回与注入、记忆候选区与冲突裁决、收件箱兜底（P3）。
 
-未实现：MCP 端点、守护进程、watchdog/重试、面板 UI。
+未实现：Streamable HTTP 版 MCP、守护进程、watchdog/重试、面板 UI、手机端批准任务卡。
 
 派单收到 `status=done` 的回执后，core 会复跑卡上的 `verify`：全部通过 → `done` + `verified`；有失败（含超时）→ `blocked` + `verified: verify_failed`；只有 `human` 项或无法判定的 `check` → `blocked(needs_human)`；卡上没有 `verify` 则保持 `done` + `unverified`。

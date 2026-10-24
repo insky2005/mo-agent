@@ -7,69 +7,16 @@ import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 import { moHome, projectDir } from "../lib/paths.mjs";
 import { writeAtomic, exists, readText } from "../lib/fsx.mjs";
+import { renderAgentBlock, renderMoDoc, renderPointer } from "../../core/manager/contract.mjs";
 
 const BEGIN = "<!-- >>> mo >>> -->";
 const END = "<!-- <<< mo <<< -->";
 
-const STEPS = [
-  "1. 补齐交付物、验收标准、边界，再 `mo task create --worker <claude|codex|qodercli|qoderclicn|pi|qwen>`",
-  "2. 把卡摘要给用户，等确认",
-  "3. `mo task confirm` → `mo task dispatch`",
-  "4. 只按 `mo task status` / `mo ledger query` 汇报，不要替执行者宣称完成",
-];
-
-const RECEIPT_RULE = "执行者没写回执（`missing_receipt`）一律视为未完成。";
-
-const SKILL_BLOCK = `${BEGIN}
-## mo
-
-本仓库使用 [mo](https://github.com/insky2005/mo-agent)：讨论落地时按已安装的 **mo 技能**执行
-（建卡 → 回显给用户 → 等确认 → 派单），只按 \`mo task status\` / \`mo ledger query\` 的事实汇报。
-${END}`;
-
-const REF_BLOCK = `${BEGIN}
-## mo
-
-本仓库使用 [mo](https://github.com/insky2005/mo-agent)。把讨论落地时的完整用法见
-\`.mo-agent/MO.md\`，开始前先读它。
-${END}`;
-
-const INLINE_BLOCK = `${BEGIN}
-## mo
-
-要把讨论落地时，用 mo CLI：
-
-${STEPS.join("\n")}
-
-${RECEIPT_RULE}
-${END}`;
-
-const MO_DOC = `# mo 用法
-
-本文件由 \`mo project init\` 生成，供主 Agent 在把讨论落地时参考。
-
-## 流程
-
-${STEPS.join("\n")}
-
-${RECEIPT_RULE}
-
-## 常用命令
-
-\`\`\`bash
-mo task list                       # 本项目任务
-mo task status <taskId> --json     # 状态与事件
-mo ledger query --task <taskId>    # 账本流水
-mo worker list                     # 可用执行者
-\`\`\`
-
-## 铁律
-
-- 没确认不派单（\`E_NOT_CONFIRMED\`）；
-- 没拿到 taskId 不说"已派发"；
-- 不手改 \`.mo-agent/tasks/*.md\`，不自己写回执；
-- 一次对话最多派 3 个任务。
-`;
+/** 文案全部来自 core/manager/contract.mjs，这里只负责包边界与落盘 */
+const SKILL_BLOCK = BEGIN + "\n" + renderPointer("把讨论落地时按已安装的 **mo 技能**执行（建卡 → 回显 → 等批准 → 派单）") + "\n" + END;
+const REF_BLOCK = BEGIN + "\n" + renderPointer("把讨论落地时的完整用法见 `.mo-agent/MO.md`，开始前先读它") + "\n" + END;
+const INLINE_BLOCK = BEGIN + "\n" + renderAgentBlock() + "\n" + END;
+const MO_DOC = renderMoDoc();
 
 export function skillInstalled() {
   return allTargets().some((target) => target.installed);

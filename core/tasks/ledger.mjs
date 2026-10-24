@@ -5,6 +5,8 @@
 export const EVENT_TYPES = [
   "task.created",
   "task.confirmed",
+  "task.confirm_requested",
+  "task.confirm_rejected",
   "task.dispatched",
   "task.completed",
   "task.failed",

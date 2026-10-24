@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "../lib/version.mjs";
+import { TOOLS as CONTRACT_TOOLS } from "../../core/manager/contract.mjs";
 
 /**
  * mo mcp —— stdio 薄壳（spec §9）。
@@ -63,26 +64,9 @@ function repeat(list, name, values) {
   for (const value of values) list.push("--" + name, String(value));
 }
 
-const TOOLS = [
-  {
-    name: "task_create",
-    description: "建一张 draft 任务卡（未确认，不能派单）。返回 taskId 与卡片路径。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "一句话标题" },
-        deliverables: { type: "array", items: { type: "string" }, description: "交付物清单，至少一条" },
-        verify: { type: "array", items: { type: "string" }, description: '验收项，形如 "run:npm test" / "check:文件含X" / "human:视觉确认"' },
-        boundaries: { type: "array", items: { type: "string" }, description: "边界（不要做什么）" },
-        constraints: { type: "array", items: { type: "string" }, description: "约束" },
-        background: { type: "string", description: "背景" },
-        project: { type: "string", description: "项目名或路径，缺省用当前目录绑定的项目" },
-        worker: { type: "string", description: "内置执行者名，与 exec 二选一" },
-        exec: { type: "string", description: "自定义执行命令，如 \"claude -p\"" },
-        timeout: { type: "string", description: "形如 45m / 2h" },
-      },
-      required: ["title", "deliverables"],
-    },
+/** 工具语义（名字 / 描述 / schema）来自 contract；这里只负责映射成 CLI 参数 */
+const BUILDERS = {
+  task_create: {
     build: (args) => {
       const list = ["task", "create"];
       flag(list, "title", [args.title]);
@@ -98,20 +82,15 @@ const TOOLS = [
       return list;
     },
   },
-  {
-    name: "task_dispatch",
-    description: "派发已确认的任务卡，前台等待执行者跑完并做验收。可能耗时数分钟。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string" },
-        worker: { type: "string" },
-        exec: { type: "string" },
-        timeout: { type: "string" },
-        project: { type: "string" },
-      },
-      required: ["taskId"],
+  task_confirm: {
+    build: (args) => {
+      const list = ["task", "confirm", String(args.taskId)];
+      flag(list, "wait", [args.wait]);
+      flag(list, "project", [args.project]);
+      return list;
     },
+  },
+  task_dispatch: {
     build: (args) => {
       const list = ["task", "dispatch", String(args.taskId)];
       flag(list, "worker", [args.worker]);
@@ -121,31 +100,14 @@ const TOOLS = [
       return list;
     },
   },
-  {
-    name: "task_status",
-    description: "查任务状态、验收结果与最近事件。汇报只引用这里的字段。",
-    inputSchema: {
-      type: "object",
-      properties: { taskId: { type: "string" }, project: { type: "string" } },
-      required: ["taskId"],
-    },
+  task_status: {
     build: (args) => {
       const list = ["task", "status", String(args.taskId)];
       flag(list, "project", [args.project]);
       return list;
     },
   },
-  {
-    name: "inbox_pull",
-    description: "拉取任务通知（done / blocked / failed），拉完归档；主 Agent 用它替代推送。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        peek: { type: "boolean", description: "只看不归档" },
-        taskId: { type: "string" },
-        limit: { type: "number" },
-      },
-    },
+  inbox_pull: {
     build: (args) => {
       const list = ["inbox", "pull"];
       if (args.peek) list.push("--peek");
@@ -154,19 +116,7 @@ const TOOLS = [
       return list;
     },
   },
-  {
-    name: "ledger_query",
-    description: "查账本事件（机器事实，优先于任何转述）。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        project: { type: "string" },
-        taskId: { type: "string" },
-        type: { type: "string", description: "事件类型前缀，如 task." },
-        days: { type: "number" },
-        limit: { type: "number" },
-      },
-    },
+  ledger_query: {
     build: (args) => {
       const list = ["ledger", "query"];
       flag(list, "project", [args.project]);
@@ -177,18 +127,7 @@ const TOOLS = [
       return list;
     },
   },
-  {
-    name: "memory_recall",
-    description: "按关键词从知识库召回条目（派单时同一条通道会自动注入）。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        limit: { type: "number" },
-        scope: { type: "string", description: "preferences / pitfalls / decisions" },
-      },
-      required: ["query"],
-    },
+  memory_recall: {
     build: (args) => {
       const list = ["memory", "recall", String(args.query)];
       flag(list, "limit", [args.limit]);
@@ -196,21 +135,8 @@ const TOOLS = [
       return list;
     },
   },
-  {
-    name: "memory_propose",
-    description: "提一条记忆候选（不进知识库，等人裁决）。缺触发条件会被拒收。",
-    inputSchema: {
-      type: "object",
-      properties: {
-        scope: { type: "string", description: "preferences / pitfalls / decisions，默认 pitfalls" },
-        title: { type: "string" },
-        trigger: { type: "array", items: { type: "string" }, description: "触发条件，必填" },
-        tags: { type: "array", items: { type: "string" } },
-        body: { type: "string" },
-      },
-      required: ["title", "trigger", "body"],
-    },
-    build: (args) => ["memory", "propose", "--file", "-"],
+  memory_propose: {
+    build: () => ["memory", "propose", "--file", "-"],
     input: (args) =>
       JSON.stringify({
         scope: args.scope || "pitfalls",
@@ -221,10 +147,10 @@ const TOOLS = [
         source: "agent",
       }),
   },
-];
+};
 
 function byName(name) {
-  return TOOLS.find((tool) => tool.name === name) || null;
+  return CONTRACT_TOOLS.find((tool) => tool.name === name) || null;
 }
 
 function textResult(text, isError = false) {
@@ -235,14 +161,17 @@ async function callTool(params) {
   const tool = byName(params && params.name);
   if (!tool) return { error: { code: -32602, message: "未知工具：" + (params && params.name) } };
 
+  const builder = BUILDERS[tool.name];
+  if (!builder) return { error: { code: -32603, message: "工具缺少 CLI 映射：" + tool.name } };
+
   const args = (params && params.arguments) || {};
-  const missing = (tool.inputSchema.required || []).filter((key) => args[key] === undefined || args[key] === null || args[key] === "");
+  const missing = ((tool.schema && tool.schema.required) || []).filter((key) => args[key] === undefined || args[key] === null || args[key] === "");
   if (missing.length) {
     return { result: textResult("缺少参数：" + missing.join(", ") + "（工具 " + tool.name + "）", true) };
   }
 
-  const cliArgs = tool.build(args);
-  const input = tool.input ? tool.input(args) : undefined;
+  const cliArgs = builder.build(args);
+  const input = builder.input ? builder.input(args) : undefined;
   const outcome = await runCli(cliArgs, { input });
 
   const body = outcome.stdout.trim();
@@ -275,7 +204,7 @@ async function handle(message) {
     return {
       jsonrpc: "2.0",
       id,
-      result: { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) },
+      result: { tools: CONTRACT_TOOLS.map(({ name, description, schema }) => ({ name, description, inputSchema: schema })) },
     };
   }
 
@@ -294,7 +223,7 @@ function send(payload) {
 
 /** 逐行读 stdin，逐条回包；MCP 的 stdio 传输约定就是一行一条消息 */
 export function mcpCommand(ctx, args) {
-  process.stderr.write("[mo] mcp stdio 已就绪（" + TOOLS.length + " 个工具）\n");
+  process.stderr.write("[mo] mcp stdio 已就绪（" + CONTRACT_TOOLS.length + " 个工具）\n");
 
   let buffer = "";
   process.stdin.setEncoding("utf8");

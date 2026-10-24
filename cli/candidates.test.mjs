@@ -8,6 +8,13 @@ import { fileURLToPath } from "node:url";
 
 const MO = fileURLToPath(new URL("./mo.mjs", import.meta.url));
 
+/** 新流程：confirm 只发起请求，批准是另一步（测试里用 --yes 跳过 TTY） */
+function confirm(ws, taskId) {
+  run(ws, ["task", "confirm", taskId]);
+  return run(ws, ["task", "approve", taskId, "--yes"]);
+}
+
+
 function workspace() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-candidates-"));
   const project = path.join(root, "proj");
@@ -171,7 +178,7 @@ test("B10.1：回执带 pitfalls 自动生成候选，缺触发条件的拒收",
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  runJson(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
 
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.status, 0, dispatched.stderr);

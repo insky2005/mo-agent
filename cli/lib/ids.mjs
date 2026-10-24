@@ -28,3 +28,4 @@ export const newTaskId = () => "t_" + ulid();
 export const newProjectId = () => "p_" + ulid();
 export const newMachineId = () => "m_" + ulid().slice(0, 8);
 export const newCandidateId = () => "c_" + ulid();
+export const newApprovalId = () => "a_" + ulid();

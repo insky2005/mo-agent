@@ -8,6 +8,13 @@ import { fileURLToPath } from "node:url";
 
 const MO = fileURLToPath(new URL("./mo.mjs", import.meta.url));
 
+/** 新流程：confirm 只发起请求，批准是另一步（测试里用 --yes 跳过 TTY） */
+function confirm(ws, taskId) {
+  run(ws, ["task", "confirm", taskId]);
+  return run(ws, ["task", "approve", taskId, "--yes"]);
+}
+
+
 function workspace() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-inbox-"));
   const project = path.join(root, "proj");
@@ -56,7 +63,7 @@ function prepare(ws, executor, title = "加筛选") {
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  runJson(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
   return taskId;
 }
 
@@ -137,4 +144,45 @@ test("--task 过滤", () => {
   const rest = runJson(ws, ["inbox", "pull"]);
   assert.equal(rest.parsed.count, 1);
   assert.equal(rest.parsed.items[0].taskId, first);
+});
+test("inbox pull --wait 到点没有消息：timedOut 且不算失败", () => {
+  const ws = workspace();
+  const started = Date.now();
+  const waited = runJson(ws, ["inbox", "pull", "--wait", "1s"]);
+  const elapsed = Date.now() - started;
+  assert.equal(waited.status, 0, waited.stderr);
+  assert.equal(waited.parsed.count, 0);
+  assert.equal(waited.parsed.timedOut, true);
+  assert.ok(elapsed >= 800, "应该真的等了一会儿，实际 " + elapsed + "ms");
+});
+
+test("inbox pull --wait 有消息时立刻返回", () => {
+  const ws = workspace();
+  const taskId = prepare(ws, DONE_EXECUTOR);
+  runJson(ws, ["task", "dispatch", taskId]);
+
+  const pulled = runJson(ws, ["inbox", "pull", "--wait", "5s"]);
+  assert.equal(pulled.parsed.count, 1);
+  assert.equal(pulled.parsed.timedOut, false);
+});
+
+test("--from 写进卡片与账本，缺省回落到环境变量", () => {
+  const ws = workspace();
+  fs.writeFileSync(path.join(ws.project, "executor.mjs"), DONE_EXECUTOR);
+  runJson(ws, ["project", "add", "."]);
+
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "带来源",
+    "--deliverable", "x",
+    "--exec", "node executor.mjs",
+    "--from", "claude-code",
+  ]);
+  const taskId = created.parsed.taskId;
+  const card = fs.readFileSync(path.join(ws.project, ".mo-agent", "tasks", taskId + ".md"), "utf8");
+  assert.match(card, /from: claude-code/);
+
+  const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
+  const createdEvent = ledger.parsed.events.find((event) => event.type === "task.created");
+  assert.equal(createdEvent.payload.from, "claude-code");
 });

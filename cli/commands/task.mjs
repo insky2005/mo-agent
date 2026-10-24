@@ -2,7 +2,7 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { cardSections, renderCard, validateCard, verifyItems } from "../../core/tasks/card.mjs";
 import { newTaskId } from "../lib/ids.mjs";
-import { all, one } from "../lib/args.mjs";
+import { all, has, one } from "../lib/args.mjs";
 import { emit, table } from "../lib/output.mjs";
 import { moHome, cardPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/store.mjs";
@@ -12,6 +12,10 @@ import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
 import { readRunLog } from "../lib/logs.mjs";
 import { resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
+import readline from "node:readline/promises";
+import { applyDecision, expireOverdue, listRequests, pendingForTask, readRequest, requestConfirmation } from "../lib/approvals.mjs";
+import { cardDigest } from "../../core/manager/approval.mjs";
+import { parseDuration } from "../lib/envelope.mjs";
 
 function resolveContext(ctx, args) {
   return resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
@@ -61,6 +65,9 @@ export function taskCommand(ctx, args) {
 
   if (sub === "create") return createTask(ctx, args, home);
   if (sub === "confirm") return confirmTask(ctx, args, home);
+  if (sub === "approve") return approveTask(ctx, args, home);
+  if (sub === "reject") return rejectTask(ctx, args, home);
+  if (sub === "requests") return requestsTask(ctx, args, home);
   if (sub === "cancel") return cancelTask(ctx, args, home);
   if (sub === "status") return statusTask(ctx, args, home);
   if (sub === "list") return listTask(ctx, args, home);
@@ -68,7 +75,7 @@ export function taskCommand(ctx, args) {
   if (sub === "verify") return verifyTask(ctx, args, home);
   if (sub === "logs") return logsTask(ctx, args);
 
-  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / cancel / status / list / dispatch / verify / logs）");
+  throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / approve / reject / requests / cancel / status / list / dispatch / verify / logs）");
 }
 
 function createTask(ctx, args, home) {
@@ -95,7 +102,7 @@ function createTask(ctx, args, home) {
     status: "draft",
     created: now,
     updated: now,
-    from: "cli",
+    from: one(args.options, "from") || process.env.MO_AGENT_ID || "cli",
     assignee: one(args.options, "assignee", "auto"),
     worker: chosen ? chosen.name : undefined,
     exec: chosen ? chosen.command : one(args.options, "exec"),
@@ -124,7 +131,7 @@ function createTask(ctx, args, home) {
   }
   saveCard(resolved.root, meta, body);
   // CLI 发起的动作记为 agent（主 Agent）；core / worker 的事件由内核与执行者写入
-  appendEvent(home, { type: "task.created", project: meta.project, taskId: id, payload: { title }, actor: "agent" });
+  appendEvent(home, { type: "task.created", project: meta.project, taskId: id, payload: { title, from: meta.from }, actor: "agent" });
 
   const cardFile = cardPath(resolved.root, id);
   const relativeCard = path.relative(resolved.root, cardFile);
@@ -149,12 +156,199 @@ function loadTarget(ctx, args) {
   return { resolved, taskId, card: loadCard(resolved.root, taskId) };
 }
 
+/**
+ * 发起确认请求 —— 不是确认本身。
+ * 确认权属于人：Agent 能发请求，批准必须走 mo task approve（终端）或手机。
+ */
 function confirmTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
-  // 确认是唯一强制由人执行的动作，账本固定记 human
-  const next = transition({ home, root: resolved.root, card, to: "confirmed", payload: {}, actor: "human" });
-  emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
-    ["✓ 已确认", "", "  id     " + taskId, "  状态   " + next.meta.status, "", "下一步（派发）：mo task dispatch " + taskId].join("\n"));
+
+  if (card.meta.status === "confirmed") {
+    emit(args.options, { ok: true, taskId, status: "confirmed", alreadyConfirmed: true }, () =>
+      ["已经确认过了", "", "  id     " + taskId, "", "下一步（派发）：mo task dispatch " + taskId].join("\n"));
+    return 0;
+  }
+
+  const { request, created } = requestConfirmation({
+    home,
+    root: resolved.root,
+    card,
+    requestedBy: { actor: "agent", from: one(args.options, "from") || process.env.MO_AGENT_ID || null },
+    ttlMs: parseDuration(one(args.options, "ttl"), 24 * 60 * 60 * 1000),
+  });
+
+  if (has(args.options, "wait")) {
+    return waitForApproval(ctx, args, home, resolved.root, taskId, request, parseDuration(one(args.options, "wait"), 30000));
+  }
+
+  emit(
+    args.options,
+    { ok: true, pending: true, taskId, requestId: request.id, status: card.meta.status, expiresAt: request.expiresAt, created },
+    () =>
+      [
+        "⏳ 已发出确认请求" + (created ? "" : "（复用未过期的请求）"),
+        "",
+        "  id     " + taskId,
+        "  请求   " + request.id,
+        "  标题   " + card.meta.title,
+        "  过期   " + request.expiresAt,
+        "",
+        "确认权属于人：",
+        "  终端：mo task approve " + taskId,
+        "  手机：等推送后点「允许」",
+        "",
+        "批准前不会派单，卡仍是 draft。",
+      ].join("\n"),
+  );
+  return 0;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** mo task confirm --wait 60s：等决定出现 */
+async function waitForApproval(ctx, args, home, root, taskId, request, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let status = "pending";
+  while (Date.now() < deadline) {
+    const current = readRequest(home, request.id);
+    status = current ? current.status : "expired";
+    if (status !== "pending") break;
+    await sleep(500);
+  }
+
+  const card = loadCard(root, taskId);
+  const approved = status === "approved" || card.meta.status === "confirmed";
+  emit(
+    args.options,
+    { ok: approved, pending: !approved && status === "pending", taskId, requestId: request.id, status, cardStatus: card.meta.status },
+    () =>
+      approved
+        ? ["✓ 已批准", "", "  id     " + taskId, "", "下一步（派发）：mo task dispatch " + taskId].join("\n")
+        : ["⏳ 还没批准（" + status + "）", "", "  id     " + taskId, "  请求   " + request.id, "", "等用户批准后再继续。"].join("\n"),
+  );
+  return approved ? 0 : 1;
+}
+
+function requireTerminal(args) {
+  if (process.stdin.isTTY) return true;
+  if (has(args.options, "yes")) return false;
+  throw new MoError("E_FORBIDDEN", "批准只能在人的终端里做（当前不是 TTY）", {
+    hint: "让用户自己执行；CI 场景确实要的话加 --yes（会失去这道防线）",
+  });
+}
+
+async function askYesNo(lines) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    process.stdout.write(lines.join("\n") + "\n> ");
+    const answer = (await rl.question("")).trim().toLowerCase();
+    return /^(y|yes|是)$/.test(answer);
+  } finally {
+    rl.close();
+  }
+}
+
+/** mo task approve —— 人在终端批准；指纹不一致就作废 */
+async function approveTask(ctx, args, home) {
+  const { resolved, taskId, card } = loadTarget(ctx, args);
+  const interactive = requireTerminal(args);
+
+  const request = pendingForTask(home, taskId);
+  if (!request) {
+    if (card.meta.status === "confirmed") {
+      emit(args.options, { ok: true, taskId, status: "confirmed", alreadyConfirmed: true }, "这张卡已经确认过了");
+      return 0;
+    }
+    throw new MoError("E_NOT_FOUND", "没有待批准的请求", {
+      hint: "先让主 Agent 发起：mo task confirm " + taskId,
+    });
+  }
+
+  if (interactive) {
+    const approved = await askYesNo([
+      "要批准这张卡吗？",
+      "",
+      "  标题   " + card.meta.title,
+      "  项目   " + card.meta.project,
+      "  验收   " + (verifyItems(card.meta).length ? verifyItems(card.meta).length + " 项" : "无"),
+      "  指纹   " + cardDigest(card).slice(0, 12) + "…",
+      "  请求   " + request.id,
+    ]);
+    if (!approved) {
+      applyDecision({ home, root: resolved.root, request, status: "rejected", channel: "terminal", note: "人在终端拒绝" });
+      emit(args.options, { ok: false, taskId, status: "draft", rejected: true }, "已拒绝，卡保持 draft");
+      return 1;
+    }
+  }
+
+  const decided = applyDecision({
+    home,
+    root: resolved.root,
+    request,
+    status: "approved",
+    channel: interactive ? "terminal" : "cli-flag",
+  });
+
+  emit(
+    args.options,
+    { ok: true, taskId, status: "confirmed", requestId: decided.id, channel: decided.decidedBy.channel },
+    () =>
+      [
+        "✓ 已确认",
+        "",
+        "  id     " + taskId,
+        "  请求   " + decided.id,
+        "  通道   " + decided.decidedBy.channel,
+        "",
+        "下一步（派发）：mo task dispatch " + taskId,
+      ].join("\n"),
+  );
+  return 0;
+}
+
+/** mo task reject —— 人在终端拒绝，卡保持 draft */
+function rejectTask(ctx, args, home) {
+  const { resolved, taskId, card } = loadTarget(ctx, args);
+  const interactive = requireTerminal(args);
+  const request = pendingForTask(home, taskId);
+  if (!request) {
+    throw new MoError("E_NOT_FOUND", "没有待批准的请求", { hint: "mo task status " + taskId + " 看当前状态" });
+  }
+  const decided = applyDecision({
+    home,
+    root: resolved.root,
+    request,
+    status: "rejected",
+    channel: interactive ? "terminal" : "cli-flag",
+    note: one(args.options, "note") || null,
+  });
+  emit(args.options, { ok: false, taskId, status: card.meta.status, requestId: decided.id, rejected: true }, () =>
+    ["✗ 已拒绝", "", "  id     " + taskId, "  状态   " + card.meta.status, "  请求   " + decided.id].join("\n"));
+  return 0;
+}
+
+/** mo task requests —— 看待批的确认请求（顺带清过期） */
+function requestsTask(ctx, args, home) {
+  let root = null;
+  try {
+    root = resolveProject({ cwd: ctx.cwd, home }).root;
+  } catch {
+    // 不在项目里也能看待批列表，只是没法顺手把过期卡置 expired
+  }
+  if (root) expireOverdue({ home, root });
+
+  const pending = listRequests(home).filter((item) => item.status === "pending");
+  emit(
+    args.options,
+    { ok: true, total: pending.length, requests: pending },
+    () => {
+      if (!pending.length) return "没有待批准的确认请求";
+      const rows = pending.map((item) => [item.id, item.taskId, item.title, item.expiresAt]);
+      return "待批准的确认请求（" + pending.length + " 条）\n\n" + table(rows, ["请求", "任务", "标题", "过期"]) + "\n\n批准：mo task approve <taskId>";
+    },
+  );
   return 0;
 }
 
@@ -169,6 +363,7 @@ function cancelTask(ctx, args, home) {
 function statusTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   const events = readEvents(home).filter((event) => event.taskId === taskId).slice(-8);
+  const pending = pendingForTask(home, taskId);
   const payload = {
     taskId,
     status: card.meta.status,
@@ -177,6 +372,7 @@ function statusTask(ctx, args, home) {
     project: card.meta.project,
     root: resolved.root,
     verify: verifyItems(card.meta),
+    ...(pending ? { approval: { requestId: pending.id, expiresAt: pending.expiresAt } } : {}),
     events,
   };
   emit(args.options, payload, () =>
@@ -185,6 +381,7 @@ function statusTask(ctx, args, home) {
       "",
       "  项目   " + card.meta.project + "  (" + resolved.root + ")",
       "  验收   " + (payload.verify.length ? payload.verify.length + " 项 · " + payload.verified : "无"),
+      ...(pending ? ["  待批   " + pending.id + "   mo task approve " + taskId] : []),
       "",
       "  最近事件",
       ...events.map((event) => "    " + event.at + "  " + event.type),

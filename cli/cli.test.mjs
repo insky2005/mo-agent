@@ -8,6 +8,13 @@ import { fileURLToPath } from "node:url";
 
 const MO = fileURLToPath(new URL("./mo.mjs", import.meta.url));
 
+/** 新流程：confirm 只发起请求，批准是另一步（测试里用 --yes 跳过 TTY） */
+function confirm(ws, taskId) {
+  run(ws, ["task", "confirm", taskId]);
+  return run(ws, ["task", "approve", taskId, "--yes"]);
+}
+
+
 function workspace() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-cli-"));
   const project = path.join(root, "proj");
@@ -81,7 +88,19 @@ test("建卡 → 确认 → 派单 → done，账本可查", () => {
   const taskId = created.parsed.taskId;
   assert.match(created.parsed.path, /\.mo-agent\/tasks\//);
 
-  const confirmed = runJson(ws, ["task", "confirm", taskId]);
+  // 新流程：confirm 只发起授权请求，批准是独立一步
+  const requested = runJson(ws, ["task", "confirm", taskId]);
+  assert.equal(requested.status, 0, requested.stderr);
+  assert.equal(requested.parsed.pending, true);
+  assert.match(requested.parsed.requestId, /^a_/);
+
+  const again = runJson(ws, ["task", "confirm", taskId]);
+  assert.equal(again.parsed.requestId, requested.parsed.requestId, "重复 confirm 应复用同一个请求");
+
+  const requests = runJson(ws, ["task", "requests"]);
+  assert.equal(requests.parsed.total, 1);
+
+  const confirmed = runJson(ws, ["task", "approve", taskId, "--yes"]);
   assert.equal(confirmed.status, 0, confirmed.stderr);
   assert.equal(confirmed.parsed.status, "confirmed");
 
@@ -118,7 +137,7 @@ test("执行者没写回执 → blocked(missing_receipt)，退出码 1", () => {
   run(ws, ["project", "add", "."]);
   const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y", "--exec", "node executor.mjs"]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
 
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.status, 1);
@@ -159,7 +178,7 @@ test("回执不合法 → blocked(bad_receipt)", () => {
 
   run(ws, ["project", "add", "."]);
   const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y", "--exec", "node executor.mjs"]);
-  run(ws, ["task", "confirm", created.parsed.taskId]);
+  confirm(ws, created.parsed.taskId);
   const dispatched = runJson(ws, ["task", "dispatch", created.parsed.taskId]);
   assert.equal(dispatched.parsed.status, "blocked");
   assert.equal(dispatched.parsed.reason, "bad_receipt");
@@ -177,7 +196,7 @@ test("验收 run:false → blocked + verify_failed，账本留下 task.verify_fa
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
 
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.status, 1);
@@ -210,7 +229,7 @@ test("验收 run:true → done + verified，账本留下 task.verified", () => {
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
 
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.status, 0, dispatched.stderr);
@@ -239,7 +258,7 @@ test("mo task verify 对已 done 的卡重跑验收，失败只改 verified 不�
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.parsed.verified, "verified");
 
@@ -283,7 +302,7 @@ test("回执可以后补：submit + apply 把 blocked 救回 done", () => {
     "--exec", "node executor.mjs",
   ]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
 
   const first = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(first.parsed.status, "blocked");
@@ -306,12 +325,15 @@ test("账本记录发起者：cli 动作记 agent，确认记 human", () => {
 
   const created = runJson(ws, ["task", "create", "--title", "x", "--deliverable", "y"]);
   const taskId = created.parsed.taskId;
-  const ok = run(ws, ["task", "confirm", taskId]);
+  const requested = run(ws, ["task", "confirm", taskId]);
+  assert.equal(requested.status, 0, requested.stderr);
+  const ok = run(ws, ["task", "approve", taskId, "--yes"]);
   assert.equal(ok.status, 0, ok.stderr);
 
   const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
   const actors = Object.fromEntries(ledger.parsed.events.map((event) => [event.type, event.actor]));
   assert.equal(actors["task.created"], "agent");
+  assert.equal(actors["task.confirm_requested"], "agent");
   assert.equal(actors["task.confirmed"], "human");
 });
 test("派单会留下完整日志，mo task logs 能读到执行者输出", () => {
@@ -321,7 +343,7 @@ test("派单会留下完整日志，mo task logs 能读到执行者输出", () =
 
   const created = runJson(ws, ["task", "create", "--title", "log", "--deliverable", "y", "--exec", "node executor.mjs"]);
   const taskId = created.parsed.taskId;
-  run(ws, ["task", "confirm", taskId]);
+  confirm(ws, taskId);
   const dispatched = runJson(ws, ["task", "dispatch", taskId]);
   assert.equal(dispatched.status, 0, dispatched.stderr);
 

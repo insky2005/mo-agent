@@ -126,7 +126,9 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo project agent [--remove]` | 只写/删 Agent 说明文件 |
 | `mo project list` | 已登记项目 |
 | `mo task create …` | 建卡（draft） |
-| `mo task confirm <id>` | 确认（只有人能拍板） |
+| `mo task confirm <id>` | 发起确认请求（不改状态） |
+| `mo task approve \| reject <id>` | 人批准 / 拒绝（需 TTY） |
+| `mo task requests` | 待批准的请求 |
 | `mo task dispatch <id>` | 派单并等待，含自动验收 |
 | `mo task verify <id>` | 对已 done 的卡重跑验收 |
 | `mo task logs <id> [--tail N]` | 执行者日志 |
@@ -144,13 +146,14 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo memory accept \| reject <id>` | 采纳 / 丢弃候选（冲突时拒绝写入） |
 | `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
 | `mo mcp` | stdio MCP 服务（给主 Agent 接） |
+| `mo agent describe \| add` | 输出契约 / 合并 MCP 配置 |
 | `mo doctor` | 自检 |
 | `mo help` | 帮助 |
 
 ## 5. 任务生命周期
 
 ```
-draft ──confirm──▶ confirmed ──dispatch──▶ running ──┬─▶ done
+draft ──approve──▶ confirmed ──dispatch──▶ running ──┬─▶ done
                                                        ├─▶ failed
                                                        ├─▶ blocked ──dispatch──▶ running
                                                        └─▶ canceled / expired
@@ -158,7 +161,7 @@ draft ──confirm──▶ confirmed ──dispatch──▶ running ──┬
 
 | 状态 | 意思 | 下一步 |
 |---|---|---|
-| `draft` | 刚建，等人拍板 | `mo task confirm` |
+| `draft` | 刚建，等人拍板 | 先 `mo task confirm` 发请求，再由人 `mo task approve` |
 | `confirmed` | 可以派了 | `mo task dispatch` |
 | `running` | 执行者在跑 | 等 |
 | `done` | 回执合法 + 验收通过 | 验收没过会变 `blocked` |
@@ -325,9 +328,17 @@ npx skills add insky2005/mo-agent
 }
 ```
 
-挂上之后，主 Agent 能用的工具是：`task_create`、`task_dispatch`、`task_status`、`inbox_pull`、`ledger_query`、`memory_recall`、`memory_propose`。
+挂上之后，主 Agent 能用的工具是：`task_create`、`task_confirm`、`task_dispatch`、`task_status`、`inbox_pull`、`ledger_query`、`memory_recall`、`memory_propose`。
 
-**故意没有** `task_confirm`（确认得你来）和 `memory_accept`（记忆入库得你拍板）。每个工具调用是一次 `mo … --json` 子进程，所以 `task_dispatch` 会一直阻塞到执行者跑完。
+不想手写配置也可以：
+
+```bash
+mo agent add --mcp ./mcp.json    # 合并进任意 mcpServers 配置，幂等 + 备份
+mo agent describe --format prompt # 只能读文字的 Agent，直接粘这段
+mo agent describe --json          # 让 Agent 自己读能力清单
+```
+
+**故意没有** `task_approve` / `task_reject`（批准得你来）和 `memory_accept`（记忆入库得你拍板）。`task_confirm` 只发请求，不改变卡片状态。每个工具调用是一次 `mo … --json` 子进程，所以 `task_dispatch` 会一直阻塞到执行者跑完。
 
 ## 11. 知识与收件箱
 
@@ -381,6 +392,7 @@ mo inbox pull --task t_x # 只拉这一条
 | 项目登记表 | `~/.mo-agent/projects.json` |
 | 自定义执行者 | `~/.mo-agent/workers.json` |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
+| 确认请求 | `~/.mo-agent/approvals/<a_…>.json` |
 | 知识库 | `~/.mo-agent/knowledge/`（`MO_AGENT_KNOWLEDGE` 可覆盖） |
 | 记忆候选 | `~/.mo-agent/knowledge/_candidates/<id>.json` |
 | 收件箱 | `~/.mo-agent/inbox/pending/`、`inbox/pulled/` |
@@ -405,6 +417,8 @@ mo inbox pull --task t_x # 只拉这一条
 | `E_ASSIGNEE_UNSUPPORTED` | 执行者命令未安装，或与要求不符 |
 | `E_NO_RECEIPT` / `E_BAD_RECEIPT` | 回执缺失 / 不合法 |
 | `E_NOT_DONE` | 只有 done 的卡能重跑验收 |
+| `E_FORBIDDEN` | 批准只能在人的终端里做（或没 TTY） |
+| `E_CARD_CHANGED` | 批准前卡片被改，批准作废 |
 | `E_CARD_INVALID` / `E_CARD_TOO_LARGE` | 卡不合法 / 超过 8KB |
 | `E_TRANSITION` | 状态机不允许这次转换 |
 
@@ -424,6 +438,7 @@ mo inbox pull --task t_x # 只拉这一条
 
 - 只支持 macOS / Linux；Windows 未验证。
 - 派单是同步阻塞的：执行者跑多久，命令就等多久。
-- 确认权目前是流程约定；daemon 持有确认权在 P4。
+- 批准要走 `mo task approve`：要求 TTY，并校验卡片指纹（批准前改卡会导致作废）；`--yes` 是给 CI 的逃生口，会绕过这道防线。
+- 手机/桌面批准还没写进同一个决定文件，目前只有终端这一条批准通道。
 - 没有 daemon，也没有推送：任务的结束通知落在收件箱，主 Agent 需要主动 `mo inbox pull`，或查 `status` / `ledger`。
 - 记忆回流还是"人裁决"：候选不会自动入库，得跑 `mo memory accept`。

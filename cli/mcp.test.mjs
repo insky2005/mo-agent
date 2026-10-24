@@ -98,10 +98,12 @@ test("tools/list 暴露工具，但不暴露 task_confirm（B4.5）", async () =
   s.send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
   const reply = await s.next();
   const names = reply.result.tools.map((tool) => tool.name);
-  for (const name of ["task_create", "task_dispatch", "task_status", "inbox_pull", "ledger_query", "memory_recall", "memory_propose"]) {
+  for (const name of ["task_create", "task_confirm", "task_dispatch", "task_status", "inbox_pull", "ledger_query", "memory_recall", "memory_propose"]) {
     assert.ok(names.includes(name), "缺少工具 " + name);
   }
-  assert.ok(!names.includes("task_confirm"), "确认权不能给主 Agent");
+  // confirm 只是发起请求，批准必须由人做，所以 approve 永远不暴露
+  assert.ok(!names.includes("task_approve"), "批准权不能给主 Agent");
+  assert.ok(!names.includes("task_reject"), "拒绝权不能给主 Agent");
   assert.ok(!names.includes("memory_accept"), "采纳记忆属于人的裁决");
   for (const tool of reply.result.tools) {
     assert.equal(tool.inputSchema.type, "object");

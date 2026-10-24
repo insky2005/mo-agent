@@ -42,6 +42,7 @@
 │   └── _candidates/*.json                      # 待裁决的候选，不进召回
 ├── ledger/2026-10.jsonl                        # 全局账本
 ├── inbox/pending/*.json  inbox/pulled/         # 待主 Agent 拉取的通知（B9.3）
+├── approvals/a_*.json                          # 确认请求与裁决（B4.6）
 ├── projects.json                               # 项目登记表（指针）
 └── scratch/tasks/                              # 无项目兜底（慎用）
 
@@ -99,6 +100,7 @@ canceled            canceled                failed                  └─> canc
   └─ 24h 未确认 → expired
 ```
 
+- `confirm` **不改变状态**：它只发起授权请求（B4.6），`draft → confirmed` 只由 `approve` 触发；
 - **终态**：`done` / `failed` / `canceled` / `expired`；
 - `blocked` **不是终态**：等外部输入（人决策、重试、补权限），可回到 `running` 或走向终态；
 - `verified` 是**独立字段**（`unverified` / `verified` / `verify_failed`），不是状态，避免与状态语义互相污染。
@@ -141,11 +143,13 @@ canceled            canceled                failed                  └─> canc
 
 | 编号 | 条件 | 结果 | 错误码 |
 |---|---|---|---|
-| B4.1 | 人确认 | `draft → confirmed`，记录确认人和时间 | — |
+| B4.1 | 人批准 | `draft → confirmed`，记 `requestId`、通道与卡片指纹 | — |
 | B4.2 | 人修改 | 回到 `draft`，需重新确认 | — |
 | B4.3 | 人取消 | `canceled`（终态） | — |
 | B4.4 | 24h 未确认 | `expired`（终态），不自动派发 | `E_NOT_CONFIRMED` |
-| B4.5 | 主 Agent 试图确认 | 拒绝（它没有 `task_confirm` 工具） | `E_FORBIDDEN` |
+| B4.5 | 主 Agent 试图批准 | 拒绝：`task_approve` 不暴露给任何 Agent，CLI 也要求 TTY | `E_FORBIDDEN` |
+| B4.6 | 主 Agent 发起确认请求 | 写 `~/.mo-agent/approvals/`，卡保持 `draft`，等人批准 | — |
+| B4.7 | 批准前卡片被改 | 指纹不一致，批准作废，请求标 `stale` | `E_CARD_CHANGED` |
 
 ### 6.5 派单（B5）
 
@@ -278,6 +282,7 @@ canceled            canceled                failed                  └─> canc
 | `E_CONFIRM_REQUIRED` | 需要人确认 | 人 |
 | `E_CARD_INVALID` / `E_CARD_TOO_LARGE` | 卡不合法 | 主 Agent 修 |
 | `E_NOT_CONFIRMED` / `E_FORBIDDEN` | 越权/跳步 | 拒绝 |
+| `E_CARD_CHANGED` | 批准前卡片被改，批准作废 | 人重新发起 |
 | `E_ASSIGNEE_*` / `E_NO_EXECUTOR` | 执行者不可用 | 人定 |
 | `E_BUDGET` / `E_DEPTH` / `E_SCOPE` | 约束 | 拒绝 |
 | `E_DISPATCH_FAILED` / `E_EXECUTOR_CRASHED` / `E_TIMEOUT` | 执行异常 | core 重试/升级 |
@@ -292,7 +297,9 @@ canceled            canceled                failed                  └─> canc
 | 操作 | CLI | MCP |
 |---|---|---|
 | 建卡 | `mo task create --project . --title ... --json` | `task_create` |
-| 确认 | `mo task confirm t_x` | **不暴露给主 Agent** |
+| 发起确认请求 | `mo task confirm t_x` | `task_confirm`（只发请求） |
+| 批准 / 拒绝 | `mo task approve\|reject t_x` | **不暴露给任何 Agent** |
+| 待批列表 | `mo task requests` | — |
 | 派单 | `mo task dispatch t_x --exec "claude -p"` | `task_dispatch` |
 | 状态 | `mo task status t_x` | `task_status` |
 | 收件箱 | `mo inbox pull` | `inbox_pull` |
@@ -367,7 +374,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 阶段 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
-| **P1** | 主 Agent 接入：skill + CLI + `mo mcp`（HTTP 传输与 inbox 唤醒未做） | 主 Agent 全程不离开对话框完成一轮 | 🟡 skill 与 stdio MCP 已落地，缺少自动唤醒 |
+| **P1** | 主 Agent 接入：skill + CLI + `mo mcp`（HTTP 传输未做） | 任意 Agent 接入后能跑完一轮 | 🟡 skill / stdio MCP / `mo agent describe` / `agent add --mcp` / `inbox pull --wait` 已落地；HTTP 传输未做 |
 | **P2** | `verify` 执行器 + `blocked` 升级（watchdog 未做） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify`） |
 | **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 | ✅ 已落地（`core/knowledge/` + `mo memory`：recall 注入、propose、候选区、冲突裁决） |
 | **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 | ⬜ 未开始 |
@@ -447,11 +454,38 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | `memory_recall` | `mo memory recall … --json` |
 | `memory_propose` | `mo memory propose --file - --json`（走 stdin 传 JSON） |
 
-**刻意不暴露**：`task_confirm`（B4.5，确认权属于人）、`memory_accept`（B10.4，裁决属于人）、`receipt_submit`（回执属于执行者）。
+**刻意不暴露**：`task_approve` / `task_reject`（B4.5，批准权属于人）、`memory_accept`（B10.4，裁决属于人）、`receipt_submit`（回执属于执行者）。`task_confirm` 暴露，但它只发起请求，不改变状态。
 
 传输沿用 MCP stdio 约定：一行一条 JSON-RPC，日志只走 stderr；支持 `initialize` / `tools/list` / `tools/call` / `ping`，未知方法与坏 JSON 分别回 `-32601` / `-32700`。工具失败不回 JSON-RPC error，而是 `isError: true` + 文本（与 `mo` 的 `[E_CODE]` 输出一致）。
 
 **未做**：Streamable HTTP `/mcp`、`mo agent add <agent>` 写各家 MCP 配置、tool 级权限与审计。
+
+### 12.4 主 Agent 接口层（2026-11）
+
+**一条原则**：mo 不认识任何具体 Agent。接入只有三种可粘贴物 + 一个可等待的收件箱。
+
+| 件 | 命令 | 说明 |
+|---|---|---|
+| 契约 | `mo agent describe --json` | 工具清单 / 禁止项 / 铁律，机器可读 |
+| 契约 | `mo agent describe --format prompt\|skill\|agent-block\|mo-doc` | 同一份内容的不同渲染，由 `core/manager/contract.mjs` 生成 |
+| 接入 | `mo agent add --mcp <file>` | 合并 `mcpServers`，幂等 + `.bak-<时间>` 备份 |
+| 接入 | `mo agent add --prompt` | 打到 stdout，自己贴到没有配置文件的地方 |
+| 唤醒 | `mo inbox pull --wait 60s` | 有就立刻返回，没有就等到超时；不依赖推送与 hook |
+| 身份 | `mo task create --from <id>` / `MO_AGENT_ID` | 写进卡片 `from` 与账本 `task.created.payload.from` |
+
+**文案真源**：`core/manager/contract.mjs`。`skills/mo/SKILL.md`、`AGENTS.md` 内联块、`.mo-agent/MO.md`、`--format prompt` 全部由它渲染，`scripts/gen-skill.mjs` 负责生成 SKILL.md 与代码内联副本。`core/manager/contract.test.mjs` 会拦住两类腐化：工具漏写、文案里写死 Agent 名字。
+
+**确认权（B4）**：
+
+| 动作 | 谁 | 怎么保证 |
+|---|---|---|
+| 发起请求 | 任何 Agent | `mo task confirm`，只写 `approvals/`，状态不变 |
+| 批准 | 人 | `mo task approve` 要求 TTY（`--yes` 是显式逃生口），并校验卡片指纹 |
+| 拒绝 | 人 | `mo task reject`，卡保持 `draft` |
+
+指纹 = `sha256(标题 + 正文 + 验收 + workdir + timeout …)`，不含状态与时间。批准时指纹不一致 → `E_CARD_CHANGED`，请求标 `stale`，防止"批准完再偷改卡"。
+
+**仍未做**：手机/桌面批准写入同一个决定文件（现在只有终端 `mo task approve`）、daemon 启动时补推 pending 请求、Streamable HTTP `/mcp`。
 
 ## 13. 安装与首次使用
 

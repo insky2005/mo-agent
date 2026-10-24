@@ -11,10 +11,10 @@ import { listCandidates } from "./candidates.mjs";
 const SPEC = {
   project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
   task: {
-    subs: ["create", "confirm", "cancel", "status", "list", "dispatch", "verify", "logs"],
+    subs: ["create", "confirm", "approve", "reject", "requests", "cancel", "status", "list", "dispatch", "verify", "logs"],
     flags: [
       "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-      "--background", "--assignee", "--worker", "--exec", "--timeout", "--json",
+      "--background", "--assignee", "--worker", "--exec", "--timeout", "--wait", "--ttl", "--note", "--from", "--json",
     ],
   },
   receipt: { subs: ["submit", "apply"], flags: ["--file", "--dry-run"] },
@@ -29,15 +29,16 @@ const SPEC = {
   },
   inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
   mcp: { subs: [], flags: ["--json"] },
+  agent: { subs: ["describe", "add"], flags: ["--format", "--mcp", "--prompt", "--name", "--json"] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
   "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires", "--scope", "--peek",
-  "--title", "--trigger", "--tag", "--body", "--source", "--id",
+  "--title", "--trigger", "--tag", "--body", "--source", "--id", "--format", "--mcp", "--name", "--from",
 ]);
 
 function startsWith(prefix) {
@@ -121,7 +122,7 @@ export function complete(ctx = {}) {
   const positionals = tokens.slice(2);
   if (positionals.length > 0) return [];
 
-  if (group === "task" && ["confirm", "cancel", "status", "dispatch", "verify"].includes(sub)) {
+  if (group === "task" && ["confirm", "approve", "reject", "cancel", "status", "dispatch", "verify"].includes(sub)) {
     return taskItems(cwd).filter(startsWith(current));
   }
   if (group === "receipt" && ["submit", "apply"].includes(sub)) return taskItems(cwd).filter(startsWith(current));

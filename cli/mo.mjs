@@ -18,6 +18,7 @@ import { skillCommand } from "./commands/skill.mjs";
 import { memoryCommand } from "./commands/memory.mjs";
 import { inboxCommand } from "./commands/inbox.mjs";
 import { mcpCommand } from "./commands/mcp.mjs";
+import { agentCommand } from "./commands/agent-add.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
@@ -32,7 +33,9 @@ const HELP = [
   "  mo project list                 查看已登记项目",
   "",
   "  mo task create --title 标题 --deliverable 产出 [--verify \"run:命令\"] [--worker 执行者] [--exec 命令]",
-  "  mo task confirm <id>            确认任务卡（确认权属于人）",
+  "  mo task confirm <id>            发起确认请求（不改状态；批准由人做）",
+  "  mo task approve|reject <id>     人在终端批准 / 拒绝（需 TTY，--yes 跳过）",
+  "  mo task requests                查看待批准的确认请求",
   "  mo task dispatch <id> [--worker 执行者] [--exec 命令]   派发并等待回执",
   "  mo task verify <id>             对已 done 的卡重跑验收",
   "  mo task status <id>             查看状态与最近事件",
@@ -53,6 +56,9 @@ const HELP = [
   "  mo inbox pull [--peek]          拉取任务通知（完成 / 阻塞 / 失败），拉完归档",
   "",
   "  mo mcp                          stdio MCP 服务（主 Agent 用，一行一条 JSON-RPC）",
+  "  mo agent describe [--format …]   输出契约（prompt / skill / agent-block / mo-doc）",
+  "  mo agent add --mcp <配置文件>     把 mo 合并进任意 mcpServers 配置（幂等 + 备份）",
+  "  mo agent add --prompt            只打印可粘贴的提示词",
   "  mo help                         显示本帮助",
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
@@ -74,6 +80,7 @@ const ROUTES = {
   memory: memoryCommand,
   inbox: inboxCommand,
   mcp: mcpCommand,
+  agent: agentCommand,
 };
 
 async function main(argv) {

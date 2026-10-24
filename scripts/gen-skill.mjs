@@ -1,38 +1,46 @@
 #!/usr/bin/env node
 /**
- * 把 skills/mo/SKILL.md 内联成 cli/lib/skill-content.mjs。
+ * 生成技能产物，两件：
+ *  1. skills/mo/SKILL.md      ← 由 core/manager/contract.mjs 渲染（唯一真源）
+ *  2. cli/lib/skill-content.mjs ← 把 SKILL.md 内联进代码（单文件二进制里没有 skills/ 目录）
  *
- * 为什么内联：单文件二进制里没有 skills/ 目录，`mo skill install` 只能靠代码里的副本。
- * 源文件仍是 SKILL.md；这个生成物由 npm run check 校验，不要手改。
+ * 两处都是生成物，npm run check 会校验是否最新，不要手改。
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderSkill } from "../core/manager/contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const source = path.join(root, "skills", "mo", "SKILL.md");
-const target = path.join(root, "cli", "lib", "skill-content.mjs");
+const skillFile = path.join(root, "skills", "mo", "SKILL.md");
+const inlineFile = path.join(root, "cli", "lib", "skill-content.mjs");
 
-const markdown = fs.readFileSync(source, "utf8");
+const markdown = renderSkill();
 const generated =
-  "// 由 scripts/gen-skill.mjs 从 skills/mo/SKILL.md 生成，勿手改。\n" +
+  "// 由 scripts/gen-skill.mjs 从 core/manager/contract.mjs 生成，勿手改。\n" +
   "export const SKILL_NAME = \"mo\";\n" +
   "export const SKILL_MD = " + JSON.stringify(markdown) + ";\n";
 
 if (process.argv.includes("--check")) {
-  let current = "";
-  try {
-    current = fs.readFileSync(target, "utf8");
-  } catch {
-    current = "";
+  const problems = [];
+  for (const [file, expected] of [[skillFile, markdown], [inlineFile, generated]]) {
+    let current = "";
+    try {
+      current = fs.readFileSync(file, "utf8");
+    } catch {
+      current = "";
+    }
+    if (current !== expected) problems.push(path.relative(root, file));
   }
-  if (current !== generated) {
-    console.error("[skill] cli/lib/skill-content.mjs 已过期，运行：npm run gen:skill");
+  if (problems.length) {
+    console.error("[skill] 已过期：" + problems.join(", ") + "，运行：npm run gen:skill");
     process.exit(1);
   }
-  console.log("[skill] 内联内容已是最新");
+  console.log("[skill] 技能文案已是最新");
 } else {
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, generated);
-  console.log("[skill] 已写入 " + path.relative(root, target));
+  fs.mkdirSync(path.dirname(skillFile), { recursive: true });
+  fs.writeFileSync(skillFile, markdown);
+  fs.mkdirSync(path.dirname(inlineFile), { recursive: true });
+  fs.writeFileSync(inlineFile, generated);
+  console.log("[skill] 已写入 " + path.relative(root, skillFile) + " 与 " + path.relative(root, inlineFile));
 }

@@ -10,14 +10,14 @@ metadata:
 
 # mo
 
-用 `mo` 把"聊出来的想法"固化成任务卡，再派给执行 Agent（Claude / Codex / Qoder / pi / qwen），最后按账本汇报。
+用 `mo` 把"聊出来的想法"固化成任务卡，派给任意执行 Agent，最后按账本汇报。
 
 ## 前提
 
-```bash
+`BT`bash
 mo --version          # 不可用 → 见下面的「mo 还没装」
 mo doctor             # 顺带确认当前目录属于某个项目
-```
+`BT`
 
 当前目录不是项目时，先问用户是否要 `mo project init .`，**不要自动建**。
 
@@ -27,27 +27,25 @@ mo doctor             # 顺带确认当前目录属于某个项目
 
 #### 用户同意由你安装
 
-```bash
+`BT`bash
 TMP="$(mktemp)"
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh -o "$TMP"
 bash "$TMP"
 
 ~/.local/bin/mo --version     # PATH 可能还没刷新，先用绝对路径验证
 ~/.local/bin/mo skill list    # 确认技能也装上了
-```
+`BT`
 
 装完告诉用户两件事：
 
 1. **重开终端**后 `mo` 才会在 PATH 里；当前会话用绝对路径 `~/.local/bin/mo` 也能继续；
 2. 新终端里执行 `mo --version` 确认。
 
-之后用绝对路径继续建卡派单是可以的，不需要等用户重开。
-
 #### 用户不同意，或想自己装
 
 给出两条命令，然后停下：
 
-```bash
+`BT`bash
 # Release 单文件二进制（不需要 Node；加 --with-skill 会顺带装技能）
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 
@@ -55,61 +53,60 @@ curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/ins
 git clone https://github.com/insky2005/mo-agent.git
 cd mo-agent
 bash scripts/install-cli.sh
-```
-
-源码方式里，没有 bun 时安装脚本会退化为软链到仓库（需要 Node）；有 bun 则构建单文件二进制。
+`BT`
 
 **不要 `curl … | bash` 一把梭**：先把脚本下到临时文件，让用户有机会先看一眼再执行。
 
 ## 什么时候动手
 
-用户输入 `/mo`、提到本技能、或在相关话题里跟你说话——**默认就是"聊"**：正常对话，不建卡、不派单、不碰任何 `mo` 命令。技能被加载不代表要立刻执行动作。
+用户提到本技能、或在相关话题里跟你说话——**默认就是"聊"**：正常对话，不建卡、不派单、不碰任何 `mo` 命令。技能被加载不代表要立刻执行动作。
 
 只有出现明确的信号才进下一步：
 
 | 信号 | 动作 |
 |---|---|
-| 要落地（"开始做 / 落地 / 派给 X / 就这么办"） | 建卡 → 回显 → 等确认 → 派单 |
-| 问进度（"怎么样了 / 做完了吗"） | 先 `mo inbox pull` 看有没有到期的通知，再 `mo task status` 按事实汇报 |
-| 纠正你的做法 | 问用户要不要改，不自己改卡；确认后可用 `mo memory propose` 记成偏好候选 |
-| 其它情况（默认） | 只聊 |
+| 要落地（开始做 / 落地 / 派给 X / 就这么办） | 建卡 → 回显 → 等批准 → 派单 |
+| 问进度（怎么样了 / 做完了吗） | 先 mo inbox pull 看通知，再 mo task status 按事实汇报 |
+| 纠正你的做法 | 问用户要不要改；同意后用 mo memory propose 记成候选 |
+| 其它情况（默认） | 只聊，不碰任何 mo 命令 |
 
 ## 建卡
 
 先把三个字段问清楚：**交付物、验收标准、边界**。缺验收标准要明确提醒，不要静默建卡。
 
-```bash
+`BT`bash
 mo task create \
   --title "一句话说明" \
   --deliverable "可验收的产出" \
   --verify "run:npm test -- --filter x" \
   --verify "check:dist/index.html 存在" \
   --boundary "不要改后端接口" \
-  --worker claude \
+  --worker <执行者> \
   --json
-```
+`BT`
 
 `--worker` 用内置执行者（`mo worker list` 看清单和本机是否安装）；需要额外参数时改用 `--exec "<完整命令>"`，两者互斥。
 
-## 派单前必须回显
+## 派单前必须回显，批准由人做
 
-把卡摘要给用户，然后**停下等确认**：
+把卡摘要给用户，然后**停下等批准**：
 
-```text
+`BT`text
 任务：t_01H…
-项目：mo-agent
-交付：app/web/tasks.html 加筛选栏
-验收：run npm test --filter tasks / human 视觉确认
-执行：claude（claude -p …）
+项目：<项目名>
+交付：<可验收的产出>
+验收：run npm test / human 视觉确认
+执行：<执行者>
 派发吗？
-```
+`BT`
 
-用户确认后：
+用 `mo task confirm <taskId>` **发起确认请求**（不改变状态）。批准只能由人完成：
 
-```bash
-mo task confirm <taskId>
-mo task dispatch <taskId> --json
-```
+`BT`bash
+mo task confirm <taskId>         # 你发起请求，返回 pending
+# 用户在终端：mo task approve <taskId>     （或手机上点允许）
+mo task dispatch <taskId> --json # 批准后才能派
+`BT`
 
 `dispatch` 是**前台等待**的：执行者跑完才返回，可能几分钟。可以先把"已开始"告诉用户。
 
@@ -117,11 +114,11 @@ mo task dispatch <taskId> --json
 
 只引用工具返回的事实，不要替执行者说"完成了"。
 
-```bash
+`BT`bash
 mo inbox pull --json              # 任务结束/阻塞的通知，拉完归档
 mo task status <taskId> --json
 mo ledger query --task <taskId> --json
-```
+`BT`
 
 - `done` + `verified: verified` → 才算真的完成；
 - `done` + `verified: unverified` → 卡上没有能自动跑的验收项，转述给用户确认；
@@ -130,32 +127,34 @@ mo ledger query --task <taskId> --json
 
 ## 账本里的发起者
 
-账本的 `发起` 列只有四种值：
+账本的 `actor` 只有四种值：
 
-- `agent`：通过 `mo task ...` 发起的动作（建卡、派单、取消）
-- `human`：确认（`mo task confirm`），只有这一种动作强制由人拍板
-- `core`：内核自己的判定（完成、阻塞、验收）
+- `agent`：通过 `mo task ...` 发起的动作（建卡、派单、发起确认请求）
+- `human`：只用于批准（`mo task approve`）
+- `core`：内核判定（完成、阻塞、验收）
 - `worker`：执行者交回执
 
-不要替用户执行确认——不是怕记录，是确认权在用户手里。
+不要替用户批准——确认权在用户手里。
 
 ## 铁律
 
-1. **没确认不派单**：`dispatch` 会返回 `E_NOT_CONFIRMED`；
-2. **没拿到 taskId 不许说"已派发"**；
-3. **执行者退出码 0 但没有回执 = 未完成**（`blocked(missing_receipt)`）；
-4. **不要手改** `.mo-agent/tasks/*.md`，除非用户明确要求；
-5. **不要自己写回执**——回执属于执行者，伪造等于把系统变成摆设；
-6. 一次对话最多派 3 个任务；不确定就停下来问；
-7. **安装软件、修改 shell 配置前必须得到用户明确同意**，不做"顺手就装了"。
+1. **没确认不派单：dispatch 会返回 E_NOT_CONFIRMED；confirm 只是发起请求**
+2. **没拿到 taskId 不许说"已派发"**
+3. **执行者退出码 0 但没有回执 = 未完成（blocked/missing_receipt）**
+4. **不要手改 .mo-agent/tasks/*.md，除非用户明确要求**
+5. **不要自己写回执**
+6. **一次对话最多派 3 个任务；不确定就停下来问**
+7. **安装软件、修改 shell 配置前必须得到明确同意**
 
 ## 常见失败
 
 | 返回 | 意思 | 你说什么 |
 |---|---|---|
-| `E_NOT_CONFIRMED` | 卡还没确认 | "还差确认，要现在确认吗？" |
-| `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问是否 `mo project init .` |
-| `E_NO_EXECUTOR` | 卡里没执行者 | 问用哪个 `--worker` |
-| `blocked(missing_receipt)` | 执行者没写回执 | 转述 `outputTail`（常见：未登录） |
-| `blocked(bad_receipt)` | 回执不合法 | 转述 `errors` |
+| `E_NOT_CONFIRMED` | 卡还没确认 | 还差批准，要现在发起吗？ |
+| `E_FORBIDDEN` | 批准只能在人的终端里做 | 请用户自己执行 mo task approve |
+| `E_CARD_CHANGED` | 批准前卡片被改过 | 让用户重新发起确认 |
+| `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问是否 mo project init . |
+| `E_NO_EXECUTOR` | 卡里没执行者 | 问用哪个 --worker 或 --exec |
+| `blocked(missing_receipt)` | 执行者没写回执 | 转述 outputTail（常见：未登录） |
+| `blocked(bad_receipt)` | 回执不合法 | 转述 errors |
 | `blocked(timeout)` | 超时 | 问重试还是换执行者 |
