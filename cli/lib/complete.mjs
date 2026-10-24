@@ -1,6 +1,6 @@
 /**
- * TAB 补全的候选生成。纯计算：读注册表与任务卡，不改任何东西。
- * 被 `mo __complete` 调用，由 shells 的补全脚本转给 shell。
+ * TAB 补全：按「组 → 子命令 → 该子命令自己的 flag」组织。
+ * 纯计算，读注册表与任务卡，不改任何东西。
  */
 import { moHome } from "./paths.mjs";
 import { listProjects, findProjectRoot } from "./project.mjs";
@@ -8,50 +8,117 @@ import { listCards } from "./store.mjs";
 import { listAgents } from "./executors.mjs";
 import { listCandidates } from "./candidates.mjs";
 import { groupNames } from "./help.mjs";
+import { allTargets } from "../commands/skill.mjs";
+
+const GLOBAL_FLAGS = ["--project", "--json", "--help"];
+
+const PROJECT = ["--project"];
+const taskIds = { positional: "task" };
+const candidateIds = { positional: "candidate" };
 
 const SPEC = {
-  project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
   task: {
-    subs: ["create", "confirm", "approve", "reject", "requests", "cancel", "status", "list", "dispatch", "verify", "logs"],
-    flags: [
-      "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-      "--background", "--assignee", "--worker", "--exec", "--timeout", "--wait", "--ttl", "--note", "--from", "--json",
-    ],
+    subs: {
+      create: { flags: ["--title", "--deliverable", "--verify", "--boundary", "--constraint", "--background", "--assignee", "--worker", "--exec", "--timeout", "--from"] },
+      confirm: { flags: ["--wait", "--ttl", "--from"], ...taskIds },
+      approve: { flags: ["--yes"], ...taskIds },
+      reject: { flags: ["--yes", "--note"], ...taskIds },
+      requests: { flags: [] },
+      cancel: { flags: [], ...taskIds },
+      status: { flags: [], ...taskIds },
+      list: { flags: [] },
+      dispatch: { flags: ["--worker", "--exec", "--timeout"], ...taskIds },
+      verify: { flags: [], ...taskIds },
+      logs: { flags: ["--tail"], ...taskIds },
+    },
   },
-  receipt: { subs: ["submit", "apply"], flags: ["--file", "--dry-run"] },
-  ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
-  doctor: { subs: [], flags: ["--json"] },
-  worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
-  skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
-  completion: { subs: ["bash", "zsh"], flags: [] },
+  project: {
+    subs: {
+      init: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
+      agent: { flags: ["--file", "--mode", "--remove"] },
+      list: { flags: [] },
+    },
+  },
   memory: {
-    subs: ["recall", "list", "init", "path", "migrate", "propose", "candidates", "accept", "reject"],
-    flags: ["--limit", "--scope", "--all", "--file", "--title", "--trigger", "--tag", "--body", "--source", "--id", "--json"],
+    subs: {
+      recall: { flags: ["--limit", "--scope", "--all"] },
+      list: { flags: ["--scope"] },
+      init: { flags: [] },
+      path: { flags: [] },
+      migrate: { flags: ["--dry-run"] },
+      propose: { flags: ["--file", "--scope", "--title", "--trigger", "--tag", "--body", "--source", "--task"] },
+      candidates: { flags: [] },
+      accept: { flags: ["--id"], ...candidateIds },
+      reject: { flags: ["--id"], ...candidateIds },
+    },
   },
-  inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
-  mcp: { subs: [], flags: ["--json"] },
-  agent: { subs: ["describe", "add"], flags: ["--mcp", "--prompt", "--name", "--json"] },
+  agent: {
+    subs: {
+      describe: { flags: ["--json"] },
+      add: { flags: ["--mcp", "--prompt", "--name"] },
+    },
+  },
+  inbox: {
+    subs: {
+      pull: { flags: ["--peek", "--wait", "--limit", "--task"], ...taskIds },
+    },
+  },
+  ledger: {
+    subs: {
+      query: { flags: ["--project", "--task", "--type", "--days", "--limit"] },
+    },
+  },
+  receipt: {
+    subs: {
+      submit: { flags: ["--file", "--dry-run"], ...taskIds },
+      apply: { flags: [], ...taskIds },
+    },
+  },
+  worker: {
+    subs: {
+      list: { flags: [] },
+      add: { flags: ["--command", "--description", "--requires", "--project"] },
+      remove: { flags: [] },
+    },
+  },
+  skill: {
+    subs: {
+      list: { flags: ["--target"] },
+      install: { flags: ["--target", "--yes"] },
+      uninstall: { flags: ["--target"] },
+    },
+  },
+  completion: { subs: { bash: { flags: [] }, zsh: { flags: [] } } },
+  mcp: { subs: {} },
+  doctor: { subs: {} },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "help"];
-const GLOBAL_FLAGS = ["--project", "--json", "--help"];
+/** 取值型 flag：补全时给候选而不是空 */
 const VALUE_FLAGS = new Set([
-  "--project", "--exec", "--timeout", "--file", "--task", "--name",
-  "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--worker", "--type", "--tail", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires", "--scope", "--peek",
-  "--title", "--trigger", "--tag", "--body", "--source", "--id", "--format", "--mcp", "--name", "--from", "--dry-run",
+  "--project", "--task", "--worker", "--scope", "--mode", "--target", "--file", "--mcp", "--type", "--id",
 ]);
 
-function startsWith(prefix) {
-  return (item) => item.value.startsWith(prefix);
-}
+const ENUMS = {
+  "--scope": ["preferences", "pitfalls", "decisions"],
+  "--mode": ["auto", "skill", "ref", "inline"],
+};
+
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };
 }
 
-function flagItems(flags) {
-  return flags.map((flag) => item(flag, ""));
+function startsWith(prefix) {
+  return (entry) => entry.value.startsWith(prefix);
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+function projectItems() {
+  return listProjects(moHome()).map((project) => item(project.name || project.id, project.id));
 }
 
 function taskItems(cwd) {
@@ -59,54 +126,61 @@ function taskItems(cwd) {
   if (!root) return [];
   return listCards(root)
     .map((card) => item(card.meta.id, (card.meta.status || "") + " " + (card.meta.title || "")))
-    .sort((a, b) => a.value.localeCompare(b.value));
+    .sort((left, right) => left.value.localeCompare(right.value));
 }
 
 function candidateItems() {
   return listCandidates({ home: moHome() })
     .map((candidate) => item(candidate.id, candidate.scope + " " + candidate.title))
-    .sort((a, b) => a.value.localeCompare(b.value));
+    .sort((left, right) => left.value.localeCompare(right.value));
 }
 
-function projectItems() {
-  return listProjects(moHome()).map((project) => item(project.name || project.id, project.id));
-}
-
-function valuesFor(flag, ctx) {
+function valuesFor(flag, cwd) {
   if (flag === "--project") return projectItems();
-  if (flag === "--task") return taskItems(ctx.cwd);
+  if (flag === "--task") return taskItems(cwd);
   if (flag === "--worker") return listAgents().map((agent) => item(agent.name, agent.description));
+  if (flag === "--scope") return ENUMS["--scope"].map((value) => item(value, ""));
+  if (flag === "--mode") return ENUMS["--mode"].map((value) => item(value, ""));
+  if (flag === "--id") return candidateItems();
+  if (flag === "--target") {
+    return allTargets()
+      .filter((target) => target.available)
+      .map((target) => item(target.name, target.dir));
+  }
+  // --file / --type 交给 shell 回退（文件名补全）
+  return [];
+}
+
+function positionalFor(kind, cwd) {
+  if (kind === "task") return taskItems(cwd);
+  if (kind === "candidate") return candidateItems();
   return [];
 }
 
 /**
  * @param {{cwd?: string, words?: string[]}} ctx words 是 "mo" 之后的参数，最后一个是当前正在补的词
- * @returns {{value: string, description: string}[]}
  */
 export function complete(ctx = {}) {
   const cwd = ctx.cwd || process.cwd();
   const words = ctx.words || [];
   const current = words.length ? words[words.length - 1] : "";
   const tokens = words.slice(0, -1);
-  const local = { cwd };
 
   const previous = tokens[tokens.length - 1];
-  if (previous && VALUE_FLAGS.has(previous) && !current.startsWith("-")) {
-    return valuesFor(previous, local).filter(startsWith(current));
-  }
-
-  if (current.startsWith("-")) {
-    const group = tokens[0];
-    const flags = group && SPEC[group] ? [...SPEC[group].flags, ...GLOBAL_FLAGS] : [...GLOBAL_FLAGS];
-    return flagItems([...new Set(flags)]).filter(startsWith(current));
+  if (previous && previous.startsWith("--") && !current.startsWith("-")) {
+    // 取值型 flag 给具体候选；其余（--title / --body …）是自由文本，交回 shell
+    return VALUE_FLAGS.has(previous) ? valuesFor(previous, cwd).filter(startsWith(current)) : [];
   }
 
   const group = tokens[0];
+
   if (!group) {
+    if (current.startsWith("-")) return flagItems(GLOBAL_FLAGS, current);
     return TOP_LEVEL.filter((name) => name.startsWith(current)).map((name) => item(name, ""));
   }
 
-  if (group === "help" && !tokens[1]) {
+  if (group === "help") {
+    if (tokens[1]) return [];
     return groupNames()
       .map((name) => item(name, "看这组命令"))
       .filter((entry) => entry.value.startsWith(current));
@@ -117,32 +191,40 @@ export function complete(ctx = {}) {
 
   const sub = tokens[1];
 
-  // run 没有子命令，第一个位置参数就是 taskId
-  if (!sub && !spec.subs.length) {
-    return taskItems(cwd).filter(startsWith(current));
-  }
-
   if (!sub) {
-    // help 是每个组都支持的写法（mo task help），一并补出来
-    return [...spec.subs.map((name) => item(name, "")), item("help", "看这组命令"), ...flagItems(GLOBAL_FLAGS)].filter(
+    if (current.startsWith("-")) return flagItems(GLOBAL_FLAGS, current);
+    const subs = Object.keys(spec.subs);
+    // mcp / doctor 没有子命令：直接给 flag
+    if (!subs.length) return flagItems([...GLOBAL_FLAGS, ...(group === "doctor" ? ["--json"] : [])], current);
+    return [...subs.map((name) => item(name, "")), item("help", "看这组命令"), ...flagItems(GLOBAL_FLAGS, current)].filter(
       startsWith(current),
     );
   }
 
-  const positionals = tokens.slice(2);
-  if (positionals.length > 0) return [];
+  const subSpec = spec.subs[sub];
+  if (!subSpec) return [];
 
-  if (group === "task" && ["confirm", "approve", "reject", "cancel", "status", "dispatch", "verify"].includes(sub)) {
-    return taskItems(cwd).filter(startsWith(current));
+  const typed = tokens.slice(2);
+  const flags = unique([...subSpec.flags, ...GLOBAL_FLAGS]);
+
+  if (current.startsWith("-")) return flagItems(flags, current);
+
+  // 第一个位置参数：优先给具体 id；没有就退回 flag
+  if (typed.length === 0 && subSpec.positional) {
+    const items = positionalFor(subSpec.positional, cwd);
+    if (items.length) return items.filter(startsWith(current));
   }
-  if (group === "receipt" && ["submit", "apply"].includes(sub)) return taskItems(cwd).filter(startsWith(current));
-  if (group === "memory" && ["accept", "reject"].includes(sub)) return candidateItems().filter(startsWith(current));
 
-  return [];
+  // 其余位置参数没有候选；给 flag 提示比什么都不给好
+  return flagItems(flags, current);
+}
+
+function flagItems(flags, current) {
+  return unique(flags).map((flag) => item(flag, "")).filter(startsWith(current));
 }
 
 /** zsh 的 _describe 需要 "值:说明"；把值里可能出现的冒号换掉 */
-export function describe(item) {
-  const description = String(item.description || "").replace(/:/g, "·").replace(/\s+/g, " ").trim();
-  return description ? item.value + ":" + description : item.value;
+export function describe(entry) {
+  const description = String(entry.description || "").replace(/:/g, "·").replace(/\s+/g, " ").trim();
+  return description ? entry.value + ":" + description : entry.value;
 }

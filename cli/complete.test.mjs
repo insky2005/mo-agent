@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "version", "help",
   ]);
 });
 
@@ -67,11 +67,13 @@ test("--project 补项目名", () => {
   assert.deepEqual(got, ["proj"]);
 });
 
-test("没有项目上下文时安静返回空", () => {
+test("没有项目上下文时不给 taskId，只给 flag", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-complete-empty-"));
   process.env.MO_AGENT_HOME = path.join(root, "home");
   fs.mkdirSync(process.env.MO_AGENT_HOME, { recursive: true });
-  assert.deepEqual(complete({ cwd: root, words: ["task", "confirm", ""] }), []);
+  const got = values(complete({ cwd: root, words: ["task", "confirm", ""] }));
+  assert.ok(!got.some((value) => value.startsWith("t_")), "不该凭空给 taskId");
+  assert.ok(got.includes("--wait"), "应该仍然给 flag");
 });
 
 test("describe 把冒号换成中点", () => {
@@ -91,4 +93,55 @@ test("每个组都补出 help 子命令", () => {
   const ws = workspace();
   const items = values(complete({ cwd: ws.project, words: ["task", ""] }));
   assert.ok(items.includes("help"), "task 组缺 help 子命令");
+});
+test("子命令的 flag 只给该子命令自己的", () => {
+  const ws = workspace();
+  const confirm = values(complete({ cwd: ws.project, words: ["task", "confirm", "--"] }));
+  assert.ok(confirm.includes("--wait"));
+  assert.ok(confirm.includes("--ttl"));
+  assert.ok(!confirm.includes("--title"), "confirm 不该出现 --title");
+  assert.ok(!confirm.includes("--deliverable"), "confirm 不该出现 --deliverable");
+
+  const create = values(complete({ cwd: ws.project, words: ["task", "create", ""] }));
+  assert.ok(create.includes("--title"));
+  assert.ok(!create.includes("--wait"));
+});
+
+test("无位置参数时给 flag，而不是空", () => {
+  const ws = workspace();
+  for (const words of [["ledger", "query", ""], ["agent", "add", ""], ["worker", "add", ""], ["skill", "install", ""], ["inbox", "pull", ""]]) {
+    const got = values(complete({ cwd: ws.project, words }));
+    assert.ok(got.some((value) => value.startsWith("--")), words.join(" ") + " 应该给 flag");
+  }
+});
+
+test("枚举值有补全", () => {
+  const ws = workspace();
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["memory", "recall", "--scope", ""] })), [
+    "preferences",
+    "pitfalls",
+    "decisions",
+  ]);
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["project", "init", "--mode", ""] })), [
+    "auto",
+    "skill",
+    "ref",
+    "inline",
+  ]);
+  assert.ok(values(complete({ cwd: ws.project, words: ["skill", "install", "--target", ""] })).includes("agents"));
+});
+
+test("无子命令的组不瞎给 taskId", () => {
+  const ws = workspace();
+  addTask(ws.project, "t_01A", "甲");
+  for (const group of ["doctor", "mcp"]) {
+    const got = values(complete({ cwd: ws.project, words: [group, ""] }));
+    assert.ok(!got.includes("t_01A"), group + " 不该补 taskId");
+    assert.ok(got.includes("--json") || got.includes("--help"), group + " 应该给 flag");
+  }
+});
+
+test("自由文本 flag 之后不再给候选", () => {
+  const ws = workspace();
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["task", "create", "--title", ""] })), []);
 });
