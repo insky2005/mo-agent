@@ -129,7 +129,7 @@ mo project init --mode inline     # 强制把完整用法写进 AGENTS.md
 mo project init --file docs/AI.md # 写到指定文件
 ```
 
-`mo agent init` / `mo agent remove` 可以单独重跑这一步，不影响项目登记。
+`mo project agent` / `mo project agent --remove` 可以单独重跑这一步，不影响项目登记。
 
 ## 第一次使用
 
@@ -330,10 +330,10 @@ bash scripts/install-skill.sh [--uninstall]
 没有技能机制的 Agent，可以让 mo 直接写进去：
 
 ```bash
-mo agent init                 # 自动选 AGENTS.md / CLAUDE.md，按是否已装技能决定内容
-mo agent init --mode inline   # 强制写完整用法（不依赖技能）
-mo agent init --file docs/AI.md
-mo agent remove               # 只删自己那段
+mo project agent              # 自动选 AGENTS.md / CLAUDE.md，按是否已装技能决定内容
+mo project agent --mode inline   # 强制写完整用法（不依赖技能）
+mo project agent --file docs/AI.md
+mo project agent --remove     # 只删自己那段
 ```
 
 - **技能已安装**：只写一段指针，说明"按 mo 技能走"；
@@ -426,8 +426,8 @@ mo task list
 mo task cancel <id>
 
 # Agent 说明文件
-mo agent init                      # 只更新 AGENTS.md/CLAUDE.md
-mo agent remove                    # 只删自己那段
+mo project agent                   # 只更新 AGENTS.md/CLAUDE.md
+mo project agent --remove          # 只删自己那段
 
 # 其它
 mo run <id> [--exec 命令]          # 与 dispatch 等价，用于重跑

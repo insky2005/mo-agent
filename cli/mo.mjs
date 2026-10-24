@@ -16,32 +16,32 @@ import { doctorCommand } from "./commands/doctor.mjs";
 import { completionCommand, completeCommand } from "./commands/completion.mjs";
 import { workerCommand } from "./commands/worker.mjs";
 import { skillCommand } from "./commands/skill.mjs";
-import { agentCommand } from "./commands/agent.mjs";
 import { VERSION } from "./lib/version.mjs";
 
 const HELP = [
   "mo —— 个人工作台 CLI",
   "",
   "用法：",
-  "  mo project init [路径]               初始化项目（.mo-agent/ + AGENTS.md 说明）",
-  "  mo project list                      查看已登记项目",
+  "  mo worker list|add|remove       执行者（含自定义与可用性检测）",
+  "  mo skill install|uninstall|list 安装 mo 技能到各 Agent 的技能目录",
   "",
-  "  mo task create --title 标题 --deliverable 产出 [--verify \"run:命令\"] [--exec 命令]",
-  "  mo task confirm <id>                 确认任务卡（确认权属于人）",
-  "  mo task dispatch <id> [--exec 命令]   派发并等待回执（done 后自动验收）",
-  "  mo task verify <id>                  对已 done 的卡重跑验收",
-  "  mo task status <id>                  查看状态与最近事件",
-  "  mo task list                         列出本项目任务",
-  "  mo task cancel <id>                  取消任务",
+  "  mo project init [路径]          初始化项目（.mo-agent/ + AGENTS.md）",
+  "  mo project agent [--remove]     写/删 AGENTS.md、CLAUDE.md 里的 mo 说明",
+  "  mo project list                 查看已登记项目",
   "",
-  "  mo run <id> [--exec 命令]             执行（卡片已确认/已派发时可用）",
-  "  mo receipt submit <id> --file -       提交回执（stdin）",
+  "  mo task create --title 标题 --deliverable 产出 [--verify \"run:命令\"] [--worker 执行者] [--exec 命令]",
+  "  mo task confirm <id>            确认任务卡（确认权属于人）",
+  "  mo task dispatch <id> [--worker 执行者] [--exec 命令]   派发并等待回执",
+  "  mo task verify <id>             对已 done 的卡重跑验收",
+  "  mo task status <id>             查看状态与最近事件",
+  "  mo task list                    列出本项目任务",
+  "  mo task cancel <id>             取消任务",
+  "",
+  "  mo run <id> [--worker 执行者] [--exec 命令]",
+  "  mo receipt submit <id> --file - 提交回执（stdin）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
-  "  mo doctor                            自检",
-  "  mo worker list|add|remove            执行者（含自定义与可用性检测）",
-  "  mo skill install|uninstall|list      安装 mo 技能到各 Agent 的技能目录",
-  "  mo agent init|remove                 写/删 AGENTS.md、CLAUDE.md 里的 mo 说明",
-  "  mo completion bash|zsh               输出补全脚本（eval 即可）",
+  "  mo doctor                       自检",
+  "  mo completion bash|zsh          输出补全脚本（eval 即可）",
   "",
   "全局选项：--project <名称|路径>  --json  --help",
   "",
@@ -58,7 +58,6 @@ const ROUTES = {
   completion: completionCommand,
   worker: workerCommand,
   skill: skillCommand,
-  agent: agentCommand,
 };
 
 async function main(argv) {

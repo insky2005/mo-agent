@@ -3,7 +3,7 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { allTargets } from "./skill.mjs";
 import { resolveProject } from "../lib/project.mjs";
-import { one } from "../lib/args.mjs";
+import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 import { moHome, projectDir } from "../lib/paths.mjs";
 import { writeAtomic, exists, readText } from "../lib/fsx.mjs";
@@ -124,17 +124,12 @@ export function removeAgentFile({ root, file }) {
   return { file: target, changed: true };
 }
 
-/** mo agent init|remove —— 单独维护 AGENTS.md / CLAUDE.md 里的说明 */
-export function agentCommand(ctx, args) {
-  const sub = args.positional[0] || "init";
-  if (!["init", "remove"].includes(sub)) {
-    throw new MoError("E_USAGE", "未知子命令：agent " + sub + "（可用：init / remove）");
-  }
-
+/** mo project agent [--remove] —— 维护 AGENTS.md / CLAUDE.md 里的说明 */
+export function projectAgent(ctx, args) {
   const project = resolveProject({ cwd: ctx.cwd, target: one(args.options, "project"), home: moHome() });
   const file = one(args.options, "file");
 
-  if (sub === "remove") {
+  if (has(args.options, "remove")) {
     const result = removeAgentFile({ root: project.root, file });
     emit(args.options, { ok: true, ...result }, () =>
       result.changed ? "✓ 已移除 " + path.relative(project.root, result.file) : "没有需要移除的段落");

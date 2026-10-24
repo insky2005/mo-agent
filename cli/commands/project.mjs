@@ -4,7 +4,7 @@ import { attachProject, listProjects } from "../lib/project.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { all, has, one } from "../lib/args.mjs";
 import { emit, table } from "../lib/output.mjs";
-import { applyAgentFile } from "./agent.mjs";
+import { applyAgentFile, projectAgent } from "./agent.mjs";
 
 export function projectCommand(ctx, args) {
   const sub = args.positional[0] || "list";
@@ -35,6 +35,10 @@ export function projectCommand(ctx, args) {
     return 0;
   }
 
+  if (sub === "agent") {
+    return projectAgent(ctx, args);
+  }
+
   if (sub === "list") {
     const projects = listProjects(home);
     if (!projects.length) {
@@ -49,7 +53,7 @@ export function projectCommand(ctx, args) {
     return 0;
   }
 
-  throw new MoError("E_USAGE", "未知子命令：project " + sub + "（可用：init / list）");
+  throw new MoError("E_USAGE", "未知子命令：project " + sub + "（可用：init / agent / list）");
 }
 
 export function parseProjectOption(args) {

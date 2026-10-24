@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { agentCommand } from "./commands/agent.mjs";
+import { projectAgent } from "./commands/agent.mjs";
 import { attachProject } from "./lib/project.mjs";
 import { SKILL_MD } from "./lib/skill-content.mjs";
 
@@ -32,7 +32,7 @@ function run(ctx, args, options = {}) {
     return true;
   };
   try {
-    const code = agentCommand({ cwd: ctx.project }, { positional: args, options });
+    const code = projectAgent({ cwd: ctx.project }, { positional: args, options });
     return { code, out: lines.join("") };
   } finally {
     process.stdout.write = original;
@@ -41,7 +41,7 @@ function run(ctx, args, options = {}) {
 
 test("技能已装 → 写指针块", () => {
   const ws = workspace({ withSkill: true });
-  run(ws, ["init"]);
+  run(ws, []);
   const text = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
   assert.match(text, /mo 技能/);
   assert.match(text, />>> mo >>>/);
@@ -49,7 +49,7 @@ test("技能已装 → 写指针块", () => {
 
 test("技能未装 → 写 MO.md 并在 AGENTS.md 里引用", () => {
   const ws = workspace();
-  run(ws, ["init"]);
+  run(ws, []);
   const agents = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
   assert.match(agents, /\.mo-agent\/MO\.md/);
   const doc = fs.readFileSync(path.join(ws.project, ".mo-agent", "MO.md"), "utf8");
@@ -59,8 +59,8 @@ test("技能未装 → 写 MO.md 并在 AGENTS.md 里引用", () => {
 
 test("重复执行只保留一段", () => {
   const ws = workspace();
-  run(ws, ["init"]);
-  run(ws, ["init"]);
+  run(ws, []);
+  run(ws, []);
   const text = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
   assert.equal(text.split(">>> mo >>>").length - 1, 1);
 });
@@ -69,7 +69,7 @@ test("保留原有内容，只在末尾追加", () => {
   const ws = workspace();
   const file = path.join(ws.project, "AGENTS.md");
   fs.writeFileSync(file, "# 项目说明\n\n原有内容。\n");
-  run(ws, ["init"]);
+  run(ws, []);
   const text = fs.readFileSync(file, "utf8");
   assert.match(text, /原有内容。/);
   assert.ok(text.indexOf("原有内容。") < text.indexOf(">>> mo >>>"));
@@ -79,8 +79,8 @@ test("remove 只去掉自己那段", () => {
   const ws = workspace();
   const file = path.join(ws.project, "AGENTS.md");
   fs.writeFileSync(file, "# 项目说明\n");
-  run(ws, ["init"]);
-  run(ws, ["remove"]);
+  run(ws, []);
+  run(ws, [], { remove: [true] });
   const text = fs.readFileSync(file, "utf8");
   assert.doesNotMatch(text, />>> mo >>>/);
   assert.match(text, /# 项目说明/);
@@ -89,19 +89,19 @@ test("remove 只去掉自己那段", () => {
 test("已有 CLAUDE.md 时优先写它", () => {
   const ws = workspace();
   fs.writeFileSync(path.join(ws.project, "CLAUDE.md"), "# 指令\n");
-  run(ws, ["init"]);
+  run(ws, []);
   assert.equal(fs.existsSync(path.join(ws.project, "AGENTS.md")), false);
   assert.match(fs.readFileSync(path.join(ws.project, "CLAUDE.md"), "utf8"), />>> mo >>>/);
 });
 
 test("--mode 可强制内联", () => {
   const ws = workspace({ withSkill: true });
-  run(ws, ["init"], { mode: ["inline"] });
+  run(ws, [], { mode: ["inline"] });
   assert.match(fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8"), /mo task create/);
 });
 
 test("--mode inline 不生成 MO.md", () => {
   const ws = workspace();
-  run(ws, ["init"], { mode: ["inline"] });
+  run(ws, [], { mode: ["inline"] });
   assert.equal(fs.existsSync(path.join(ws.project, ".mo-agent", "MO.md")), false);
 });

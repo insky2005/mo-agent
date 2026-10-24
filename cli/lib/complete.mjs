@@ -8,7 +8,7 @@ import { listCards } from "./store.mjs";
 import { listAgents } from "./executors.mjs";
 
 const SPEC = {
-  project: { subs: ["init", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file"] },
+  project: { subs: ["init", "agent", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file", "--remove"] },
   task: {
     subs: ["create", "confirm", "cancel", "status", "list", "dispatch", "verify"],
     flags: [
@@ -22,11 +22,10 @@ const SPEC = {
   doctor: { subs: [], flags: ["--json"] },
   worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
-  agent: { subs: ["init", "remove"], flags: ["--file", "--mode", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "worker", "skill", "agent", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "worker", "skill", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
