@@ -261,7 +261,7 @@ if [ "$IN_PATH" = "0" ]; then
 fi
 
 if [ -n "$SHELL_NAME" ]; then
-  printf '启用补全：\n  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
+  printf '当前终端启用补全（新终端会自动生效）：\n  hash -r; eval "$(%s completion %s)"\n' "$INSTALLED" "$SHELL_NAME"
 fi
 
 if [ "$NEED_SKILL" = "1" ]; then
