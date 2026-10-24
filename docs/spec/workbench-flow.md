@@ -276,6 +276,7 @@ canceled            canceled                failed                  └─> canc
 | `E_CONFIRM_REQUIRED` | 需要人确认 | 人 |
 | `E_CARD_INVALID` / `E_CARD_TOO_LARGE` | 卡不合法 | 主 Agent 修 |
 | `E_NOT_CONFIRMED` / `E_FORBIDDEN` | 越权/跳步 | 拒绝 |
+| `E_HUMAN_ONLY` | 该动作只能由人执行（如 confirm），Agent 自报身份时拒绝 | 拒绝 |
 | `E_ASSIGNEE_*` / `E_NO_EXECUTOR` | 执行者不可用 | 人定 |
 | `E_BUDGET` / `E_DEPTH` / `E_SCOPE` | 约束 | 拒绝 |
 | `E_DISPATCH_FAILED` / `E_EXECUTOR_CRASHED` / `E_TIMEOUT` | 执行异常 | core 重试/升级 |

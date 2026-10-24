@@ -18,7 +18,7 @@ export function resolveReceiptFile(root, meta) {
  * 派单：确认 → 派发 → 起进程 → 收执 → 定状态。
  * 返回结构化结果，不打印。
  */
-export async function dispatchTask({ home, root, taskId, exec, timeout }) {
+export async function dispatchTask({ home, root, taskId, exec, timeout, actor = "core" }) {
   const card = loadCard(root, taskId);
   const { meta } = card;
 
@@ -39,10 +39,10 @@ export async function dispatchTask({ home, root, taskId, exec, timeout }) {
 
   if (meta.status === "blocked") {
     // 重试：blocked 是"可恢复"的，回到 running 再跑一次
-    transition({ home, root, card, to: "running", payload: { retry: true, exec: String(command) } });
+    transition({ home, root, card, to: "running", payload: { retry: true, exec: String(command) }, actor });
   } else if (meta.status === "confirmed") {
-    transition({ home, root, card, to: "dispatched", payload: { assignee: meta.assignee || "auto", exec: String(command) } });
-    transition({ home, root, card, to: "running", payload: {} });
+    transition({ home, root, card, to: "dispatched", payload: { assignee: meta.assignee || "auto", exec: String(command) }, actor });
+    transition({ home, root, card, to: "running", payload: {}, actor });
   }
 
   const receiptFile = resolveReceiptFile(root, meta);

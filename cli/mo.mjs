@@ -43,7 +43,7 @@ const HELP = [
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
   "",
-  "全局选项：--project <名称|路径>  --json  --help",
+  "全局选项：--project <名称|路径>  --actor <human|agent:名字>  --json  --help",
   "",
   "环境变量：MO_AGENT_HOME（默认 ~/.mo-agent）",
 ].join("\n");

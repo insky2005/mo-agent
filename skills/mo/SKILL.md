@@ -126,6 +126,11 @@ mo ledger query --task <taskId> --json
 - `blocked` → 说清 `reason`、`exitCode`、`outputTail`；
 - `failed` → 同样转述，不要美化。
 
+## 身份与确认
+
+- 自己发起的命令带上身份：`--actor agent:<你的名字>`，或先 `export MO_ACTOR=agent:mo`。这样账本里能区分人和 Agent。
+- **确认只能由用户执行**。带 `agent:` 身份调用 `mo task confirm` 会被直接拒绝（E_HUMAN_ONLY）——这是有意的，不要绕过。
+
 ## 铁律
 
 1. **没确认不派单**：`dispatch` 会返回 `E_NOT_CONFIRMED`；

@@ -504,6 +504,10 @@ mo receipt apply t_01HXYZ     # 应用它：跑验收、更新状态
 
 `MO_AGENT_HOME` 可覆盖 `~/.mo-agent`，测试与多套环境都用它隔离。
 
+账本每条事件都带 `actor`（发起者）：`human` / `agent:<名字>` / `cli` / `core` / `executor`。
+Agent 调用时用 `--actor agent:<名字>` 或 `export MO_ACTOR=agent:mo` 自报身份；
+`mo ledger query` 的「发起」列就是它。带 `agent:` 身份执行 `mo task confirm` 会被拒绝（`E_HUMAN_ONLY`）。
+
 ## P0 边界
 
 已实现：项目认领、状态机、卡/回执校验、派单执行、账本、CLI、`verify` 自动执行（P2）。

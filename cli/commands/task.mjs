@@ -10,6 +10,7 @@ import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
 import { resolveWorker } from "../lib/workers-config.mjs";
+import { assertHuman, resolveActor } from "../lib/actor.mjs";
 import { transition } from "../lib/ingest.mjs";
 
 function resolveContext(ctx, args) {
@@ -121,7 +122,7 @@ function createTask(ctx, args, home) {
     throw new MoError("E_CARD_TOO_LARGE", "任务卡超过 8KB，请拆分");
   }
   saveCard(resolved.root, meta, body);
-  appendEvent(home, { type: "task.created", project: meta.project, taskId: id, payload: { title } });
+  appendEvent(home, { type: "task.created", project: meta.project, taskId: id, payload: { title }, actor: resolveActor(args.options) });
 
   const cardFile = cardPath(resolved.root, id);
   const relativeCard = path.relative(resolved.root, cardFile);
@@ -148,7 +149,9 @@ function loadTarget(ctx, args) {
 
 function confirmTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
-  const next = transition({ home, root: resolved.root, card, to: "confirmed", payload: { by: "human" } });
+  const actor = resolveActor(args.options);
+  assertHuman(actor, "确认任务");
+  const next = transition({ home, root: resolved.root, card, to: "confirmed", payload: {}, actor });
   emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
     ["✓ 已确认", "", "  id     " + taskId, "  状态   " + next.meta.status, "", "下一步（派发）：mo task dispatch " + taskId].join("\n"));
   return 0;
@@ -156,7 +159,8 @@ function confirmTask(ctx, args, home) {
 
 function cancelTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
-  const next = transition({ home, root: resolved.root, card, to: "canceled", payload: { by: "human" } });
+  const actor = resolveActor(args.options);
+  const next = transition({ home, root: resolved.root, card, to: "canceled", payload: {}, actor });
   emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
     ["✓ 已取消", "", "  id     " + taskId, "  状态   " + next.meta.status].join("\n"));
   return 0;
@@ -291,6 +295,7 @@ function nextStep(result, taskId) {
 }
 
 export function runDispatch(args, { home, root, taskId }) {
+  const actor = resolveActor(args.options);
   const chosen = pickExecutor(args.options, { home, projectRoot: root });
   if (chosen && !chosen.installed) {
     throw new MoError("E_ASSIGNEE_UNSUPPORTED", "执行者 " + chosen.binary + " 未安装", {
@@ -303,6 +308,7 @@ export function runDispatch(args, { home, root, taskId }) {
     taskId,
     exec: chosen ? chosen.command : one(args.options, "exec"),
     timeout: one(args.options, "timeout"),
+    actor,
   }).then((result) => {
     emit(args.options, { ok: result.status === "done", ...result }, () => {
       const head = {

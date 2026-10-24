@@ -19,7 +19,7 @@ const SPEC = {
   receipt: { subs: ["submit", "apply"], flags: ["--file", "--dry-run"] },
   ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
   doctor: { subs: [], flags: ["--json"] },
-  worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
+  worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--actor", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
 };

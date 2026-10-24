@@ -16,14 +16,14 @@ const STATE_EVENT = {
   expired: "task.expired",
 };
 
-export function transition({ home, root, card, to, payload = {} }) {
+export function transition({ home, root, card, to, payload = {}, actor = "core" }) {
   const { meta, body } = card;
   assertTransition(meta.status, to);
   meta.status = to;
   meta.updated = new Date().toISOString();
   saveCard(root, meta, body);
   const type = STATE_EVENT[to];
-  if (type) appendEvent(home, { type, project: meta.project, taskId: meta.id, payload });
+  if (type) appendEvent(home, { type, project: meta.project, taskId: meta.id, payload, actor });
   return card;
 }
 
