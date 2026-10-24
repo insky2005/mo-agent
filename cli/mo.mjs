@@ -40,6 +40,7 @@ const HELP = [
   "  mo run <id> [--worker 执行者] [--exec 命令]",
   "  mo receipt submit <id> --file - 提交回执（stdin）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
+  "  mo help                         显示本帮助",
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
   "",
