@@ -279,6 +279,17 @@ function dispatchCommand(ctx, args, home) {
   return runDispatch(args, { home, root: resolved.root, taskId });
 }
 
+function nextStep(result, taskId) {
+  // 只在需要动作时才提示；done 是终点，不再给"下一步"制造噪音
+  if (result.status === "blocked") {
+    return { label: "重试", command: "mo task dispatch " + taskId };
+  }
+  if (result.status === "failed") {
+    return { label: "排查", command: "mo task status " + taskId };
+  }
+  return null;
+}
+
 export function runDispatch(args, { home, root, taskId }) {
   const chosen = pickExecutor(args.options, { home, projectRoot: root });
   if (chosen && !chosen.installed) {
@@ -329,6 +340,9 @@ export function runDispatch(args, { home, root, taskId }) {
         lines.push("", "  输出");
         for (const line of String(result.outputTail).split("\n").slice(-8)) lines.push("    " + line);
       }
+
+      const next = nextStep(result, taskId);
+      if (next) lines.push("", "下一步（" + next.label + "）：" + next.command);
 
       return lines.join("\n");
     });
