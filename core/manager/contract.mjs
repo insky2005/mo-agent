@@ -80,12 +80,12 @@ export const TOOLS = [
   },
   {
     name: "memory_recall",
-    description: "按关键词从知识库召回条目（派单时同一条通道会自动注入）。",
+    description: "按关键词从记忆库召回条目（派单时同一条通道会自动注入）。",
     schema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" }, scope: { type: "string", description: "preferences / pitfalls / decisions" } }, required: ["query"] },
   },
   {
     name: "memory_propose",
-    description: "提一条记忆候选（不进知识库，等人裁决）。缺触发条件会被拒收。",
+    description: "提一条记忆候选（不进记忆库，等人裁决）。缺触发条件会被拒收。",
     schema: {
       type: "object",
       properties: {

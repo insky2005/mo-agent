@@ -36,26 +36,38 @@ function runJson(ws, args) {
   return { ...result, parsed };
 }
 
-test("describe 只暴露 prompt / skill 两种格式", () => {
+test("mo agent 默认给「怎么接」的概览，不是一坨契约", () => {
   const ws = workspace();
-  const listed = run(ws, ["agent", "describe", "--format", "list"]);
-  assert.equal(listed.status, 0, listed.stderr);
-  assert.match(listed.stdout, /--format prompt/);
-  assert.match(listed.stdout, /--format skill/);
-  assert.match(listed.stdout, /mo project init/);
-  assert.doesNotMatch(listed.stdout, /--format agent-block/);
-
-  const denied = run(ws, ["agent", "describe", "--format", "agent-block"]);
-  assert.equal(denied.status, 2);
-  assert.match(denied.stderr, /E_USAGE/);
+  for (const args of [["agent"], ["agent", "describe"]]) {
+    const result = run(ws, args);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /怎么接（三选一/);
+    assert.match(result.stdout, /mo agent add --mcp/);
+    assert.match(result.stdout, /mo agent add --prompt/);
+    assert.match(result.stdout, /mo skill install/);
+    assert.doesNotMatch(result.stdout, /^# mo 任务派发契约/m);
+  }
 });
 
-test("describe --format skill 与仓库里的 SKILL.md 完全一致", () => {
+test("--prompt / --skill 才打印契约文本", () => {
   const ws = workspace();
+  const prompt = run(ws, ["agent", "describe", "--prompt"]);
+  assert.equal(prompt.status, 0, prompt.stderr);
+  assert.match(prompt.stdout, /^# mo 任务派发契约/);
+  assert.match(prompt.stderr, /可粘贴/);
+
   const file = fileURLToPath(new URL("../skills/mo/SKILL.md", import.meta.url));
-  const rendered = run(ws, ["agent", "describe", "--format", "skill"]);
-  assert.equal(rendered.status, 0, rendered.stderr);
-  assert.equal(rendered.stdout, fs.readFileSync(file, "utf8"));
+  const skill = run(ws, ["agent", "describe", "--skill"]);
+  assert.equal(skill.stdout, fs.readFileSync(file, "utf8"));
+});
+
+test("--format 已取消，直接报错指路", () => {
+  const ws = workspace();
+  const denied = run(ws, ["agent", "describe", "--format", "prompt"]);
+  assert.equal(denied.status, 2);
+  assert.match(denied.stderr, /E_USAGE/);
+  assert.match(denied.stderr, /--prompt/);
+  assert.match(denied.stderr, /mo project/);
 });
 
 test("describe --json 给出工具、禁止项与规则", () => {
@@ -71,18 +83,16 @@ test("describe --json 给出工具、禁止项与规则", () => {
   assert.equal(result.parsed.name, "mo");
 });
 
-test("describe --format prompt 输出可粘贴文本", () => {
+test("契约文本不写死具体 Agent 名字", () => {
   const ws = workspace();
-  const result = run(ws, ["agent", "describe", "--format", "prompt"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /^# mo 任务派发契约/);
+  const result = run(ws, ["agent", "describe", "--prompt"]);
   assert.match(result.stdout, /mo task approve/);
+  assert.doesNotMatch(result.stdout, /claude|codex|qoder|workbuddy/i);
 });
 
-test("describe 不写死具体 Agent 名字", () => {
+test("概览里也不点具体 Agent 名字", () => {
   const ws = workspace();
-  const result = run(ws, ["agent", "describe", "--format", "prompt"]);
-  assert.doesNotMatch(result.stdout, /claude|codex|qoder|workbuddy/i);
+  assert.doesNotMatch(run(ws, ["agent"]).stdout, /claude|codex|qoder|workbuddy/i);
 });
 
 test("add --mcp 新建配置并写对启动命令", () => {

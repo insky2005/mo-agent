@@ -469,7 +469,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 件 | 命令 | 说明 |
 |---|---|---|
 | 契约 | `mo agent describe --json` | 工具清单 / 禁止项 / 铁律，机器可读 |
-| 契约 | `mo agent describe --format prompt\|skill\|agent-block\|mo-doc` | 同一份内容的不同渲染，由 `core/manager/contract.mjs` 生成 |
+| 契约 | `mo agent describe [--json\|--prompt\|--skill]` | 概览 / 机器可读 / 可粘贴文本，都是 `core/manager/contract.mjs` 的渲染 |
 | 接入 | `mo agent add --mcp <file>` | 合并 `mcpServers`，幂等 + `.bak-<时间>` 备份 |
 | 接入 | `mo agent add --prompt` | 打到 stdout，自己贴到没有配置文件的地方 |
 | 唤醒 | `mo inbox pull --wait 60s` | 有就立刻返回，没有就等到超时；不依赖推送与 hook |
@@ -479,7 +479,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 | 格式 | 入口 | 落在哪 |
 |---|---|---|
-| `skill` | `mo agent describe --format skill` / `mo skill install` | 技能目录（与 `skills/mo/SKILL.md` 逐字节一致） |
+| `skill` | `mo agent describe --skill` / `mo skill install` | 技能目录（与 `skills/mo/SKILL.md` 逐字节一致） |
 | `prompt` | `mo agent describe`（默认）/ `mo agent add --prompt` | 粘进 Agent 的系统提示 |
 | `agent-block` | `mo project init` / `mo project agent --mode inline` | `<repo>/AGENTS.md` |
 | `mo-doc` | `mo project init --mode ref` | `.mo-agent/MO.md` |
@@ -487,7 +487,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 后三种是**落盘 payload**，不是给人对着终端读的——它们本来就靠"指向技能或 MO.md"补全细节，所以 `mo agent describe` 只暴露前两种；直接打印短块会得到一段没有上下文的话。
 
-**文案真源**：`core/manager/contract.mjs`。`skills/mo/SKILL.md`、`AGENTS.md` 内联块、`.mo-agent/MO.md`、`--format prompt` 全部由它渲染，`scripts/gen-skill.mjs` 负责生成 SKILL.md 与代码内联副本。`core/manager/contract.test.mjs` 会拦住两类腐化：工具漏写、文案里写死 Agent 名字。
+**文案真源**：`core/manager/contract.mjs`。`skills/mo/SKILL.md`、`AGENTS.md` 内联块、`.mo-agent/MO.md`、`--prompt` 全部由它渲染，`scripts/gen-skill.mjs` 负责生成 SKILL.md 与代码内联副本。`core/manager/contract.test.mjs` 会拦住两类腐化：工具漏写、文案里写死 Agent 名字。
 
 **确认权（B4）**：
 

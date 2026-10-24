@@ -29,7 +29,7 @@ const SPEC = {
   },
   inbox: { subs: ["pull"], flags: ["--peek", "--limit", "--task", "--json"] },
   mcp: { subs: [], flags: ["--json"] },
-  agent: { subs: ["describe", "add"], flags: ["--format", "--mcp", "--prompt", "--name", "--json"] },
+  agent: { subs: ["describe", "add"], flags: ["--mcp", "--prompt", "--skill", "--name", "--json"] },
 };
 
 const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "help"];

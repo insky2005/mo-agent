@@ -462,10 +462,10 @@ mo doctor
 mo mcp                             # 一行一条 JSON-RPC，工具调用转发给上面的命令
 
 # 通用接入：不认识具体的 Agent，只产出可粘贴物
-mo agent describe                  # 契约（人看，等同 --format prompt）
-mo agent describe --json           # 契约（机器读）
-mo agent describe --format skill   # 与 skills/mo/SKILL.md 完全一致
-mo agent describe --format list    # 看这两种格式各用在哪
+mo agent                          # 怎么接：工具、边界、三条接入路
+mo agent describe --json           # 机器可读的契约
+mo agent describe --skill          # 与 skills/mo/SKILL.md 完全一致
+mo agent describe --prompt         # 可粘贴的契约文本（65 行）
 mo agent add --mcp ./mcp.json      # 合并 mcpServers，幂等 + 备份
 mo agent add --prompt              # 只打印提示词
 ```

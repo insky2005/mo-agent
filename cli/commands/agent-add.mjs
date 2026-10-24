@@ -2,30 +2,66 @@ import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
-import { emit } from "../lib/output.mjs";
-import { isJson } from "../lib/output.mjs";
+import { emit, isJson } from "../lib/output.mjs";
 import { VERSION } from "../lib/version.mjs";
-import { DESCRIBE_FORMATS, DESCRIBE_GUIDE, FORBIDDEN, RULES, TOOLS, render } from "../../core/manager/contract.mjs";
+import { FORBIDDEN, RULES, TOOLS, render } from "../../core/manager/contract.mjs";
 
 /**
- * 通用接入：mo 不认识任何具体 Agent，只产出三种可粘贴物——
- *   describe：契约（人看的文本 / 机器读的 JSON）
- *   add --mcp：往任意 mcpServers 配置里合并一段
- *   add --prompt：把 prompt 打到 stdout，自己贴到没有配置文件的地方
+ * 通用接入：mo 不认识任何具体 Agent。
+ *
+ *   mo agent               → 怎么接（人看的概览 + 三条路，各带命令）
+ *   mo agent describe      → 同上（描述契约）
+ *   mo agent describe --json   → 机器读的契约
+ *   mo agent describe --prompt → 可粘贴的契约文本（默认不打印，见上）
+ *   mo agent describe --skill  → 技能文件内容
+ *   mo agent add --mcp <file>  → 合并 mcpServers
+ *   mo agent add --prompt      → 只打印提示词
  */
 
 const USAGE = "可用：describe / add";
 
 export function agentCommand(ctx, args) {
   const sub = args.positional[0];
+  if (!sub || sub === "help") return describeCommand(args);
   if (sub === "describe") return describeCommand(args);
   if (sub === "add") return addCommand(ctx, args);
-  throw new MoError("E_USAGE", "未知子命令：agent " + (sub || "") + "（" + USAGE + "）");
+  throw new MoError("E_USAGE", "未知子命令：agent " + sub + "（" + USAGE + "）");
+}
+
+/** 给人看的概览：工具、边界、以及"到底该怎么接" */
+function overview() {
+  const toolRows = TOOLS.map((tool) => "  " + tool.name.padEnd(16) + tool.description);
+  const forbiddenRows = FORBIDDEN.map((item) => "  - " + item.cli + "（" + item.why + "）");
+
+  return [
+    "mo —— 让任意 Agent 当「主 Agent」",
+    "",
+    "它能调用 " + TOOLS.length + " 个工具：",
+    ...toolRows,
+    "",
+    "它不能做：",
+    ...forbiddenRows,
+    "",
+    "怎么接（三选一，按对方能力）：",
+    "",
+    "  1. 只会聊天的 Agent",
+    "       mo agent add --prompt | pbcopy      # macOS；其它系统重定向到文件",
+    "     粘进它的系统提示，它就能照着跑。",
+    "",
+    "  2. 支持 stdio MCP 的 Agent",
+    "       mo agent add --mcp ./mcp.json",
+    "     合并进它的 mcpServers（幂等、自动备份），工具直接可用，不用贴提示词。",
+    "",
+    "  3. 想让它懂「什么时候该派活、回显后要停下等批准」",
+    "       mo skill install      # 全局，所有会话生效",
+    "       mo project init       # 或者只给这个仓库写 AGENTS.md",
+    "",
+    "机器可读的契约：mo agent describe --json",
+    "完整的契约文本：mo agent describe --prompt",
+  ].join("\n");
 }
 
 function describeCommand(args) {
-  const format = String(one(args.options, "format", "prompt"));
-
   if (isJson(args.options)) {
     emit(args.options, {
       ok: true,
@@ -34,37 +70,30 @@ function describeCommand(args) {
       tools: TOOLS.map(({ name, description, schema }) => ({ name, description, schema })),
       forbidden: FORBIDDEN,
       rules: RULES,
-      formats: DESCRIBE_FORMATS,
     });
     return 0;
   }
 
-  if (format === "list") {
-    const rows = TOOLS.map((tool) => [tool.name, tool.description]);
-    emit(args.options, { formats: DESCRIBE_FORMATS, tools: TOOLS.map((tool) => tool.name) }, () =>
-      [
-        "这个命令给你的是「怎么接我」，能贴的只有两种：",
-        "",
-        ...DESCRIBE_GUIDE.map(([name, purpose]) => "  " + ("--format " + name).padEnd(18) + purpose),
-        "",
-        "（项目内 AGENTS.md / MO.md 由 mo project init 写入，不是这里的产物）",
-        "",
-        "能调用的工具：",
-        "",
-        ...rows.map(([name, desc]) => "  " + name.padEnd(18) + desc),
-      ].join("\n"),
-    );
+  if (has(args.options, "prompt")) {
+    process.stderr.write("[mo] 已输出可粘贴的契约文本\n");
+    process.stdout.write(render("prompt"));
     return 0;
   }
 
-  if (!DESCRIBE_FORMATS.includes(format)) {
-    throw new MoError("E_USAGE", "describe 只输出接入契约：" + DESCRIBE_FORMATS.join(" / "), {
-      hint:
-        "agent-block / mo-doc / pointer 是 mo project init 落盘用的短块（要的话：mo project agent --mode inline）；describe 不给它们",
+  if (has(args.options, "skill")) {
+    process.stderr.write("[mo] 已输出技能文件内容（与 skills/mo/SKILL.md 一致）\n");
+    process.stdout.write(render("skill"));
+    return 0;
+  }
+
+  // --format 已经取消：不保留静默别名，免得又变成"猜命令"
+  if (has(args.options, "format")) {
+    throw new MoError("E_USAGE", "--format 已取消：用 --prompt / --skill", {
+      hint: "要项目内的短块（AGENTS.md / MO.md）用 mo project init 或 mo project agent --mode inline",
     });
   }
 
-  process.stdout.write(render(format));
+  process.stdout.write(overview() + "\n");
   return 0;
 }
 
@@ -84,6 +113,7 @@ function stamp(date = new Date()) {
 
 function addCommand(ctx, args) {
   if (has(args.options, "prompt")) {
+    process.stderr.write("[mo] 已输出可粘贴的契约文本\n");
     process.stdout.write(render("prompt"));
     return 0;
   }
@@ -91,7 +121,7 @@ function addCommand(ctx, args) {
   const file = one(args.options, "mcp");
   if (!file || file === true) {
     throw new MoError("E_USAGE", "缺少配置目标", {
-      hint: "mo agent add --mcp ./mcp.json（或在支持 MCP 的客户端配置里手贴 mo agent describe --format prompt）",
+      hint: "mo agent add --mcp ./mcp.json（只能读文字的 Agent 用 mo agent add --prompt）",
     });
   }
 
