@@ -104,7 +104,8 @@ async function chooseTargets() {
     const note = target.installed ? "（已装）" : target.available ? "" : "（未安装）";
     lines.push("  " + (index + 1) + ") " + mark + " " + target.name.padEnd(11) + target.dir + note);
   });
-  lines.push("", "选择：输入编号后回车（如 1,3）| a 全选可用 | 直接回车用默认 | q 取消");
+  lines.push("", "[x] 是默认项：直接回车就装这 " + selected.size + " 项（通用位置 + 本机已装的 Agent）");
+  lines.push("选择：输入编号后回车（如 1,3）| a 选所有可用项 | q 取消");
   process.stdout.write(lines.join("\n") + "\n> ");
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
