@@ -1,3 +1,4 @@
+import { MoError } from "../../core/errors.mjs";
 import { listAgents } from "../lib/executors.mjs";
 import { emit, table } from "../lib/output.mjs";
 
@@ -5,10 +6,10 @@ import { emit, table } from "../lib/output.mjs";
 export function workerCommand(ctx, args) {
   const sub = args.positional[0] || "list";
   if (sub !== "list") {
-    throw new Error("未知子命令：worker " + sub + "（可用：list）");
+    throw new MoError("E_USAGE", "未知子命令：worker " + sub + "（可用：list）");
   }
   const agents = listAgents();
-  emit(args.options, { agents }, () => {
+  emit(args.options, { workers: agents }, () => {
     const rows = agents.map((agent) => [
       agent.name,
       agent.installed ? "✓" : "✗ 缺 " + agent.missing.map((item) => item.split("/").pop()).join(", "),
