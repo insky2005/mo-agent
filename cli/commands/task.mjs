@@ -8,7 +8,7 @@ import { moHome, cardPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
-import { resolveAgent } from "../lib/executors.mjs";
+import { resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 
 function resolveContext(ctx, args) {
@@ -16,13 +16,13 @@ function resolveContext(ctx, args) {
 }
 
 /** --agent 与 --exec 二选一：前者用内置模板，后者是完整命令 */
-function pickExecutor(options) {
+function pickExecutor(options, ctx) {
   const agentName = one(options, "agent");
   const command = one(options, "exec");
   if (agentName && command) {
     throw new MoError("E_USAGE", "--agent 与 --exec 只能二选一");
   }
-  if (agentName) return resolveAgent(agentName);
+  if (agentName) return resolveWorker(agentName, ctx);
   return null;
 }
 
@@ -73,7 +73,7 @@ function createTask(ctx, args, home) {
   if (!deliverables.length) throw new MoError("E_USAGE", "缺少 --deliverable（至少一条交付物）");
 
   const verify = parseVerifyInput(all(args.options, "verify"));
-  const chosen = pickExecutor(args.options);
+  const chosen = pickExecutor(args.options, { home, projectRoot: resolved.root });
   if (chosen && !chosen.installed) {
     process.stderr.write("[W_WORKER_MISSING] " + chosen.binary + " 未安装，这张卡派单会失败\n");
   }
@@ -191,7 +191,7 @@ function dispatchCommand(ctx, args, home) {
 }
 
 export function runDispatch(args, { home, root, taskId }) {
-  const chosen = pickExecutor(args.options);
+  const chosen = pickExecutor(args.options, { home, projectRoot: root });
   if (chosen && !chosen.installed) {
     throw new MoError("E_ASSIGNEE_UNSUPPORTED", "执行者 " + chosen.binary + " 未安装", {
       hint: "先装好它，或换一个 --agent / 用 --exec",

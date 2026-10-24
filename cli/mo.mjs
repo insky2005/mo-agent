@@ -37,7 +37,7 @@ const HELP = [
   "  mo receipt submit <id> --file -       提交回执（stdin）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
   "  mo doctor                            自检",
-  "  mo worker list                       列出可用的执行者模板（--agent 用）",
+  "  mo worker list|add|remove            执行者模板（含自定义与可用性检测）",
   "  mo skill install|uninstall|list      安装 mo 技能到各 Agent 的技能目录",
   "  mo agent init|remove                 写/删 AGENTS.md、CLAUDE.md 里的 mo 说明",
   "  mo completion bash|zsh               输出补全脚本（eval 即可）",

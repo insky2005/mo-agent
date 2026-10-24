@@ -20,7 +20,7 @@ const SPEC = {
   ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
   run: { subs: [], flags: ["--agent", "--exec", "--timeout"] },
   doctor: { subs: [], flags: ["--json"] },
-  worker: { subs: ["list"], flags: ["--json"] },
+  worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   agent: { subs: ["init", "remove"], flags: ["--file", "--mode", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
@@ -31,7 +31,7 @@ const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
   "--title", "--deliverable", "--verify", "--boundary", "--constraint",
-  "--background", "--assignee", "--agent", "--type", "--days", "--limit", "--target", "--file", "--mode",
+  "--background", "--assignee", "--agent", "--type", "--days", "--limit", "--target", "--file", "--mode", "--command", "--description", "--requires",
 ]);
 
 function startsWith(prefix) {

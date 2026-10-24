@@ -354,6 +354,29 @@ mo agent remove               # 只删自己那段
 
 > 目前是 CLI 形态：Agent 通过 shell 调 `mo`。MCP 端点、被唤醒（inbox）还没做，属 P1 的后半段。
 
+## 自定义 worker
+
+内置模板不够用时，注册自己的执行者：
+
+```bash
+mo worker add mine --command 'claude -p "$(cat)" --model sonnet'
+mo worker add local --command 'node scripts/exec.mjs' --requires node
+mo worker add team  --command '…' --project      # 写进项目 .mo-agent/workers.json
+mo worker list
+mo worker remove mine
+```
+
+| 作用域 | 文件 | 适合 |
+|---|---|---|
+| 个人 | `~/.mo-agent/workers.json` | 你自己的常用参数 |
+| 项目 | `<repo>/.mo-agent/workers.json` | 团队固定的执行方式，跟着仓库走 |
+
+优先级：**内置 < 个人 < 项目**。不能与内置同名，内置也不能删。
+
+`--requires` 用来声明**命令里看不出来的依赖**：比如命令是 `node run.mjs`，但脚本内部调用 claude，就写 `--requires claude`，这样 `worker list` 会同时检查 node 和 claude。
+
+用 `--agent <名称>` 建卡时，命令会被展开写进卡片的 `exec:`，之后改 worker 不会改变历史任务的含义。
+
 ## Tab 补全
 
 支持 bash 与 zsh：命令、子命令、选项，以及**任务 id（带状态和标题）**、`--project` 的项目名。
