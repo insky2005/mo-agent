@@ -21,7 +21,7 @@ function home() {
 }
 
 /**
- * 安装目标 —— 与 `mo agents` 支持的执行者一致：
+ * 安装目标 —— 与 `mo workers` 列出的执行者一致：
  *
  *   agents      ~/.agents/skills     通用位置（本机已有，多个工具共享）
  *   claude      ~/.claude/skills

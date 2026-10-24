@@ -1,8 +1,8 @@
 import { listAgents } from "../lib/executors.mjs";
 import { emit, table } from "../lib/output.mjs";
 
-/** mo agents —— 列出内置执行者模板、完整命令与本机是否安装 */
-export function agentsCommand(ctx, args) {
+/** mo workers —— 列出内置执行者模板、完整命令与本机是否安装 */
+export function workersCommand(ctx, args) {
   const agents = listAgents();
   emit(args.options, { agents }, () => {
     const rows = agents.map((agent) => [

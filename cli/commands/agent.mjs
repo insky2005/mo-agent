@@ -60,7 +60,7 @@ ${RECEIPT_RULE}
 mo task list                       # 本项目任务
 mo task status <taskId> --json     # 状态与事件
 mo ledger query --task <taskId>    # 账本流水
-mo agents                          # 可用执行者模板
+mo workers                         # 可用执行者模板
 \`\`\`
 
 ## 铁律

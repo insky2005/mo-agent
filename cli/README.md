@@ -146,7 +146,7 @@ mo project init .          # 认领项目，写 .mo-agent/project.json
 常用 Agent 有内置模板，用 `--agent` 选，不用记完整命令：
 
 ```bash
-mo agents                        # 列出模板
+mo workers                        # 列出模板
 mo task create --agent claude …  # 展开成 claude -p "$(cat)"
 mo task create --agent codex …
 ```
@@ -160,7 +160,7 @@ mo task create --agent codex …
 | `pi` | `pi -p "$(cat)"` | pi |
 | `qwen` | `qwen --approval-mode auto-edit "$(cat)"` | Qwen Code |
 
-`mo agents` 会标出每个模板在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
+`mo workers` 会标出每个模板在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
 
 模板都选了"能写文件"的模式——执行者必须能写 `$MO_RECEIPT`，只读模式跑出来的任务永远到不了 `done`。
 
