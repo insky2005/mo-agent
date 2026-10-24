@@ -53,3 +53,6 @@ docs/private/
 # ---- CLI 构建产物（单文件二进制 / npm 包）----
 cli/dist/
 dist/
+
+# ---- mo 本地状态（不提交）----
+.mo-agent/
