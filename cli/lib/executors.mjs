@@ -118,19 +118,44 @@ export function which(binary) {
   return null;
 }
 
+/**
+ * 一个 worker 能不能用，要同时满足两件事：
+ *   - 命令里实际调用的程序存在（binaryOf 解析）
+ *   - 声明的 requires 存在（如果声明了）
+ * 例：命令是 `node run.mjs`，但 requires: "claude"，那 node 和 claude 都得在。
+ */
+export function workerStatus(preset) {
+  const program = binaryOf(preset.command);
+  const requires = preset.requires || "";
+  const programPath = program ? which(program) : null;
+  const requiresPath = requires ? which(requires) : null;
+
+  const missing = [];
+  if (program && !programPath) missing.push(program);
+  if (requires && !requiresPath) missing.push(requires);
+
+  return {
+    program,
+    requires: requires || null,
+    installed: missing.length === 0,
+    missing: [...new Set(missing)],
+    path: programPath,
+    requiresPath,
+  };
+}
+
 export function listAgents() {
   return Object.entries(EXECUTORS).map(([name, preset]) => {
-    // 以命令里实际调用的程序为准；requires 只作兜底
-    const binary = preset.requires || binaryOf(preset.command);
-    const found = which(binary);
+    const status = workerStatus(preset);
     return {
       name,
       command: preset.command,
       description: preset.description,
       requires: preset.requires,
-      binary,
-      installed: Boolean(found),
-      path: found,
+      binary: status.program,
+      installed: status.installed,
+      missing: status.missing,
+      path: status.path,
     };
   });
 }

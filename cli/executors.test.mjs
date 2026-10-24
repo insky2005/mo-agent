@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAgent, listAgents, which, binaryOf, EXECUTORS } from "./lib/executors.mjs";
+import { resolveAgent, listAgents, which, binaryOf, workerStatus, EXECUTORS } from "./lib/executors.mjs";
 
 test("已知模板展开成完整命令", () => {
   const claude = resolveAgent("claude");
@@ -62,6 +62,28 @@ test("PATH 为空时所有模板都标为未安装", () => {
     const agents = listAgents();
     assert.ok(agents.every((agent) => agent.installed === false));
     assert.ok(agents.every((agent) => agent.binary));
+  } finally {
+    process.env.PATH = before;
+  }
+});
+test("workerStatus 同时校验命令程序与 requires", () => {
+  const before = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const status = workerStatus({ command: "node run.mjs", requires: "claude" });
+    assert.equal(status.installed, false);
+    assert.deepEqual(status.missing.sort(), ["claude", "node"]);
+  } finally {
+    process.env.PATH = before;
+  }
+});
+
+test("没有 requires 时只看命令程序", () => {
+  const before = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const status = workerStatus({ command: "node run.mjs" });
+    assert.deepEqual(status.missing, ["node"]);
   } finally {
     process.env.PATH = before;
   }

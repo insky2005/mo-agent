@@ -11,11 +11,11 @@ export function workerCommand(ctx, args) {
   emit(args.options, { agents }, () => {
     const rows = agents.map((agent) => [
       agent.name,
-      agent.installed ? "✓" : "✗ 缺 " + agent.binary.split("/").pop(),
+      agent.installed ? "✓" : "✗ 缺 " + agent.missing.map((item) => item.split("/").pop()).join(", "),
       agent.command,
       agent.description,
     ]);
-    const missing = agents.filter((agent) => !agent.installed).map((agent) => agent.binary.split("/").pop());
+    const missing = agents.filter((agent) => !agent.installed).flatMap((agent) => agent.missing.map((item) => item.split("/").pop()));
     const lines = [
       table(rows, ["模板", "已装", "命令", "说明"]),
       "",
