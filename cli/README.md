@@ -258,9 +258,9 @@ TARGET=bun-linux-x64 bash scripts/build-cli.sh   # → cli/dist/mo-linux-x64（�
 npm pack --pack-destination cli/dist      # → cli/dist/mo-agent-0.2.0.tgz（约 25KB）
 ```
 
-## 接到主 Agent
+## 接到 Agent（技能）
 
-把技能装到主 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
+把技能装到各个 Agent 的技能目录，之后在对话里说“开始做”就行，不用手敲命令。
 
 ```bash
 mo skill install                 # 交互选择装到哪些 Agent
