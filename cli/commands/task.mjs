@@ -1,3 +1,4 @@
+import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { cardSections, renderCard, validateCard, verifyItems } from "../../core/tasks/card.mjs";
 import { STATES } from "../../core/tasks/model.mjs";
@@ -121,8 +122,19 @@ function createTask(ctx, args, home) {
   saveCard(resolved.root, meta, body);
   appendEvent(home, { type: "task.created", project: meta.project, taskId: id, payload: { title } });
 
-  emit(args.options, { ok: true, taskId: id, status: meta.status, path: cardPath(resolved.root, id), project: resolved.root }, () =>
-    "已建卡 " + id + "（draft）\n  项目: " + resolved.root + "\n  卡片: " + cardPath(resolved.root, id) + "\n\n确认后可派发：mo task confirm " + id);
+  const cardFile = cardPath(resolved.root, id);
+  const relativeCard = path.relative(resolved.root, cardFile);
+
+  emit(args.options, { ok: true, taskId: id, status: meta.status, path: cardFile, project: resolved.root }, () =>
+    [
+      "✓ 已建卡（" + meta.status + "）",
+      "",
+      "  id     " + id,
+      "  卡片   " + relativeCard,
+      "  项目   " + resolved.root,
+      "",
+      "下一步：mo task confirm " + id,
+    ].join("\n"));
   return 0;
 }
 
