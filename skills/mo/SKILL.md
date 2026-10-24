@@ -19,7 +19,7 @@ mo --version          # 不可用 → 见下面的「mo 还没装」
 mo doctor             # 顺带确认当前目录属于某个项目
 ```
 
-当前目录不是项目时，先问用户是否要 `mo project add .`，**不要自动建**。
+当前目录不是项目时，先问用户是否要 `mo project init .`，**不要自动建**。
 
 ### mo 还没装
 
@@ -141,7 +141,7 @@ mo ledger query --task <taskId> --json
 | 返回 | 意思 | 你说什么 |
 |---|---|---|
 | `E_NOT_CONFIRMED` | 卡还没确认 | "还差确认，要现在确认吗？" |
-| `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问是否 `mo project add .` |
+| `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问是否 `mo project init .` |
 | `E_NO_EXECUTOR` | 卡里没执行者 | 问用哪个 `--agent` |
 | `blocked(missing_receipt)` | 执行者没写回执 | 转述 `outputTail`（常见：未登录） |
 | `blocked(bad_receipt)` | 回执不合法 | 转述 `errors` |

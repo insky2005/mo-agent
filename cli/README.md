@@ -98,12 +98,45 @@ bash cli/demo/run.sh
 | 回执非法 | `blocked(bad_receipt)`，例如 `done` 却没有验收证据 |
 | 卡住后重试 | `blocked → running → done`，账本留下完整时间线 |
 
+## 操作路径
+
+两条安装线，两个初始化分支。
+
+### 1. 装 mo（二选一）
+
+| 顺序 | 做法 | 结果 |
+|---|---|---|
+| **先 CLI** | `bash scripts/install-cli.sh` 或远端 `install-remote.sh` | 命令就位，终端里顺带装技能 |
+| **先技能** | `npx skills add insky2005/mo-agent` | 技能就位，首次使用时 Agent 引导你装 CLI |
+
+### 2. 初始化项目
+
+```bash
+cd <项目>
+mo project init
+```
+
+一条命令做三件事：写 `.mo-agent/project.json`、登记到 `~/.mo-agent/projects.json`、给 Agent 写说明。说明内容取决于技能装没装：
+
+| 技能状态 | 写什么 | 为什么 |
+|---|---|---|
+| 已安装 | `AGENTS.md` / `CLAUDE.md` 里一段**指针** | 细节在技能里，避免两处漂移 |
+| 未安装 | 生成 `.mo-agent/MO.md`（完整用法），`AGENTS.md` 里只放**引用** | 项目自包含，换台机器也够用 |
+
+```bash
+mo project init --no-agent-file   # 只登记，不动 Agent 文件
+mo project init --mode inline     # 强制把完整用法写进 AGENTS.md
+mo project init --file docs/AI.md # 写到指定文件
+```
+
+`mo agent init` / `mo agent remove` 可以单独重跑这一步，不影响项目登记。
+
 ## 第一次使用
 
 ```bash
 mo doctor                 # 自检：node / home / 项目
 cd ~/c/work/your-project
-mo project add .          # 认领项目，写 .mo-agent/project.json
+mo project init .          # 认领项目，写 .mo-agent/project.json
 ```
 
 然后建第一张卡。`--exec` 是**任意 shell 命令**，不绑定任何厂商，只有一个要求：
@@ -351,7 +384,7 @@ mo ledger query --project <TAB>   demo  other-project
 
 ```bash
 # 项目
-mo project add [路径] [--name 名称]
+mo project init [路径] [--name 名称] [--no-agent-file] [--mode auto|skill|ref|inline] [--file 文件]
 mo project list
 
 # 任务
@@ -367,6 +400,10 @@ mo task dispatch <id> [--exec 命令] [--timeout 45m]
 mo task status <id>
 mo task list
 mo task cancel <id>
+
+# Agent 说明文件
+mo agent init                      # 只更新 AGENTS.md/CLAUDE.md
+mo agent remove                    # 只删自己那段
 
 # 其它
 mo run <id> [--exec 命令]          # 与 dispatch 等价，用于重跑

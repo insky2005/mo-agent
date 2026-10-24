@@ -265,7 +265,7 @@ if [ -n "$SHELL_NAME" ]; then
 fi
 
 if [ "$NEED_SKILL" = "1" ]; then
-  echo "下一步：mo skill install && mo project add ."
+  echo "下一步：mo skill install && mo project init ."
 else
-  echo "下一步：mo project add ."
+  echo "下一步：mo project init ."
 fi

@@ -397,7 +397,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | macOS 12+（Linux/Windows 适配中） | 必需 | 无法安装 |
 | Node ≥ 18 | `mo` CLI 与 hooks 需要 | `mo setup` 提示安装或用桌面端自带运行时 |
 | 一个主 Agent（DSH / Claude Code / …） | 建议 | 仍可用 CLI 手工建卡派单 |
-| 一个 git 仓库 | 可选 | 非 git 目录需显式 `mo project add` |
+| 一个 git 仓库 | 可选 | 非 git 目录需显式 `mo project init` |
 
 ### 13.3 首次使用的七步
 
@@ -419,7 +419,7 @@ mo agent add dsh        # 写入 MCP 配置 + manager 契约
 mo agent add claude-code # 或按需
 
 # 6. 认领第一个项目
-cd ~/c/work/foo && mo project add .
+cd ~/c/work/foo && mo project init .
 
 # 7. 验证
 mo doctor
@@ -455,7 +455,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 └── （原有）devices.json 等    # 若桌面端已初始化则保留
 ```
 
-项目侧只会在**首次建卡或 `mo project add`** 时写入 `.mo-agent/`，安装阶段不碰任何仓库。
+项目侧只会在**首次建卡或 `mo project init`** 时写入 `.mo-agent/`，安装阶段不碰任何仓库。
 
 ### 13.6 首次使用的分支
 
@@ -468,7 +468,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 | I5 | 已有 daemon 在跑（锁存在） | 复用，不重复起 | — |
 | I6 | 主 Agent 已配过 mo-agent MCP | 更新版本，保留其它配置 | 备份 `.bak-<时间>` |
 | I7 | 主 Agent 不支持 MCP | 只写 CLI 契约（CHARTER / CLAUDE.md） | "降级为 B 档，结果需手动拉取" |
-| I8 | 当前目录不是 git 仓库 | 不自动认领 | 提示 `mo project add .` |
+| I8 | 当前目录不是 git 仓库 | 不自动认领 | 提示 `mo project init .` |
 | I9 | 知识库路径不可写 | 启动但不静默：`memory_*` 返回 `E_KNOWLEDGE_UNAVAILABLE` | 界面告警 |
 | I10 | CLI 与 daemon 版本不一致 | 拒绝调用并提示升级 | "CLI 0.3.0 / daemon 0.2.0" |
 

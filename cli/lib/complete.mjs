@@ -8,7 +8,7 @@ import { listCards } from "./store.mjs";
 import { listAgents } from "./executors.mjs";
 
 const SPEC = {
-  project: { subs: ["add", "list"], flags: ["--name"] },
+  project: { subs: ["init", "list"], flags: ["--name", "--file", "--mode", "--no-agent-file"] },
   task: {
     subs: ["create", "confirm", "cancel", "status", "list", "dispatch"],
     flags: [

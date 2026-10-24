@@ -23,7 +23,7 @@ const HELP = [
   "mo —— 个人工作台 CLI",
   "",
   "用法：",
-  "  mo project add [路径] [--name 名称]   登记项目（写入 .mo-agent/project.json）",
+  "  mo project init [路径]               初始化项目（.mo-agent/ + AGENTS.md 说明）",
   "  mo project list                      查看已登记项目",
   "",
   "  mo task create --title 标题 --deliverable 产出 [--verify \"run:命令\"] [--exec 命令]",

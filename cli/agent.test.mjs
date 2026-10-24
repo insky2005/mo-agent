@@ -43,16 +43,18 @@ test("技能已装 → 写指针块", () => {
   const ws = workspace({ withSkill: true });
   run(ws, ["init"]);
   const text = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
-  assert.match(text, /mo 技能已安装/);
+  assert.match(text, /mo 技能/);
   assert.match(text, />>> mo >>>/);
 });
 
-test("技能未装 → 写内联用法", () => {
+test("技能未装 → 写 MO.md 并在 AGENTS.md 里引用", () => {
   const ws = workspace();
   run(ws, ["init"]);
-  const text = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
-  assert.match(text, /mo task create/);
-  assert.match(text, /missing_receipt/);
+  const agents = fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8");
+  assert.match(agents, /\.mo-agent\/MO\.md/);
+  const doc = fs.readFileSync(path.join(ws.project, ".mo-agent", "MO.md"), "utf8");
+  assert.match(doc, /mo task create/);
+  assert.match(doc, /missing_receipt/);
 });
 
 test("重复执行只保留一段", () => {
@@ -96,4 +98,10 @@ test("--mode 可强制内联", () => {
   const ws = workspace({ withSkill: true });
   run(ws, ["init"], { mode: ["inline"] });
   assert.match(fs.readFileSync(path.join(ws.project, "AGENTS.md"), "utf8"), /mo task create/);
+});
+
+test("--mode inline 不生成 MO.md", () => {
+  const ws = workspace();
+  run(ws, ["init"], { mode: ["inline"] });
+  assert.equal(fs.existsSync(path.join(ws.project, ".mo-agent", "MO.md")), false);
 });

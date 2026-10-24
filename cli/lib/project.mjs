@@ -158,7 +158,7 @@ export function resolveProject(options = {}) {
       if (!root) {
         throw new MoError(
           "E_PROJECT_MISSING",
-          "项目 " + (entry.name || id) + " 的目录已不存在，先 mo project add <新路径>",
+          "项目 " + (entry.name || id) + " 的目录已不存在，先 mo project init <新路径>",
         );
       }
       return { root, meta: readProjectMeta(root), autoAttached: false };
@@ -169,7 +169,7 @@ export function resolveProject(options = {}) {
       });
     }
     throw new MoError("E_PROJECT_NOT_FOUND", "找不到项目：" + target, {
-      hint: "用 mo project list 查看已登记项目，或用 mo project add <路径> 登记",
+      hint: "用 mo project list 查看已登记项目，或用 mo project init <路径> 登记",
     });
   }
 
@@ -185,7 +185,7 @@ export function resolveProject(options = {}) {
     return { root: attached.root, meta: attached.meta, autoAttached: true };
   }
   throw new MoError("E_PROJECT_UNBOUND", "当前目录不属于任何项目", {
-    hint: "在项目目录里执行，或 mo project add <路径>，或 --project <名称|路径>",
+    hint: "在项目目录里执行，或 mo project init <路径>，或 --project <名称|路径>",
     cwd,
   });
 }

@@ -39,7 +39,7 @@ export MO_AGENT_HOME="$PWD/.mo-test-home"   # 隔离，不污染 ~/.mo-agent
 ## 1. 登记项目
 
 ```bash
-mo project add .
+mo project init .
 ```
 
 **预期**：输出项目名、`p_` 开头的 id、根目录。

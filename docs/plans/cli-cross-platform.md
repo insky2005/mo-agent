@@ -66,7 +66,7 @@ SKILL.md 的安装段按平台分支：Windows 给 `irm ... | iex` 或下载 `.p
 Windows 10/11 x64 上：
 
 1. `mo --version` / `mo doctor` 正常；
-2. `mo project add .`、`mo task create/confirm/dispatch` 全流程；
+2. `mo project init .`、`mo task create/confirm/dispatch` 全流程；
 3. 用仓库自带的假执行者跑通 `done`（不依赖任何模型登录）；
 4. `mo skill install` 落到 `%USERPROFILE%\.agents\skills\mo`；
 5. 补全不要求（PowerShell 补全单独做，可后置）。
