@@ -133,7 +133,7 @@ function createTask(ctx, args, home) {
       "  卡片   " + relativeCard,
       "  项目   " + resolved.root,
       "",
-      "下一步：mo task confirm " + id,
+      "下一步（确认）：mo task confirm " + id,
     ].join("\n"));
   return 0;
 }
@@ -149,7 +149,7 @@ function confirmTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   const next = transition({ home, root: resolved.root, card, to: "confirmed", payload: { by: "human" } });
   emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
-    ["✓ 已确认", "", "  id     " + taskId, "  状态   " + next.meta.status, "", "下一步：mo task dispatch " + taskId].join("\n"));
+    ["✓ 已确认", "", "  id     " + taskId, "  状态   " + next.meta.status, "", "下一步（派发）：mo task dispatch " + taskId].join("\n"));
   return 0;
 }
 
