@@ -50,6 +50,24 @@ mo --version
 mo doctor
 ```
 
+### 1.5 另一条路：从技能开始，全程由 Agent 装
+
+前面两条都是"先装 mo，再装技能"。也可以反过来：**只把技能放进去，剩下的交给 Agent**。
+
+1. 先装技能（二选一）：
+   - `npx skills add insky2005/mo-agent`
+   - 或把 `skills/mo/SKILL.md` 放到 `~/.agents/skills/mo/SKILL.md`（或对应 Agent 的技能目录）
+2. 开一个新的 Agent 会话，直接说：「用 mo 把这件事落成任务卡」。
+3. Agent 会先跑 `mo --version`，发现没有，说明情况并**征求你的同意**；同意后它执行安装脚本。
+4. 装完当前会话用 `~/.local/bin/mo` 绝对路径继续；新开终端后 `mo` 才在 PATH 里。
+
+适合：机器上已经有 Claude / Codex，想少敲命令。
+
+注意：
+- Agent 需要 shell 权限与网络；
+- 安装会写 `~/.local/bin`、可能改 shell 配置，所以它必须先问你；
+- 这条路不会自动配补全（远端安装器不写 rc），需要时自己执行 `mo completion`。
+
 ## 2. 核心概念
 
 | 概念 | 是什么 | 存在哪 |
