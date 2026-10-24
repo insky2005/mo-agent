@@ -270,8 +270,8 @@ if [ -n "$SHELL_NAME" ]; then
 fi
 
 echo
+echo "下一步："
 if [ "$NEED_SKILL" = "1" ]; then
-  echo "下一步：mo skill install && mo project init"
-else
-  echo "下一步：在项目目录执行 mo project init"
+  echo "  mo skill install        给 Claude / Codex / Qoder 等安装 mo 技能（交互选择）"
 fi
+echo "  mo project init         在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
