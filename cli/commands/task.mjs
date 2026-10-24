@@ -148,14 +148,16 @@ function loadTarget(ctx, args) {
 function confirmTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   const next = transition({ home, root: resolved.root, card, to: "confirmed", payload: { by: "human" } });
-  emit(args.options, { ok: true, taskId, status: next.meta.status }, "已确认 " + taskId + " → confirmed\n可以派发：mo task dispatch " + taskId);
+  emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
+    ["✓ 已确认", "", "  id     " + taskId, "  状态   " + next.meta.status, "", "下一步：mo task dispatch " + taskId].join("\n"));
   return 0;
 }
 
 function cancelTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   const next = transition({ home, root: resolved.root, card, to: "canceled", payload: { by: "human" } });
-  emit(args.options, { ok: true, taskId, status: next.meta.status }, "已取消 " + taskId);
+  emit(args.options, { ok: true, taskId, status: next.meta.status }, () =>
+    ["✓ 已取消", "", "  id     " + taskId, "  状态   " + next.meta.status].join("\n"));
   return 0;
 }
 
