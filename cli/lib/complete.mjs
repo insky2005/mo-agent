@@ -20,13 +20,13 @@ const SPEC = {
   ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
   run: { subs: [], flags: ["--agent", "--exec", "--timeout"] },
   doctor: { subs: [], flags: ["--json"] },
-  workers: { subs: [], flags: ["--json"] },
+  worker: { subs: ["list"], flags: ["--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   agent: { subs: ["init", "remove"], flags: ["--file", "--mode", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "workers", "skill", "agent", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "worker", "skill", "agent", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
