@@ -16,16 +16,15 @@ const SPEC = {
       "--background", "--assignee", "--worker", "--exec", "--timeout", "--json",
     ],
   },
-  receipt: { subs: ["submit"], flags: ["--file", "--dry-run"] },
+  receipt: { subs: ["submit", "apply"], flags: ["--file", "--dry-run"] },
   ledger: { subs: ["query"], flags: ["--task", "--type", "--days", "--limit", "--json"] },
-  run: { subs: [], flags: ["--worker", "--exec", "--timeout"] },
   doctor: { subs: [], flags: ["--json"] },
   worker: { subs: ["list", "add", "remove"], flags: ["--command", "--description", "--requires", "--project", "--json"] },
   skill: { subs: ["install", "uninstall", "list"], flags: ["--target", "--json"] },
   completion: { subs: ["bash", "zsh"], flags: [] },
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "run", "doctor", "worker", "skill", "completion", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "completion", "help"];
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 const VALUE_FLAGS = new Set([
   "--project", "--exec", "--timeout", "--file", "--task", "--name",
@@ -111,7 +110,7 @@ export function complete(ctx = {}) {
   if (group === "task" && ["confirm", "cancel", "status", "dispatch", "verify"].includes(sub)) {
     return taskItems(cwd).filter(startsWith(current));
   }
-  if (group === "receipt" && sub === "submit") return taskItems(cwd).filter(startsWith(current));
+  if (group === "receipt" && ["submit", "apply"].includes(sub)) return taskItems(cwd).filter(startsWith(current));
 
   return [];
 }

@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "run", "doctor", "worker", "skill", "completion", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "completion", "help",
   ]);
 });
 
@@ -58,7 +58,7 @@ test("确认/取消/查看 补任务 id", () => {
     const got = values(complete({ cwd: ws.project, words: ["task", sub, ""] }));
     assert.deepEqual(got, ["t_01A", "t_01B"], sub + " 候选不对");
   }
-  assert.deepEqual(values(complete({ cwd: ws.project, words: ["run", ""] })), ["t_01A", "t_01B"]);
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["receipt", "apply", ""] })), ["t_01A", "t_01B"]);
 });
 
 test("--project 补项目名", () => {

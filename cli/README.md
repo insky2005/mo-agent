@@ -430,8 +430,8 @@ mo project agent                   # 只更新 AGENTS.md/CLAUDE.md
 mo project agent --remove          # 只删自己那段
 
 # 其它
-mo run <id> [--exec 命令]          # 与 dispatch 等价，用于重跑
-mo receipt submit <id> --file -    # 从 stdin 提交回执
+mo receipt submit <id> --file -    # 手工写入回执（不改状态）
+mo receipt apply <id>              # 应用已有回执：跑验收并更新状态
 mo ledger query [--project 项目] [--task id] [--type task.] [--days 30] [--limit 50]
 mo doctor
 ```
@@ -478,6 +478,8 @@ mo doctor
 cat <<'JSON' | mo receipt submit t_01HXYZ --file -
 { "taskId": "t_01HXYZ", "status": "done", "summary": "改完了", "verify": [{ "cmd": "npm test", "exit": 0 }] }
 JSON
+
+mo receipt apply t_01HXYZ     # 应用它：跑验收、更新状态
 ```
 
 ## 退出码

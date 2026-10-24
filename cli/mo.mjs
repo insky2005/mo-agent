@@ -11,7 +11,6 @@ import { projectCommand } from "./commands/project.mjs";
 import { taskCommand } from "./commands/task.mjs";
 import { receiptCommand } from "./commands/receipt.mjs";
 import { ledgerCommand } from "./commands/ledger.mjs";
-import { runCommand } from "./commands/run.mjs";
 import { doctorCommand } from "./commands/doctor.mjs";
 import { completionCommand, completeCommand } from "./commands/completion.mjs";
 import { workerCommand } from "./commands/worker.mjs";
@@ -37,9 +36,9 @@ const HELP = [
   "  mo task list                    列出本项目任务",
   "  mo task cancel <id>             取消任务",
   "",
-  "  mo run <id> [--worker 执行者] [--exec 命令]",
-  "  mo receipt submit <id> --file - 提交回执（stdin）",
+  "  mo receipt submit|apply <id>    提交/应用回执（apply 走验收）",
   "  mo ledger query [--project 项目] [--task id] [--days 30]",
+  "",
   "  mo help                         显示本帮助",
   "  mo doctor                       自检",
   "  mo completion bash|zsh          输出补全脚本（eval 即可）",
@@ -54,7 +53,6 @@ const ROUTES = {
   task: taskCommand,
   receipt: receiptCommand,
   ledger: ledgerCommand,
-  run: runCommand,
   doctor: doctorCommand,
   completion: completionCommand,
   worker: workerCommand,

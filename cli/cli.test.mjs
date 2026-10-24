@@ -270,3 +270,33 @@ test("mo task verify 对已 done 的卡重跑验收，失败只改 verified 不�
   assert.equal(status.parsed.status, "done");
   assert.equal(status.parsed.verified, "verify_failed");
 });
+test("回执可以后补：submit + apply 把 blocked 救回 done", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, "process.exit(1);");
+
+  run(ws, ["project", "init", ".", "--no-agent-file"]);
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "x",
+    "--deliverable", "y",
+    "--verify", "run:true",
+    "--exec", "node executor.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+
+  const first = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(first.parsed.status, "blocked");
+
+  const receipt = { taskId, status: "done", summary: "补交的回执", verify: [{ cmd: "true", exit: 0 }] };
+  const file = path.join(ws.project, "receipt.json");
+  fs.writeFileSync(file, JSON.stringify(receipt));
+
+  const submitted = runJson(ws, ["receipt", "submit", taskId, "--file", file]);
+  assert.equal(submitted.status, 0, submitted.stderr);
+
+  const applied = runJson(ws, ["receipt", "apply", taskId]);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(applied.parsed.status, "done");
+  assert.equal(applied.parsed.verified, "verified");
+});
