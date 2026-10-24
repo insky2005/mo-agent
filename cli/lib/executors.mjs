@@ -43,6 +43,16 @@ export const EXECUTORS = {
   },
 };
 
+/** 从命令里取出真正要执行的程序：跳过 VAR=value 前缀与引号 */
+export function binaryOf(command) {
+  const tokens = String(command).match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  for (const token of tokens) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue;
+    return token.replace(/^["']|["']$/g, "");
+  }
+  return "";
+}
+
 export function resolveAgent(name) {
   const key = String(name).trim();
   const preset = EXECUTORS[key];
@@ -51,7 +61,8 @@ export function resolveAgent(name) {
       hint: "可用：" + Object.keys(EXECUTORS).join(" / ") + "；自定义命令请用 --exec",
     });
   }
-  return { name: key, ...preset };
+  const binary = preset.requires || binaryOf(preset.command);
+  return { name: key, ...preset, binary, installed: Boolean(which(binary)), path: which(binary) };
 }
 
 /** 在 PATH 里找可执行文件（不执行它） */
@@ -71,12 +82,15 @@ export function which(binary) {
 
 export function listAgents() {
   return Object.entries(EXECUTORS).map(([name, preset]) => {
-    const found = which(preset.requires);
+    // 以命令里实际调用的程序为准；requires 只作兜底
+    const binary = preset.requires || binaryOf(preset.command);
+    const found = which(binary);
     return {
       name,
       command: preset.command,
       description: preset.description,
       requires: preset.requires,
+      binary,
       installed: Boolean(found),
       path: found,
     };

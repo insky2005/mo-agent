@@ -11,11 +11,11 @@ export function workerCommand(ctx, args) {
   emit(args.options, { agents }, () => {
     const rows = agents.map((agent) => [
       agent.name,
-      agent.installed ? "✓" : "✗",
+      agent.installed ? "✓" : "✗ 缺 " + agent.binary,
       agent.command,
       agent.description,
     ]);
-    const missing = agents.filter((agent) => !agent.installed).map((agent) => agent.requires);
+    const missing = agents.filter((agent) => !agent.installed).map((agent) => agent.binary);
     const lines = [
       table(rows, ["模板", "已装", "命令", "说明"]),
       "",
@@ -23,7 +23,7 @@ export function workerCommand(ctx, args) {
       '自定义：--exec "<命令>"（与 --agent 互斥）',
     ];
     if (missing.length) {
-      lines.push("未安装：" + [...new Set(missing)].join(" / ") + "（先装好再选对应模板）");
+      lines.push("不可用：" + [...new Set(missing)].join(" / ") + "（对应模板选不了）");
     }
     return lines.join("\n");
   });

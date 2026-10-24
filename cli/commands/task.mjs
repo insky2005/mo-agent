@@ -74,6 +74,9 @@ function createTask(ctx, args, home) {
 
   const verify = parseVerifyInput(all(args.options, "verify"));
   const chosen = pickExecutor(args.options);
+  if (chosen && !chosen.installed) {
+    process.stderr.write("[W_WORKER_MISSING] " + chosen.binary + " 未安装，这张卡派单会失败\n");
+  }
   const id = newTaskId();
   const now = new Date().toISOString();
   const receipt = ".mo-agent/receipts/" + id + ".json";
@@ -189,6 +192,11 @@ function dispatchCommand(ctx, args, home) {
 
 export function runDispatch(args, { home, root, taskId }) {
   const chosen = pickExecutor(args.options);
+  if (chosen && !chosen.installed) {
+    throw new MoError("E_ASSIGNEE_UNSUPPORTED", "执行者 " + chosen.binary + " 未安装", {
+      hint: "先装好它，或换一个 --agent / 用 --exec",
+    });
+  }
   return dispatchTask({
     home,
     root,

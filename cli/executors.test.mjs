@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAgent, listAgents, which, EXECUTORS } from "./lib/executors.mjs";
+import { resolveAgent, listAgents, which, binaryOf, EXECUTORS } from "./lib/executors.mjs";
 
 test("已知模板展开成完整命令", () => {
   const claude = resolveAgent("claude");
@@ -42,5 +42,22 @@ test("listAgents 带 installed 与 path", () => {
   for (const agent of listAgents()) {
     assert.equal(typeof agent.installed, "boolean");
     if (agent.installed) assert.ok(agent.path);
+  }
+});
+test("binaryOf 取命令里真正执行的程序", () => {
+  assert.equal(binaryOf('claude -p "$(cat)"'), "claude");
+  assert.equal(binaryOf("codex exec -s workspace-write -"), "codex");
+  assert.equal(binaryOf('FOO=1 BAR=2 node "x y.mjs"'), "node");
+});
+
+test("PATH 为空时所有模板都标为未安装", () => {
+  const before = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const agents = listAgents();
+    assert.ok(agents.every((agent) => agent.installed === false));
+    assert.ok(agents.every((agent) => agent.binary));
+  } finally {
+    process.env.PATH = before;
   }
 });
