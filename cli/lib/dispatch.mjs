@@ -36,6 +36,21 @@ function recallForDispatch({ home, card }) {
 }
 
 /**
+ * 卡上的 workdir 是相对项目根的；越界直接拒绝（B5.11）。
+ */
+export function resolveWorkdir(root, meta) {
+  const relative = meta && meta.workdir ? String(meta.workdir) : ".";
+  const absolute = path.resolve(root, relative);
+  const back = path.relative(root, absolute);
+  if (back.startsWith("..") || path.isAbsolute(back)) {
+    throw new MoError("E_SCOPE", "workdir 越出项目根：" + relative, {
+      hint: "只能落在项目目录内，例如 . 或 app/web",
+    });
+  }
+  return absolute;
+}
+
+/**
  * 会话型派单：不 spawn 子进程，而是在新终端窗口里跑交互式 CLI。
  * 人能看到执行过程；dispatch 立即返回，结果靠回执文件（与无头模式的唯一区别）。
  */
@@ -54,6 +69,7 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
   }
 
   const kind = detectTerminal(env);
+  const workdir = resolveWorkdir(root, meta);
   const dryRun = String(env.MO_LAUNCHER || "").toLowerCase() === "print";
   // 先确认有终端可开，再改状态——否则会留下"running 但窗口没起来"的卡
   if (kind === "none" && !dryRun) {
@@ -79,13 +95,21 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
   const receiptFile = resolveReceiptFile(root, meta);
   ensureDir(receiptDir(root));
   const knowledge = recallForDispatch({ home, card });
-  const envelope = buildEnvelope({ meta, body: card.body, root, receiptFile, knowledge: knowledge.block });
+  const envelope = buildEnvelope({
+    meta,
+    body: card.body,
+    root,
+    receiptFile,
+    knowledge: knowledge.block,
+    workdir,
+  });
   const files = sessionPaths(root, taskId);
   const prompt =
     "请阅读 " + files.envelope + " 并执行其中的任务卡，完成后把回执写到 " + receiptFile + "，并输出一行 RECEIPT_WRITTEN " + receiptFile;
 
   writeSessionAssets({
-    root,
+    projectRoot: root,
+    cwd: workdir,
     taskId,
     title: meta.title,
     command: worker.command,
@@ -170,7 +194,7 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
 
   const result = await runExecutor({
     command: String(command),
-    cwd: root,
+    cwd: resolveWorkdir(root, meta),
     env,
     input: envelope,
     timeoutMs,
@@ -181,7 +205,7 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
     root,
     taskId,
     command: String(command),
-    cwd: root,
+    cwd: resolveWorkdir(root, meta),
     timeoutMs,
     startedAt,
     result,

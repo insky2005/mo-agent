@@ -53,12 +53,13 @@ export function renderRunScript({ root, taskId, title, command, prompt, receipt 
   ].join("\n");
 }
 
-export function writeSessionAssets({ root, taskId, title, command, prompt, receipt, envelopeText }) {
-  const files = sessionPaths(root, taskId);
+/** projectRoot 决定文件落哪；cwd 决定脚本 cd 到哪（卡上的 workdir） */
+export function writeSessionAssets({ projectRoot, cwd, taskId, title, command, prompt, receipt, envelopeText }) {
+  const files = sessionPaths(projectRoot, taskId);
   ensureDir(path.dirname(files.envelope));
   ensureDir(path.dirname(files.script));
   fs.writeFileSync(files.envelope, envelopeText, "utf8");
-  fs.writeFileSync(files.script, renderRunScript({ root, taskId, title, command, prompt, receipt }), { mode: 0o755 });
+  fs.writeFileSync(files.script, renderRunScript({ root: cwd, taskId, title, command, prompt, receipt }), { mode: 0o755 });
   return files;
 }
 

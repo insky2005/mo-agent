@@ -19,7 +19,7 @@ const candidateIds = { positional: "candidate" };
 const SPEC = {
   task: {
     subs: {
-      create: { flags: ["--title", "--deliverable", "--verify", "--boundary", "--constraint", "--background", "--assignee", "--worker", "--exec", "--timeout", "--from"] },
+      create: { flags: ["--title", "--deliverable", "--verify", "--boundary", "--constraint", "--background", "--assignee", "--worker", "--exec", "--timeout", "--workdir", "--from"] },
       confirm: { flags: ["--wait", "--ttl", "--from"], ...taskIds },
       approve: { flags: ["--yes", "--channel"], ...taskIds },
       reject: { flags: ["--yes", "--note", "--channel"], ...taskIds },

@@ -110,3 +110,63 @@ test("无头 worker 仍然走原来的子进程路径", () => {
   assert.equal(dispatched.parsed.reason, "missing_receipt");
   assert.equal(dispatched.parsed.session, undefined);
 });
+test("workdir：会话脚本 cd 到子目录，信封仍落在项目根", () => {
+  const ws = workspace();
+  fs.mkdirSync(path.join(ws.project, "app", "web"), { recursive: true });
+  const taskId = prepare(ws); // 复用 worker 注册
+  // 直接改卡上的 workdir，避免再建一张
+  const cardFile = path.join(ws.project, ".mo-agent", "tasks", taskId + ".md");
+  fs.writeFileSync(cardFile, fs.readFileSync(cardFile, "utf8").replace("workdir: .", "workdir: app/web"));
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId], { MO_LAUNCHER: "print", MO_TERMINAL: "iterm" });
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+
+  const script = fs.readFileSync(dispatched.parsed.session.script, "utf8");
+  assert.ok(script.includes("cd '" + path.join(ws.project, "app", "web") + "'"), "脚本要 cd 到 workdir");
+  assert.ok(
+    dispatched.parsed.session.envelope.startsWith(path.join(ws.project, ".mo-agent", "envelopes")),
+    "信封仍放项目根",
+  );
+});
+
+test("workdir 越出项目根：E_SCOPE，卡不变", () => {
+  const ws = workspace();
+  const taskId = prepare(ws);
+  const cardFile = path.join(ws.project, ".mo-agent", "tasks", taskId + ".md");
+  fs.writeFileSync(cardFile, fs.readFileSync(cardFile, "utf8").replace("workdir: .", "workdir: ../outside"));
+
+  const denied = runJson(ws, ["task", "dispatch", taskId], { MO_LAUNCHER: "print", MO_TERMINAL: "iterm" });
+  assert.equal(denied.status, 1);
+  assert.match(denied.stderr, /E_SCOPE/);
+  assert.equal(runJson(ws, ["task", "status", taskId]).parsed.status, "confirmed");
+});
+
+test("无头派单也遵守 workdir", () => {
+  const ws = workspace();
+  fs.mkdirSync(path.join(ws.project, "sub"), { recursive: true });
+  fs.writeFileSync(
+    path.join(ws.project, "cwd.mjs"),
+    [
+      'import fs from "node:fs";',
+      "fs.writeFileSync(process.env.MO_RECEIPT, JSON.stringify({",
+      "  taskId: process.env.MO_TASK_ID, status: \"done\", summary: process.cwd(),",
+      '  verify: [{ cmd: "x", exit: 0 }],',
+      "}));",
+    ].join("\n"),
+  );
+  run(ws, ["project", "add", "."]);
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "无头 workdir",
+    "--deliverable", "x",
+    "--workdir", "sub",
+    "--exec", "node ../cwd.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  run(ws, ["task", "confirm", taskId]);
+  run(ws, ["task", "approve", taskId, "--yes"]);
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+  assert.equal(dispatched.parsed.receipt.summary, path.join(ws.project, "sub"));
+});

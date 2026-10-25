@@ -167,7 +167,7 @@ canceled            canceled                failed                  └─> canc
 | B5.8 | 超出预算（时间/token/子任务/重试） | 拒绝或转 `blocked` 问人 | `E_BUDGET` |
 | B5.9 | 递归派单（执行者再派单） | 拒绝，深度上限 1 | `E_DEPTH` |
 | B5.10 | 起进程/注入失败 | `failed`，可重试一次 | `E_DISPATCH_FAILED` |
-| B5.11 | `workdir` 越出项目根 | 拒绝 | `E_SCOPE` |
+| B5.11 | `workdir` 越出项目根 | 拒绝（无头与会话两种派单都校验） | `E_SCOPE` |
 
 ### 6.6 执行（B6）
 

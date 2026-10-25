@@ -113,7 +113,7 @@ function createTask(ctx, args, home) {
     assignee: one(args.options, "assignee", "auto"),
     worker: chosen ? chosen.name : undefined,
     exec: chosen ? chosen.command : one(args.options, "exec"),
-    workdir: ".",
+    workdir: one(args.options, "workdir", "."),
     verify,
     receipt,
     timeout: one(args.options, "timeout", "45m"),

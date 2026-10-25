@@ -2,7 +2,7 @@
  * 派单信封：执行者拿到的全部上下文。
  * 卡片全文内嵌，路径只用于回执落盘。见 docs/spec/workbench-flow.md §7.2。
  */
-export function buildEnvelope({ meta, body, root, receiptFile, knowledge }) {
+export function buildEnvelope({ meta, body, root, receiptFile, knowledge, workdir }) {
   const lines = [
     "你是执行者。按下面的任务卡交付，不要修改任务卡本身。",
     "",
@@ -10,7 +10,7 @@ export function buildEnvelope({ meta, body, root, receiptFile, knowledge }) {
     "id: " + meta.id,
     "项目: " + (meta.name ? meta.name + " (" + meta.project + ")" : meta.project),
     "标题: " + meta.title,
-    "工作目录: " + root,
+    "工作目录: " + (workdir || root),
     "",
     body.trim(),
     "",

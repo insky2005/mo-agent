@@ -437,6 +437,7 @@ mo project remove [名称|id|路径] [--path 路径] [--purge] [--dry-run]   # �
 # 任务
 mo task create --title "给面板加筛选" \
   --deliverable "app/web/tasks.html 有筛选栏" \
+  --workdir app/web \
   --verify "run:npm test -- --filter tasks" \
   --verify "human:视觉确认" \
   --boundary "不要改后端接口" \

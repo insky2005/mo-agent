@@ -109,6 +109,7 @@ const OPTIONS = {
     ["--boundary / --constraint / --background", "写进卡的正文段落，可重复"],
     ["--worker <名> | --exec <命令>", "执行者，二选一"],
     ["--timeout 45m", "执行超时（默认 45m）"],
+    ["--workdir <相对路径>", "执行目录，必须在项目根内（默认 .）"],
     ["--assignee auto|<名>", "建卡时记下意向执行者"],
     ["--from <id>", "这张卡是谁派的（缺省取 MO_AGENT_ID）"],
     ["--wait 60s / --ttl 24h", "confirm：等批准 / 请求有效期"],
