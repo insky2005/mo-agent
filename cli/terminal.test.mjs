@@ -34,12 +34,16 @@ function runJson(ws, args, extraEnv = {}) {
   return { ...result, parsed };
 }
 
-test("list 列出内置终端", () => {
+test("list 列出内置终端，并给出当前生效的那个", () => {
   const ws = workspace();
   const listed = runJson(ws, ["terminal", "list"]);
   assert.equal(listed.status, 0, listed.stderr);
   const names = listed.parsed.terminals.map((item) => item.name);
   for (const name of ["iterm", "terminal", "print", "none"]) assert.ok(names.includes(name), name);
+
+  // 没设默认时也要告诉你会用哪个
+  assert.ok(["iterm", "terminal", "none"].includes(listed.parsed.effective.name));
+  if (!listed.parsed.current) assert.equal(listed.parsed.effective.reason, "auto");
 });
 
 test("add --use 设置默认，list 标出来", () => {
@@ -52,6 +56,23 @@ test("add --use 设置默认，list 标出来", () => {
   assert.ok(mine, "应该能列出自定义终端");
   assert.equal(mine.source, "custom");
   assert.equal(mine.default, true);
+  assert.equal(listed.parsed.effective.name, "my-tmux");
+  assert.equal(listed.parsed.effective.reason, "default");
+
+  const human = run(ws, ["terminal", "list"]);
+  assert.match(human.stdout, /当前生效：my-tmux（已设默认）/);
+});
+
+test("current 打印当前生效与原因", () => {
+  const ws = workspace();
+  const auto = runJson(ws, ["terminal", "current"]);
+  assert.ok(["iterm", "terminal", "none"].includes(auto.parsed.effective.name));
+  assert.match(run(ws, ["terminal", "current"]).stdout, /当前生效：/);
+
+  runJson(ws, ["terminal", "add", "mine", "--command", "sh {script}", "--use"]);
+  const fixed = runJson(ws, ["terminal", "current"]);
+  assert.equal(fixed.parsed.current, "mine");
+  assert.equal(fixed.parsed.effective.reason, "default");
 });
 
 test("模板必须包含 {script} 或 {raw}", () => {

@@ -7,8 +7,32 @@ import {
   currentTerminal,
   listTerminals,
   removeTerminal,
+  resolveTerminal,
   setDefaultTerminal,
 } from "../lib/terminals.mjs";
+
+const REASON_LABEL = {
+  "env:MO_LAUNCHER": "环境变量 MO_LAUNCHER",
+  "env:MO_LAUNCH_CMD": "环境变量 MO_LAUNCH_CMD",
+  "env:MO_TERMINAL": "环境变量 MO_TERMINAL",
+  default: "已设默认",
+  auto: "自动探测",
+};
+
+/** 这次派单实际会用的终端；解析失败时退回空值，不让 list 挂掉 */
+function effectiveFor(home) {
+  try {
+    return resolveTerminal({ home });
+  } catch (error) {
+    return { name: "", kind: "unknown", reason: "error", error: error.message };
+  }
+}
+
+function describeEffective(effective) {
+  if (!effective.name) return "（解析失败：" + (effective.error || "未知") + "）";
+  if (effective.kind === "none") return effective.name + "（没有可用终端；会话型派单会失败）";
+  return effective.name + "（" + (REASON_LABEL[effective.reason] || effective.reason) + "）";
+}
 
 /**
  * mo terminal list|add|remove|use
@@ -31,21 +55,31 @@ export function terminalCommand(ctx, args) {
 
 function listCommand(args, home) {
   const items = listTerminals({ home });
+  const effective = effectiveFor(home);
   const rows = items.map((item) => [
     item.name,
     SOURCE_LABEL[item.source] || item.source,
     item.default ? "✓" : "",
+    item.name === effective.name ? "✓" : "",
     item.command || "（内置驱动）",
     item.description || "",
   ]);
 
-  emit(args.options, { terminals: items, current: currentTerminal({ home }) }, () =>
-    [
-      table(rows, ["终端", "来源", "默认", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
-      "",
-      "设置默认：mo terminal use <名称>",
-      '自定义：mo terminal add <名称> --command \'tmux new-window "bash {script}"\'',
-    ].join("\n"),
+  emit(
+    args.options,
+    {
+      terminals: items,
+      current: currentTerminal({ home }),
+      effective: { name: effective.name, kind: effective.kind, reason: effective.reason },
+    },
+    () =>
+      [
+        table(rows, ["终端", "来源", "默认", "生效", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
+        "",
+        "当前生效：" + describeEffective(effective),
+        "设置默认：mo terminal use <名称>",
+        '自定义：mo terminal add <名称> --command \'tmux new-window "bash {script}"\'',
+      ].join("\n"),
   );
   return 0;
 }
@@ -77,11 +111,7 @@ function removeCommand(args, home) {
 
 function useCommand(args, home) {
   const name = args.positional[1];
-  if (!name) {
-    const current = currentTerminal({ home });
-    emit(args.options, { current }, current || "（没有设默认，按自动探测）");
-    return 0;
-  }
+  if (!name) return currentCommand(args, home);
   const result = setDefaultTerminal({ home, name });
   emit(args.options, { ok: true, ...result }, () =>
     "✓ 默认终端 = " + result.name + "（" + result.kind + "）；会话型派单会用它。");
@@ -89,7 +119,11 @@ function useCommand(args, home) {
 }
 
 function currentCommand(args, home) {
-  const current = currentTerminal({ home });
-  emit(args.options, { current }, current || "（没有设默认，按自动探测）");
+  const effective = effectiveFor(home);
+  emit(
+    args.options,
+    { current: currentTerminal({ home }), effective: { name: effective.name, kind: effective.kind, reason: effective.reason } },
+    "当前生效：" + describeEffective(effective),
+  );
   return 0;
 }

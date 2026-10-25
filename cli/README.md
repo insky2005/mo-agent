@@ -389,7 +389,8 @@ mo task dispatch t_x
 终端由 `mo terminal` 管理，和 worker 一样可注册、可设默认：
 
 ```bash
-mo terminal list                  # 内置（iterm / terminal / print / none）+ 自定义
+mo terminal list                  # 内置 + 自定义，末行给出「当前生效」与原因
+mo terminal current               # 只打印当前生效的那个
 mo terminal add my-tmux --command 'tmux new-window "bash {script}"' --use
 mo terminal use iterm             # 设默认
 mo terminal remove my-tmux

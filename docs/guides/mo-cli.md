@@ -282,6 +282,7 @@ mo ledger query --task t_01H…
 
 ```bash
 mo terminal list                                       # 内置 iterm / terminal / print / none + 自定义
+mo terminal current                                    # 当前生效的是哪个（没设默认就显示自动探测结果）
 mo terminal add my-tmux --command 'tmux new-window "bash {script}"' --use
 mo terminal use iterm                                  # 设默认
 ```
