@@ -9,8 +9,12 @@ import { ensureDir } from "./fsx.mjs";
  * 会话型 worker 的启动器：把卡写成信封文件 + 生成一个 run 脚本，
  * 然后在 iTerm / Terminal.app 里开新窗口跑交互式 CLI —— 过程对人是可见的。
  *
+ * 终端怎么开：
+ *   MO_LAUNCH_CMD='<命令模板>'   自定义，{script} 会被替换成转义后的脚本路径
+ *   MO_TERMINAL=iterm|terminal|none
+ *   否则 macOS 探测 iTerm → Terminal.app
+ *
  * MO_LAUNCHER=print 只打印，不真的开窗口（测试与无 GUI 环境用）。
- * MO_TERMINAL=iterm|terminal|none 强制指定终端。
  */
 
 const ITERM = [
@@ -19,6 +23,7 @@ const ITERM = [
 ];
 
 export function detectTerminal(env = process.env) {
+  if (String(env.MO_LAUNCH_CMD || "").trim()) return "custom";
   const forced = String(env.MO_TERMINAL || "").toLowerCase();
   if (forced === "iterm" || forced === "terminal" || forced === "none") return forced;
   if (ITERM.some((candidate) => fs.existsSync(candidate))) return "iterm";
@@ -93,9 +98,22 @@ export function launchTerminal({ kind, script, env = process.env }) {
   if (String(env.MO_LAUNCHER || "").toLowerCase() === "print") {
     return { kind: "print", launched: false };
   }
+  if (kind === "custom") {
+    const template = String(env.MO_LAUNCH_CMD || "").trim();
+    // {script} 是已转义的路径；{raw} 原样，方便自己拼
+    const command = template.split("{script}").join(shellQuote(script)).split("{raw}").join(script);
+    const result = spawnSync("/bin/sh", ["-c", command], { encoding: "utf8" });
+    if (result.error) {
+      throw new MoError("E_DISPATCH_FAILED", "MO_LAUNCH_CMD 执行失败：" + result.error.message);
+    }
+    if (result.status !== 0) {
+      throw new MoError("E_DISPATCH_FAILED", "MO_LAUNCH_CMD 退出码 " + result.status + "：" + String(result.stderr || "").trim());
+    }
+    return { kind: "custom", launched: true };
+  }
   if (kind === "none") {
     throw new MoError("E_NO_TERMINAL", "没有可用的终端，无法开启会话型 worker", {
-      hint: "macOS 装 iTerm 或直接用 Terminal.app；服务器/CI 场景请用无头 worker 或改 --exec",
+      hint: "macOS 装 iTerm / 用 Terminal.app，或设 MO_LAUNCH_CMD 指定自己的终端命令；服务器/CI 请用无头 worker",
     });
   }
   const result = spawnSync("osascript", ["-e", applescript(kind, script)], { encoding: "utf8" });

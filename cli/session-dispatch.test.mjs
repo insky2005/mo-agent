@@ -170,3 +170,16 @@ test("无头派单也遵守 workdir", () => {
   assert.equal(dispatched.status, 0, dispatched.stderr);
   assert.equal(dispatched.parsed.receipt.summary, path.join(ws.project, "sub"));
 });
+test("MO_LAUNCH_CMD：用自己的终端命令启动", () => {
+  const ws = workspace();
+  const taskId = prepare(ws);
+  const marker = path.join(ws.root, "launched.txt");
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId], {
+    MO_LAUNCH_CMD: "echo launched > " + JSON.stringify(marker) + " && sh {script}",
+  });
+  assert.equal(dispatched.status, 0, dispatched.stderr);
+  assert.equal(dispatched.parsed.session.terminal, "custom");
+  assert.equal(dispatched.parsed.session.launched, true);
+  assert.equal(fs.readFileSync(marker, "utf8").trim(), "launched");
+});
