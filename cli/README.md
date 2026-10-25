@@ -148,19 +148,29 @@ mo project init .          # 认领项目，写 .mo-agent/project.json
 常用 Agent 有内置模板，用 `--worker` 选，不用记完整命令：
 
 ```bash
-mo worker list                        # 列出执行者
-mo task create --worker claude …  # 展开成 claude -p "$(cat)"
-mo task create --worker codex …
+mo worker list                          # 列出执行者（带模式列）
+mo task create --worker claude …        # 会话型：新终端窗口，过程可见
+mo task create --worker claude-headless …  # 无头型：子进程 + stdin
 ```
 
-| 执行者 | 展开为 | 说明 |
+**裸名 = 会话型**，`-headless` 后缀 = 无头型：
+
+| 执行者 | 模式 | 展开为 |
 |---|---|---|
-| `claude` | `claude -p "$(cat)" --permission-mode acceptEdits` | Claude Code |
-| `codex` | `codex exec -s workspace-write -` | Codex CLI |
-| `qodercli` | `qodercli -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（国际版） |
-| `qoderclicn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` | Qoder CLI（CN 版） |
-| `pi` | `pi -p "$(cat)"` | pi |
-| `qwen` | `qwen --approval-mode auto-edit "$(cat)"` | Qwen Code |
+| `claude` | 会话 | `claude`（交互式） |
+| `codex` | 会话 | `codex` |
+| `qodercli` | 会话 | `qodercli` |
+| `qoderclicn` | 会话 | `qoderclicn` |
+| `pi` | 会话 | `pi` |
+| `qwen` | 会话 | `qwen` |
+| `claude-headless` | 无头 | `claude -p "$(cat)" --permission-mode acceptEdits` |
+| `codex-headless` | 无头 | `codex exec -s workspace-write -` |
+| `qodercli-headless` | 无头 | `qodercli -p "$(cat)" --permission-mode accept_edits` |
+| `qoderclicn-headless` | 无头 | `qoderclicn -p "$(cat)" --permission-mode accept_edits` |
+| `pi-headless` | 无头 | `pi -p "$(cat)"` |
+| `qwen-headless` | 无头 | `qwen --approval-mode auto-edit "$(cat)"` |
+
+老卡片没有 `session` 字段，派单时按 **无头** 解释——同名升级不会让旧卡悄悄跑去开窗口。
 
 `mo worker list` 会标出每个执行者在本机**是否已安装**（按 `requires` 里的可执行文件查 PATH）。
 
@@ -363,10 +373,11 @@ mo project agent --remove     # 只删自己那段
 
 ## 会话型 worker（过程可见）
 
-内置的 `claude-session`、或自己注册的 `--session` worker，派单时不开子进程，而是在**新终端窗口**里跑交互式 CLI：
+裸名 worker（`claude` / `codex` …）、或自己注册的 `--session` worker，派单时不开子进程，而是在**新终端窗口**里跑交互式 CLI：
 
 ```bash
-mo worker add my-claude --command claude --session
+mo worker add my-claude --command claude --session    # 自建会话型
+mo worker add my-headless --command 'claude -p "$(cat)"'  # 自建无头型
 mo task create --title "…" --worker my-claude ...
 mo task dispatch t_x
 # ✓ 已在新窗口启动（iTerm 或 Terminal.app）

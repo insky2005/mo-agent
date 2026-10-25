@@ -5,8 +5,15 @@ import { resolveAgent, listAgents, which, binaryOf, workerStatus, EXECUTORS } fr
 test("已知模板展开成完整命令", () => {
   const claude = resolveAgent("claude");
   assert.equal(claude.name, "claude");
-  assert.match(claude.command, /^claude -p /);
-  assert.match(resolveAgent("codex").command, /^codex exec -s workspace-write/);
+  assert.equal(claude.command, "claude", "裸名是会话型");
+  assert.equal(claude.session, true);
+
+  const headless = resolveAgent("claude-headless");
+  assert.match(headless.command, /^claude -p /);
+  assert.equal(headless.session, undefined);
+
+  assert.match(resolveAgent("codex-headless").command, /^codex exec -s workspace-write/);
+  assert.equal(resolveAgent("codex").session, true);
 });
 
 test("未知模板报 E_USAGE 并给候选", () => {

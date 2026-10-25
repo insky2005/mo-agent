@@ -1,54 +1,87 @@
 /**
  * 常见 Agent 的执行模板。
  *
- * 收录原则：非交互、能从 stdin 读 prompt、且**能写文件**——
- * 写不了 $MO_RECEIPT 的执行者拿不到 done，给了也是坑。
+ * 命名规则：
+ *   claude            会话型：新终端窗口跑交互式 CLI，过程可见
+ *   claude-headless   无头型：mo 起子进程，stdin 传卡（CI / 批量）
  *
- * 桌面端 Agent（Qoder 桌面版、WorkBuddy）没有 headless 入口，不在这里。
+ * 会话型靠 `session: true` 区分；无头模板必须能从 stdin 读 prompt 且能写文件。
  */
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 
-export const EXECUTORS = {
-  claude: {
-    command: 'claude -p "$(cat)" --permission-mode acceptEdits',
-    description: "Claude Code，允许在工作区改文件",
-    requires: "claude",
-  },
-  codex: {
-    command: "codex exec -s workspace-write -",
-    description: "Codex CLI，工作区可写",
-    requires: "codex",
-  },
-  qodercli: {
-    command: 'qodercli -p "$(cat)" --permission-mode accept_edits',
-    description: "Qoder CLI（国际版），允许改文件",
-    requires: "qodercli",
-  },
-  qoderclicn: {
-    command: 'qoderclicn -p "$(cat)" --permission-mode accept_edits',
-    description: "Qoder CLI（CN 版），允许改文件",
-    requires: "qoderclicn",
-  },
-  pi: {
-    command: 'pi -p "$(cat)"',
-    description: "pi，非交互模式",
-    requires: "pi",
-  },
-  qwen: {
-    command: 'qwen --approval-mode auto-edit "$(cat)"',
-    description: "Qwen Code，自动批准文件编辑",
-    requires: "qwen",
-  },
+const SESSION_NOTE = "（新终端窗口，过程可见）";
 
-  // ---- 会话型：开一个新窗口跑交互式 CLI，人在旁边看着 ----
-  // 与上面的无头模板并存：无头适合 CI/批量，会话型适合"我想看它干活"。
-  "claude-session": {
+export const EXECUTORS = {
+  // ---- 会话型（默认名字）----
+  claude: {
     command: "claude",
-    description: "Claude Code 交互会话（新终端窗口，过程可见）",
+    description: "Claude Code 交互会话" + SESSION_NOTE,
     requires: "claude",
     session: true,
+  },
+  codex: {
+    command: "codex",
+    description: "Codex CLI 交互会话" + SESSION_NOTE,
+    requires: "codex",
+    session: true,
+  },
+  qodercli: {
+    command: "qodercli",
+    description: "Qoder CLI（国际版）交互会话" + SESSION_NOTE,
+    requires: "qodercli",
+    session: true,
+  },
+  qoderclicn: {
+    command: "qoderclicn",
+    description: "Qoder CLI（CN 版）交互会话" + SESSION_NOTE,
+    requires: "qoderclicn",
+    session: true,
+  },
+  pi: {
+    command: "pi",
+    description: "pi 交互会话" + SESSION_NOTE,
+    requires: "pi",
+    session: true,
+  },
+  qwen: {
+    command: "qwen",
+    description: "Qwen Code 交互会话" + SESSION_NOTE,
+    requires: "qwen",
+    session: true,
+  },
+
+  // ---- 无头型（-headless 后缀）----
+  "claude-headless": {
+    command: 'claude -p "$(cat)" --permission-mode acceptEdits',
+    description: "Claude Code，无头，允许在工作区改文件",
+    requires: "claude",
+  },
+  "codex-headless": {
+    command: "codex exec -s workspace-write -",
+    description: "Codex CLI，无头，工作区可写",
+    requires: "codex",
+  },
+  "qodercli-headless": {
+    command: 'qodercli -p "$(cat)" --permission-mode accept_edits',
+    description: "Qoder CLI（国际版），无头，允许改文件",
+    requires: "qodercli",
+  },
+  "qoderclicn-headless": {
+    command: 'qoderclicn -p "$(cat)" --permission-mode accept_edits',
+    description: "Qoder CLI（CN 版），无头，允许改文件",
+    requires: "qoderclicn",
+  },
+  "pi-headless": {
+    command: 'pi -p "$(cat)"',
+    description: "pi，无头，非交互模式",
+    requires: "pi",
+  },
+  "qwen-headless": {
+    command: 'qwen --approval-mode auto-edit "$(cat)"',
+    description: "Qwen Code，无头，自动批准文件编辑",
+    requires: "qwen",
   },
 };
 

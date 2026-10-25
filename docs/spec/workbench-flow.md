@@ -529,7 +529,9 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | dispatch | 前台等进程 | **立即返回**，结果靠回执文件 |
 | 超时 | 进程超时 | 等不到回执 → `blocked(timeout)` |
 
-实现：`mo worker add <名> --session --command '<交互式命令>'`，内置 `claude-session`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。`MO_TERMINAL=iterm|terminal|none` 指定终端，`MO_LAUNCHER=print` 只生成不启动。
+命名：**裸名 = 会话型**（`claude` / `codex` …），`-headless` 后缀 = 无头型（`claude-headless` …）。老卡片没有 `session` 字段时按无头解释，避免同名升级后行为变化。
+
+实现：`mo worker add <名> --session --command '<交互式命令>'`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。`MO_TERMINAL=iterm|terminal|none` 指定终端，`MO_LAUNCHER=print` 只生成不启动。
 
 ## 13. 安装与首次使用
 

@@ -112,6 +112,7 @@ function createTask(ctx, args, home) {
     from: one(args.options, "from") || process.env.MO_AGENT_ID || "cli",
     assignee: one(args.options, "assignee", "auto"),
     worker: chosen ? chosen.name : undefined,
+    ...(chosen ? { session: Boolean(chosen.session) } : {}),
     exec: chosen ? chosen.command : one(args.options, "exec"),
     workdir: one(args.options, "workdir", "."),
     verify,
@@ -545,8 +546,10 @@ export function runDispatch(args, { home, root, taskId }) {
     const card = loadCard(root, taskId);
     const name = card.meta.worker || (card.meta.assignee !== "auto" ? card.meta.assignee : null);
     if (name) {
+      // 老卡片没有 session 字段：按"无头"解释，避免同名升级后行为悄悄变掉
+      const target = card.meta.session === undefined ? name + "-headless" : name;
       try {
-        chosen = resolveWorker(name, { home, projectRoot: root });
+        chosen = resolveWorker(target, { home, projectRoot: root });
       } catch {
         chosen = null; // 卡里的 worker 已经不在了，退回 meta.exec
       }

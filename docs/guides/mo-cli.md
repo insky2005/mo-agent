@@ -108,9 +108,10 @@ mo task create \
   --title hello \
   --deliverable "print hello world" \
   --verify "run:echo hello world" \
-  --worker claude                 # 或 --exec "任意命令"
+  --worker claude-headless        # 无头跑；裸名 claude 是会话型，或 --exec "任意命令"
 
-mo task confirm t_01H…            # 人确认，确认前不能派单
+mo task confirm t_01H…            # 发起确认请求（不改状态）
+mo task approve t_01H…            # 人批准（终端里执行）
 mo task dispatch t_01H…           # 跑执行者 → 收回执 → 自动验收
 
 mo task status t_01H…             # 状态、验收、最近事件
@@ -265,15 +266,15 @@ mo ledger query --task t_01H…
 
 | 名称 | 模式 | 命令 |
 |---|---|---|
-| `claude` | 无头 | `claude -p "$(cat)" --permission-mode acceptEdits` |
-| `codex` | `codex exec -s workspace-write -` |
-| `qodercli` | `qodercli -p "$(cat)" --permission-mode accept_edits` |
-| `qoderclicn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` |
-| `pi` | `pi -p "$(cat)"` |
-| `qwen` | 无头 | `qwen --approval-mode auto-edit "$(cat)"` |
-| `claude-session` | 会话 | `claude`（新终端窗口，交互式） |
+| `claude` | 会话 | `claude`（新终端窗口，交互式） |
+| `codex` / `qodercli` / `qoderclicn` / `pi` / `qwen` | 会话 | 同名的交互式入口 |
+| `claude-headless` | 无头 | `claude -p "$(cat)" --permission-mode acceptEdits` |
+| `codex-headless` | 无头 | `codex exec -s workspace-write -` |
+| `qodercli-headless` / `qoderclicn-headless` | 无头 | `… -p "$(cat)" --permission-mode accept_edits` |
+| `pi-headless` | 无头 | `pi -p "$(cat)"` |
+| `qwen-headless` | 无头 | `qwen --approval-mode auto-edit "$(cat)"` |
 
-**无头 vs 会话**：无头 worker 由 mo 起子进程、stdin 传卡，适合 CI 与批量；会话型 worker 在**新终端窗口**里跑交互式 CLI，你能看着它干活、随时插话，但回执得它自己写。派单时按卡里记的 worker 自动分流，不用额外加参数。
+**裸名 = 会话型，`-headless` = 无头型。** 无头 worker 由 mo 起子进程、stdin 传卡，适合 CI 与批量；会话型在**新终端窗口**里跑交互式 CLI，你能看着它干活、随时插话，但回执得它自己写。派单按卡里记的 worker 自动分流；老卡片没有 `session` 字段的按无头解释。
 
 `mo worker list` 会显示每个模板的来源、是否可用（命令与 `requires` 都要存在）。
 命令不存在的模板选不了；`mo task create --worker` 会警告，`dispatch` 会直接报错。
