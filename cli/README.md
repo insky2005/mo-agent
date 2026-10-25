@@ -201,6 +201,7 @@ mo task create \
   --deliverable "app/web/tasks.html 有筛选栏" \
   --verify "run:npm test -- --filter tasks" \
   --verify "human:视觉确认" \
+  --workdir app/web \
   --exec 'claude -p "$(cat)"'
 ```
 

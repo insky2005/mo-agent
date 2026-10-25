@@ -9,7 +9,7 @@ export const GROUPS = [
     title: "任务卡",
     blurb: "建卡 → 发起确认请求 → 人批准 → 派单 → 看结果",
     subs: [
-      ["create", "建卡（draft）", '例：--title "…" --deliverable "…" --verify "run:npm test"'],
+      ["create", "建卡（draft）", '例：--title "…" --deliverable "…" --verify "run:npm test" --workdir app/web'],
       ["confirm <id>", "发起确认请求：只写 approvals/，卡保持 draft", "任何 Agent 都能做，不改状态"],
       ["approve <id>", "人批准：需 TTY，校验卡片指纹", "批准前改卡会作废（E_CARD_CHANGED）"],
       ["reject <id>", "人拒绝，卡保持 draft", ""],
@@ -204,7 +204,7 @@ export function renderHelp() {
     row("  mo help <组>", "某组的子命令与选项（--mode、--wait 这些）"),
     "",
     "一次派活",
-    row("  mo task create --title … --deliverable … --verify …", "建卡（draft）"),
+    row("  mo task create --title … --deliverable … --verify … --workdir …", "建卡（draft）"),
     row("  mo task confirm <id>", "发起确认请求（Agent 可做，不改状态）"),
     row("  mo task approve <id>", "人批准（需 TTY，校验卡片指纹）"),
     row("  mo task dispatch <id>", "派单并等待验收"),

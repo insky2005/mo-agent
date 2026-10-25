@@ -109,6 +109,7 @@ mo task create \
   --deliverable "print hello world" \
   --verify "run:echo hello world" \
   --worker claude-headless        # 无头跑；裸名 claude 是会话型，或 --exec "任意命令"
+# --workdir 子目录               # 执行目录，必须在项目根内（默认项目根）
 
 mo task confirm t_01H…            # 发起确认请求（不改状态）
 mo task approve t_01H…            # 人批准（终端里执行）
