@@ -278,6 +278,8 @@ mo ledger query --task t_01H…
 
 **裸名 = 会话型，`-headless` = 无头型。** 无头 worker 由 mo 起子进程、stdin 传卡，适合 CI 与批量；会话型在**新终端窗口**里跑交互式 CLI，你能看着它干活、随时插话，但回执得它自己写。派单按卡里记的 worker 自动分流；老卡片没有 `session` 字段的按无头解释。
 
+不指定 `--worker` 的卡（`assignee: auto`）用默认执行者：`mo worker use claude-headless` 设、`mo worker current` 看、`mo worker use --unset` 清；没设默认时派单会报 `E_NO_EXECUTOR`。
+
 终端由 `mo terminal` 管，和 worker 一样可注册、可设默认：
 
 ```bash

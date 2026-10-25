@@ -153,6 +153,17 @@ mo task create --worker claude …        # 会话型：新终端窗口，过程
 mo task create --worker claude-headless …  # 无头型：子进程 + stdin
 ```
 
+不指定 `--worker` 的卡（`assignee: auto`）会用**默认执行者**：
+
+```bash
+mo worker use claude-headless   # 设默认
+mo worker current               # 当前默认
+mo worker use --unset           # 清除
+mo worker add my-w --command '…' --use   # 注册时顺手设默认
+```
+
+没设默认时，建卡会打 `W_NO_EXECUTOR`，派单直接 `E_NO_EXECUTOR`。
+
 **裸名 = 会话型**，`-headless` 后缀 = 无头型：
 
 | 执行者 | 模式 | 展开为 |

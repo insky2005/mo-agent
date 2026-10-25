@@ -92,8 +92,10 @@ const SPEC = {
   worker: {
     subs: {
       list: { flags: [] },
-      add: { flags: ["--command", "--description", "--requires", "--session", "--project"] },
+      add: { flags: ["--command", "--description", "--requires", "--session", "--use", "--project"] },
       remove: { flags: [] },
+      use: { flags: ["--project", "--unset"] },
+      current: { flags: ["--project"] },
     },
   },
   skill: {

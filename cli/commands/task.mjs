@@ -10,7 +10,7 @@ import { resolveProject } from "../lib/project.mjs";
 import { dispatchSession, dispatchTask } from "../lib/dispatch.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
 import { readRunLog } from "../lib/logs.mjs";
-import { resolveWorker } from "../lib/workers-config.mjs";
+import { resolveDefaultWorker, resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 import readline from "node:readline/promises";
 import { applyDecision, expireOverdue, listRequests, pendingForTask, readRequest, requestConfirmation } from "../lib/approvals.mjs";
@@ -123,6 +123,9 @@ function createTask(ctx, args, home) {
   };
   if (!verify.length) {
     process.stderr.write("[W_NO_VERIFY] 没有验收标准，完成后无法判定；加 --verify \"run:<命令>\" 或者 --verify \"check:<条件>\"\n");
+  }
+  if (!meta.worker && !meta.exec && !resolveDefaultWorker({ home, projectRoot: resolved.root })) {
+    process.stderr.write("[W_NO_EXECUTOR] 没指定执行者，也没设默认；派单前先 mo worker use <名称>，或 --worker/--exec\n");
   }
 
   const body = buildBody({
@@ -562,6 +565,9 @@ export function runDispatch(args, { home, root, taskId }) {
         chosen = null; // 卡里的 worker 已经不在了，退回 meta.exec
       }
     }
+
+    // 卡上没指定（assignee: auto）时，用 mo worker use 设的默认
+    if (!chosen) chosen = resolveDefaultWorker({ home, projectRoot: root });
   }
 
   if (chosen && !chosen.installed) {

@@ -20,43 +20,85 @@ export function projectWorkersFile(root) {
   return path.join(projectDir(root), "workers.json");
 }
 
-function readWorkers(file) {
+function readConfig(file) {
   const data = readJsonSafe(file, null);
-  if (!data || typeof data !== "object" || !data.workers || typeof data.workers !== "object") {
-    return {};
-  }
-  return data.workers;
+  if (!data || typeof data !== "object") return { workers: {}, default: "" };
+  const workers = data.workers && typeof data.workers === "object" ? data.workers : {};
+  const fallback = typeof data.default === "string" ? data.default : "";
+  return { workers, default: fallback };
 }
 
-function writeWorkers(file, workers) {
-  writeJsonAtomic(file, { version: 1, workers });
+function writeConfig(file, config) {
+  writeJsonAtomic(file, {
+    version: 1,
+    workers: config.workers,
+    ...(config.default ? { default: config.default } : {}),
+  });
 }
 
 export function loadConfigs({ home, projectRoot } = {}) {
   return {
-    user: home ? readWorkers(userWorkersFile(home)) : {},
-    project: projectRoot ? readWorkers(projectWorkersFile(projectRoot)) : {},
+    user: home ? readConfig(userWorkersFile(home)) : { workers: {}, default: "" },
+    project: projectRoot ? readConfig(projectWorkersFile(projectRoot)) : { workers: {}, default: "" },
   };
+}
+
+/** 项目默认优先于个人默认 */
+export function defaultWorkerName({ home, projectRoot } = {}) {
+  const config = loadConfigs({ home, projectRoot });
+  return config.project.default || config.user.default || "";
 }
 
 export function listWorkers({ home, projectRoot } = {}) {
   const { user, project } = loadConfigs({ home, projectRoot });
+  const fallback = project.default || user.default || "";
   const merged = new Map();
 
   for (const [name, preset] of Object.entries(EXECUTORS)) {
     merged.set(name, { name, ...preset, source: "builtin" });
   }
-  for (const [name, entry] of Object.entries(user)) {
+  for (const [name, entry] of Object.entries(user.workers)) {
     merged.set(name, { name, ...entry, source: "user" });
   }
-  for (const [name, entry] of Object.entries(project)) {
+  for (const [name, entry] of Object.entries(project.workers)) {
     merged.set(name, { name, ...entry, source: "project" });
   }
 
   return [...merged.values()].map((worker) => ({
     ...worker,
     ...workerStatus(worker),
+    default: worker.name === fallback,
   }));
+}
+
+/** `assignee: auto` 时用的 worker；没设默认就返回 null */
+export function resolveDefaultWorker({ home, projectRoot } = {}) {
+  const name = defaultWorkerName({ home, projectRoot });
+  if (!name) return null;
+  const found = listWorkers({ home, projectRoot }).find((worker) => worker.name === name);
+  return found || null;
+}
+
+export function setDefaultWorker({ home, projectRoot, project = false, name, clear = false }) {
+  if (clear) {
+    const file = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);
+    const config = readConfig(file);
+    config.default = "";
+    writeConfig(file, config);
+    return { name: "", file, cleared: true };
+  }
+
+  const key = String(name || "").trim();
+  const found = listWorkers({ home, projectRoot }).find((worker) => worker.name === key);
+  if (!found) {
+    throw new MoError("E_NOT_FOUND", "没有这个 worker：" + key, { hint: "mo worker list 查看可用 worker" });
+  }
+
+  const file = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);
+  const config = readConfig(file);
+  config.default = key;
+  writeConfig(file, config);
+  return { name: key, file, session: Boolean(found.session), installed: found.installed };
 }
 
 export function resolveWorker(name, ctx = {}) {
@@ -70,7 +112,7 @@ export function resolveWorker(name, ctx = {}) {
   return found;
 }
 
-export function addWorker({ name, command, description = "", requires = "", project = false, session = false, home, projectRoot }) {
+export function addWorker({ name, command, description = "", requires = "", project = false, session = false, use = false, home, projectRoot }) {
   const key = String(name || "").trim();
   if (!NAME_RE.test(key)) {
     throw new MoError("E_USAGE", "名称不合法：" + key, {
@@ -88,15 +130,16 @@ export function addWorker({ name, command, description = "", requires = "", proj
   }
 
   const file = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);
-  const workers = readWorkers(file);
-  workers[key] = {
+  const config = readConfig(file);
+  config.workers[key] = {
     command: command.trim(),
     description: String(description || "").trim(),
     ...(requires ? { requires: String(requires).trim() } : {}),
     ...(session ? { session: true } : {}),
   };
-  writeWorkers(file, workers);
-  return { name: key, file, ...workers[key] };
+  if (use) config.default = key;
+  writeConfig(file, config);
+  return { name: key, file, ...config.workers[key], default: config.default === key };
 }
 
 export function removeWorker({ name, project = false, home, projectRoot }) {
@@ -107,15 +150,16 @@ export function removeWorker({ name, project = false, home, projectRoot }) {
 
   const primary = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);
   const secondary = project ? userWorkersFile(home) : projectRoot ? projectWorkersFile(projectRoot) : null;
-  const primaryWorkers = readWorkers(primary);
+  const primaryConfig = readConfig(primary);
 
-  if (primaryWorkers[key]) {
-    delete primaryWorkers[key];
-    writeWorkers(primary, primaryWorkers);
-    return { name: key, file: primary };
+  if (primaryConfig.workers[key]) {
+    delete primaryConfig.workers[key];
+    if (primaryConfig.default === key) primaryConfig.default = "";
+    writeConfig(primary, primaryConfig);
+    return { name: key, file: primary, clearedDefault: primaryConfig.default === "" };
   }
 
-  if (secondary && exists(secondary) && readWorkers(secondary)[key]) {
+  if (secondary && exists(secondary) && readConfig(secondary).workers[key]) {
     throw new MoError("E_NOT_FOUND", key + " 不在当前范围", {
       hint: "它定义在另一个作用域，加上 " + (project ? "去掉 --project" : "--project") + " 再试",
     });

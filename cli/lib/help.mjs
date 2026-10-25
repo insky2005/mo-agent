@@ -62,9 +62,11 @@ export const GROUPS = [
     name: "worker",
     title: "执行者",
     subs: [
-      ["list", "内置与自定义执行者，含本机是否安装", ""],
-      ["add", "注册自定义执行者", ""],
+      ["list", "内置与自定义执行者，含本机是否安装", "末行显示默认执行者"],
+      ["add", "注册自定义执行者", "--use 顺便设为默认"],
       ["remove", "删除自定义执行者", ""],
+      ["use [名]", "设置默认执行者（assignee: auto 用它）", "--unset 清除"],
+      ["current", "打印当前默认执行者", ""],
     ],
   },
   {
@@ -182,6 +184,7 @@ const OPTIONS = {
   worker: [
     ["--command <命令>", "add：这个执行者怎么启动"],
     ["--session", "add：会话型——派单时开新终端窗口跑交互式 CLI"],
+    ["--use", "add：注册的同时设为默认执行者"],
     ["--description <说明> --requires <能力>", "add：给人看的说明与能力要求"],
     ["--project <名称|路径>", "add：只在某个项目里可用"],
   ],

@@ -163,9 +163,11 @@ canceled            canceled                failed                  └─> canc
 | B5.2 | 卡未确认 | 拒绝 | `E_NOT_CONFIRMED` |
 | B5.3 | 指派的执行者不支持控制（无 `prompt`/无 CLI） | 返回可替代者 | `E_ASSIGNEE_UNSUPPORTED` |
 | B5.4 | 指派者当前离线/繁忙 | 返回候选 + 建议 | `E_ASSIGNEE_BUSY` |
-| B5.5 | `assignee: auto` 且唯一匹配 | 派发，回告理由 | — |
-| B5.6 | `assignee: auto` 且多匹配 | 推荐一个 + 候选，等人定 | `E_ASSIGNEE_AMBIGUOUS` |
-| B5.7 | `assignee: auto` 且无匹配 | 拒绝并说明缺什么能力 | `E_NO_EXECUTOR` |
+| B5.5 | `assignee: auto` 且设了默认执行者 | 用默认派发，回告名字 | — |
+| B5.6 | `assignee: auto` 且没设默认 | 拒绝并提示 `mo worker use` | `E_NO_EXECUTOR` |
+| B5.7 | 指定的执行者不存在/未装 | 拒绝并说明缺什么 | `E_NO_EXECUTOR` / `E_ASSIGNEE_UNSUPPORTED` |
+
+> 设计变更（2026-11）：原计划"auto 自动挑选（空闲度/成功率/最近使用）"不做，改为**人设默认**（`mo worker use`）。理由：让 mo 猜谁来干活，猜错了代价比多打一行命令高。
 | B5.8 | 超出预算（时间/token/子任务/重试） | 拒绝或转 `blocked` 问人 | `E_BUDGET` |
 | B5.9 | 递归派单（执行者再派单） | 拒绝，深度上限 1 | `E_DEPTH` |
 | B5.10 | 起进程/注入失败 | `failed`，可重试一次 | `E_DISPATCH_FAILED` |
@@ -560,7 +562,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | B3.3 | 建卡时提示"另有 N 个进行中" | `W_TASKS_IN_FLIGHT` 未实现 |
 | B3.5 | 疑似重复卡提示 | `W_POSSIBLE_DUP` 未实现 |
 | B5.4 | 执行者忙/离线 | 无空闲度概念，`E_ASSIGNEE_BUSY` 未实现 |
-| B5.5–B5.7 | `assignee: auto` 的自动选择 | **默认值就是 `auto`，但没有选择逻辑**：不写 `--worker`/`--exec` 时派单直接 `E_NO_EXECUTOR` |
+| B5.5–B5.7 | `assignee: auto` 的解析 | **已落地**：`mo worker use` 设默认，auto 卡派单用它；没设默认时建卡告警、派单 `E_NO_EXECUTOR` 并提示。不做"按空闲度/成功率自动挑" |
 | B5.8 | 预算（时间/token/子任务/重试） | 卡上有 `budget` 字段，没人读；`E_BUDGET` 未实现 |
 | B5.9 | 递归派单深度上限 | 靠"不把 `task_dispatch` 暴露给执行者"挡住，没有 `E_DEPTH` 校验 |
 | B6.1/B6.2 | 执行者请求审批 / 反问人 | 无 `blocked(waiting_approval)` / `waiting_answer`；`needs` 只能单向上报，回答要重派 |
@@ -706,7 +708,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 1. 回执是否进 git（建议默认 ignore，可选提交摘要版）；
 2. 账本轮转与保留期；
 3. 记忆检索后端：已按内置纯文本落地（§12.2）；qmd 作为可选后端仍待评估；
-4. `assignee: auto` 的选择策略与排序权重（空闲度 / 历史成功率 / 最近使用）——**当前连选择逻辑都还没有**（§12.7）；
+4. ~~`assignee: auto` 的排序权重~~ → 已决定不做自动挑选，改为 `mo worker use` 显式默认（§6.5）；
 5. 人不在场时，`blocked` 的默认超时与升级路径（手机推送？）；
 6. 主 Agent 的工具隔离在 DSH 侧的具体配置方式；
 7. 跨平台（Windows）：暂不支持，方案与差距见 [cli-cross-platform.md](../plans/cli-cross-platform.md)，与桌面端跨平台一并处理。

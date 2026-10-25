@@ -164,8 +164,8 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
 
   const command = exec || meta.exec;
   if (!command) {
-    throw new MoError("E_NO_EXECUTOR", "没有执行者：用 --exec 指定命令，或在建卡时 --exec", {
-      hint: "例如 --exec \"claude -p\" 或 --exec \"node ./scripts/run-task.mjs\"",
+    throw new MoError("E_NO_EXECUTOR", "这张卡没有执行者，也没有默认执行者", {
+      hint: "mo worker use <名称> 设默认，或派单时 --worker/--exec 指定",
     });
   }
 
