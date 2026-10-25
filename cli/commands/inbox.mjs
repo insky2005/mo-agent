@@ -4,6 +4,8 @@ import { emit } from "../lib/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { pullInbox, inboxDir } from "../lib/inbox.mjs";
 import { parseDuration } from "../lib/envelope.mjs";
+import { findProjectRoot } from "../lib/project.mjs";
+import { runWatchdog } from "../lib/watchdog.mjs";
 
 export function inboxCommand(ctx, args) {
   const sub = args.positional[0];
@@ -31,15 +33,31 @@ async function pullCommand(args) {
   const taskId = one(args.options, "task");
   const options = { home, limit: Number.isFinite(limit) ? limit : 0, peek, taskId };
 
+  // 等待期间顺手扫一眼超时：不然 --wait 会一直干等到超时，也等不到"这张卡超时了"
+  const sweep = () => {
+    try {
+      const root = findProjectRoot(process.cwd());
+      if (root) runWatchdog({ home, roots: [root] });
+    } catch {
+      // 不在项目里、或扫描失败，都不该影响拉取
+    }
+  };
+
+  if (has(args.options, "wait")) sweep();
   let result = pullInbox(options);
   let waitedMs = 0;
 
   if (!result.items.length && has(args.options, "wait")) {
     const timeoutMs = parseDuration(one(args.options, "wait"), 30000);
     const startedAt = Date.now();
+    let lastSweep = Date.now();
     while (!result.items.length && Date.now() - startedAt < timeoutMs) {
       await sleep(Math.min(500, Math.max(50, timeoutMs - (Date.now() - startedAt))));
       result = pullInbox(options);
+      if (!result.items.length && Date.now() - lastSweep >= 30000) {
+        lastSweep = Date.now();
+        sweep();
+      }
     }
     waitedMs = Date.now() - startedAt;
   }

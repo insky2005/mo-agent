@@ -149,6 +149,7 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo memory candidates` | 待裁决的候选条目 |
 | `mo memory accept \| reject <id>` | 采纳 / 丢弃候选（冲突时拒绝写入） |
 | `mo inbox pull [--peek]` | 拉取任务通知（done / blocked / failed），拉完归档 |
+| `mo watchdog run [--all]` | 把超时没回执的卡转成 `blocked(timeout)` |
 | `mo mcp` | stdio MCP 服务（给主 Agent 接） |
 | `mo agent describe \| add` | 输出契约 / 合并 MCP 配置 |
 | `mo doctor` | 自检 |

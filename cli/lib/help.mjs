@@ -106,6 +106,16 @@ export const GROUPS = [
     ],
   },
   {
+    name: "watchdog",
+    title: "看门狗",
+    blurb: "把超时没回执的卡转成 blocked(timeout)，并落收件箱",
+    subs: [
+      ["run", "扫一遍当前项目", "可挂 cron / launchd"],
+      ["run --all", "扫全部已登记项目", ""],
+      ["run --dry-run", "只报告，不改状态", ""],
+    ],
+  },
+  {
     name: "mcp",
     title: "MCP",
     subs: [["", "stdio MCP 服务，一行一条 JSON-RPC", "给支持 MCP 的 Agent 当后端"]],

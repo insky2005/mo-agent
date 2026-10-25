@@ -59,6 +59,11 @@ const SPEC = {
       add: { flags: ["--mcp", "--prompt", "--name"] },
     },
   },
+  watchdog: {
+    subs: {
+      run: { flags: ["--project", "--all", "--dry-run"] },
+    },
+  },
   terminal: {
     subs: {
       list: { flags: [] },
@@ -113,7 +118,7 @@ const ENUMS = {
   "--mode": ["auto", "skill", "ref", "inline"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "watchdog", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };

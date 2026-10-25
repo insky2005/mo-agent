@@ -625,6 +625,28 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 
 回执里的 `needs`（提问）和 `deviations`（没按卡来的地方）会一起带上，`mo task status` 也能看到最近一次回执的这两项——worker 想求助时不用把问题硬塞进 summary。
 
+## 看门狗（超时兜底）
+
+会话型派单是异步的，worker 忘了写回执、或者窗口被关掉，卡会一直停在 `running`。watchdog 负责把它转成 `blocked(timeout)`：
+
+```bash
+mo watchdog run              # 扫当前项目
+mo watchdog run --all        # 扫全部已登记项目
+mo watchdog run --dry-run    # 只报告，不改状态
+```
+
+- 判定：`running` / `dispatched` 且距 `updated` 超过卡上的 `timeout`（默认 45m）；
+- 动作：`blocked` + 账本 `task.blocked(reason=timeout)` + 收件箱一条「超过 N 分钟没有回执」；
+- **不杀进程**：会话型的窗口不归 mo 管，标 blocked 只是「该人看了」；
+- 顺带清理过期审批请求（`draft` + 请求过 TTL → `expired`）；
+- `mo inbox pull --wait` 在等待时也会顺手扫，所以等通知的过程里超时能被发现。
+
+挂 cron 每 10 分钟跑一次（把路径换成你的 `mo`）：
+
+```cron
+*/10 * * * * /usr/local/bin/mo watchdog run --all >/dev/null 2>&1
+```
+
 ## 文件位置
 
 | 内容 | 位置 |

@@ -517,7 +517,20 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 **仍未做**：daemon 启动时补推 pending 请求、审批页之外的推送渠道、Streamable HTTP `/mcp`。
 
-### 12.5 会话型执行者（2026-11）
+### 12.5 watchdog（2026-11）
+
+会话型派单立即返回，没有进程可以等——回执不来，卡就永远停在 `running`。B6.3 的「超时无回执」需要一个主动巡检：
+
+| 做什么 | 不做什么 |
+|---|---|
+| 扫 `running` / `dispatched`，超过卡上 `timeout`（默认 45m）→ `blocked(timeout)` | 不杀进程（会话型窗口不归 mo 管） |
+| 账本 `task.blocked`（payload 带 `reason`、`elapsedMs`、`session`） | 不自动重试、不换人 |
+| 收件箱一条「超过 N 分钟没有回执」 | 不猜"是不是还在干活"（没有心跳） |
+| 顺带 `expireOverdue`：过期审批请求 → `expired` | 不碰终态卡 |
+
+入口：`mo watchdog run [--project …] [--all] [--dry-run]`，可挂 cron/launchd。`mo inbox pull --wait` 在等待循环里每 30 秒也扫一次当前项目，所以"等通知"时超时不会漏。
+
+### 12.6 会话型执行者（2026-11）
 
 无头 worker（`claude -p`）适合 CI 与批量，但过程对人不可见。会话型 worker 补的是这个：
 

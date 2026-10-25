@@ -20,6 +20,7 @@ import { inboxCommand } from "./commands/inbox.mjs";
 import { mcpCommand } from "./commands/mcp.mjs";
 import { agentCommand } from "./commands/agent-add.mjs";
 import { terminalCommand } from "./commands/terminal.mjs";
+import { watchdogCommand } from "./commands/watchdog.mjs";
 import { VERSION } from "./lib/version.mjs";
 import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
 
@@ -51,6 +52,7 @@ const ROUTES = {
   mcp: mcpCommand,
   agent: agentCommand,
   terminal: terminalCommand,
+  watchdog: watchdogCommand,
 };
 
 async function main(argv) {
