@@ -39,7 +39,7 @@ export function cardDigest({ meta, body }) {
   return crypto.createHash("sha256").update(stable(payload)).digest("hex");
 }
 
-export function makeRequest({ id, taskId, project, title, digest, requestedBy, at = new Date().toISOString(), ttlMs = DEFAULT_TTL_MS }) {
+export function makeRequest({ id, taskId, project, projectRoot, title, digest, requestedBy, at = new Date().toISOString(), ttlMs = DEFAULT_TTL_MS }) {
   const expiresAt = new Date(new Date(at).getTime() + ttlMs).toISOString();
   return {
     v: 1,
@@ -47,6 +47,7 @@ export function makeRequest({ id, taskId, project, title, digest, requestedBy, a
     kind: "task.confirm",
     taskId,
     project: project || null,
+    projectRoot: projectRoot || null,
     title: title || "",
     cardHash: digest,
     at,

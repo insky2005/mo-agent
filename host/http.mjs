@@ -7,6 +7,7 @@ import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { handleLogRoutes } from "./logs-http.mjs";
 import { handleMonitorRoutes } from "./monitor-http.mjs";
 import { canControl } from "../core/contract.mjs";
+import { decideTaskApproval, listTaskApprovals } from "./task-approvals.mjs";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -531,6 +532,25 @@ export function createMoAgentServer(options) {
 
       if (pathname === "/api/approvals" && req.method === "GET") {
         return json(res, 200, { ok: true, pending: broker.list() });
+      }
+
+      // 任务卡确认：请求来自 mo task confirm（cli 侧落盘），这里只负责列与裁决
+      if (pathname === "/api/task-approvals" && req.method === "GET") {
+        return json(res, 200, { ok: true, pending: listTaskApprovals() });
+      }
+
+      const taskApprovalMatch = /^\/api\/task-approvals\/([A-Za-z0-9_]+)$/.exec(pathname);
+      if (taskApprovalMatch && req.method === "POST") {
+        const body = await readBody(req);
+        try {
+          const result = decideTaskApproval({ id: taskApprovalMatch[1], decision: String(body.decision || "") });
+          log.info("网页已处理任务确认 " + result.id + " -> " + result.status + "（任务 " + result.taskId + "）");
+          return json(res, 200, { ok: true, ...result });
+        } catch (error) {
+          const code = (error && error.code) || null;
+          const status = code === "E_CARD_CHANGED" ? 409 : code === "E_USAGE" ? 400 : 404;
+          return json(res, status, { ok: false, code, error: (error && error.message) || "处理失败" });
+        }
       }
 
       if (pathname === "/api/processes" && req.method === "GET") {

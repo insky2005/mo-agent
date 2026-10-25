@@ -202,6 +202,8 @@ mo task requests          # 看待批准的请求
 mo task dispatch <id>     # 派单，等回执
 ```
 
+批准有两个入口，写的是同一个决定文件：终端 `mo task approve`，或**审批页**（daemon 在跑时打开手机/网页，看到「任务卡确认」点允许，账本记 `channel: web`）。批准时都会校验卡片指纹，批完再改卡会作废。
+
 注意：Claude / Codex 默认可能需要确认文件写入权限，按各家方式开启（例如 Claude 的 `--permission-mode`）。**权限由你决定，mo 不替你放行。**
 
 ## 分发给别人

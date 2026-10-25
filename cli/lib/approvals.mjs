@@ -69,6 +69,7 @@ export function requestConfirmation({ home, root, card, requestedBy, ttlMs }) {
     id: newApprovalId(),
     taskId: card.meta.id,
     project: card.meta.project,
+    projectRoot: root,
     title: card.meta.title,
     digest: cardDigest(card),
     requestedBy: requestedBy || { actor: "agent", from: process.env.MO_AGENT_ID || null },

@@ -40,6 +40,78 @@
     list = document.getElementById('approvalList');
   }
 
+  // ---- 任务卡确认（mo task confirm 发起的请求，与工具授权是两套）----
+  var taskApprovals = new Map();
+  var taskSection = null;
+  var taskList = null;
+
+  function buildTaskSection() {
+    taskSection = document.createElement('section');
+    taskSection.id = 'taskApprovalSection';
+    taskSection.className = 'pending hidden';
+    taskSection.innerHTML = '<h2>任务卡确认</h2><div id="taskApprovalList"></div>';
+    var main = document.getElementById('main');
+    if (main) main.insertBefore(taskSection, main.firstChild);
+    else document.body.appendChild(taskSection);
+    taskList = document.getElementById('taskApprovalList');
+  }
+
+  function renderTasks() {
+    var items = [];
+    taskApprovals.forEach(function (item) { items.push(item); });
+    if (!items.length) {
+      taskSection.classList.add('hidden');
+      taskList.innerHTML = '';
+      return;
+    }
+    taskSection.classList.remove('hidden');
+    taskList.innerHTML = items.map(function (item) {
+      var parts = [];
+      parts.push('<div class="card attention">');
+      parts.push('<div class="cardTop"><div class="cardTitle">确认任务卡 · ' + esc(item.title || item.taskId) + '</div><span class="badge waiting">需要你批准</span></div>');
+      parts.push('<div class="meta">' + esc(item.taskId) + ' · 指纹 ' + esc(String(item.cardHash || '').slice(0, 8)) + ' · ' + esc(item.expiresAt ? '有效至 ' + item.expiresAt.replace('T', ' ').slice(0, 16) : '') + '</div>');
+      if (item.requestedBy && item.requestedBy.from) parts.push('<div class="meta">来自 ' + esc(item.requestedBy.from) + '</div>');
+      parts.push('<div class="qText">批准后主 Agent 才能派发这张卡；批准前改卡会让这次批准失效。</div>');
+      parts.push('<div class="cardActions">');
+      parts.push('<button class="ok" data-task-id="' + esc(item.id) + '" data-task-decision="approve">允许</button>');
+      parts.push('<button class="no" data-task-id="' + esc(item.id) + '" data-task-decision="reject">拒绝</button>');
+      parts.push('</div></div>');
+      return parts.join('');
+    }).join('');
+  }
+
+  function loadTasks() {
+    return fetch(BASE + '/api/task-approvals', { headers: { 'x-mo-agent-token': token } })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        if (result && result.ok && result.pending) {
+          taskApprovals.clear();
+          result.pending.forEach(function (item) { taskApprovals.set(item.id, item); });
+          renderTasks();
+        }
+      })
+      .catch(function () { /* 忽略 */ });
+  }
+
+  function decideTask(id, decision) {
+    fetch(BASE + '/api/task-approvals/' + encodeURIComponent(id), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mo-agent-token': token },
+      body: JSON.stringify({ decision: decision })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        if (result && result.ok) {
+          taskApprovals.delete(id);
+          renderTasks();
+        } else {
+          alert('提交失败: ' + ((result && result.error) || '未知错误'));
+          loadTasks();
+        }
+      })
+      .catch(function (error) { alert('提交失败: ' + error.message); });
+  }
+
   /** 把 toolInput 展开成可读全文：命令/路径优先，其余字段用 JSON 补全。 */
   function formatToolInput(input) {
     if (input == null) return '';
@@ -196,6 +268,11 @@
       decide(submit.getAttribute('data-approval-submit'), 'allow_once', answers);
       return;
     }
+    var taskButton = event.target.closest('button[data-task-decision]');
+    if (taskButton) {
+      decideTask(taskButton.getAttribute('data-task-id'), taskButton.getAttribute('data-task-decision'));
+      return;
+    }
     var button = event.target.closest('button[data-approval-decision]');
     if (!button) return;
     decide(button.getAttribute('data-approval-id'), button.getAttribute('data-approval-decision'));
@@ -207,6 +284,10 @@
     build();
     load();
     connect();
+    buildTaskSection();
+    loadTasks();
+    // 任务确认是文件队列，没有事件推送，靠轮询
+    setInterval(loadTasks, 5000);
   }
 
   start();
