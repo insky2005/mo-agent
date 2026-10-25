@@ -69,6 +69,8 @@ async function pullCommand(args) {
         if (item.verified && item.verified !== "unverified") lines.push("  验收   " + item.verified);
         if (item.reason && item.reason !== "receipt") lines.push("  原因   " + item.reason);
         if (item.summary) lines.push("  结论   " + item.summary);
+        if (item.needs && item.needs.length) lines.push("  提问   " + item.needs.join("；"));
+        if (item.deviations && item.deviations.length) lines.push("  偏差   " + item.deviations.join("；"));
         lines.push("  时间   " + item.at);
         lines.push("  查看   mo task status " + item.taskId);
         return lines.join("\n");

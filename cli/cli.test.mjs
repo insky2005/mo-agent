@@ -390,3 +390,51 @@ test("建卡仍然自动认领（B1.2）", () => {
   assert.match(created.parsed.taskId, /^t_/);
   assert.equal(fs.existsSync(path.join(repo, ".mo-agent", "project.json")), true);
 });
+const BLOCKED_NEEDS_EXECUTOR = [
+  'import fs from "node:fs";',
+  "process.stdin.resume();",
+  'process.stdin.on("end", () => {',
+  "  fs.writeFileSync(process.env.MO_RECEIPT, JSON.stringify({",
+  '    taskId: process.env.MO_TASK_ID,',
+  '    status: "blocked",',
+  '    summary: "需要确认：要不要改后端接口",',
+  '    deviations: ["没有动页面"],',
+  '    needs: ["后端能否加 filter 参数？", "还是前端本地过滤？"],',
+  "  }));",
+  "});",
+].join("\n");
+
+test("worker 求助：needs/deviations 进派单、收件箱、status 与账本", () => {
+  const ws = workspace();
+  writeExecutor(ws.project, BLOCKED_NEEDS_EXECUTOR);
+  run(ws, ["project", "add", "."]);
+
+  const created = runJson(ws, ["task", "create", "--title", "加筛选", "--deliverable", "x", "--exec", "node executor.mjs"]);
+  const taskId = created.parsed.taskId;
+  confirm(ws, taskId);
+
+  const dispatched = runJson(ws, ["task", "dispatch", taskId]);
+  assert.equal(dispatched.status, 1);
+  assert.equal(dispatched.parsed.status, "blocked");
+  assert.equal(dispatched.parsed.reason, "needs_input");
+  assert.deepEqual(dispatched.parsed.receipt.needs, ["后端能否加 filter 参数？", "还是前端本地过滤？"]);
+  assert.deepEqual(dispatched.parsed.receipt.deviations, ["没有动页面"]);
+
+  const inbox = runJson(ws, ["inbox", "pull", "--peek"]);
+  assert.equal(inbox.parsed.items[0].reason, "needs_input");
+  assert.deepEqual(inbox.parsed.items[0].needs, ["后端能否加 filter 参数？", "还是前端本地过滤？"]);
+  assert.deepEqual(inbox.parsed.items[0].deviations, ["没有动页面"]);
+
+  const status = runJson(ws, ["task", "status", taskId]);
+  assert.equal(status.parsed.lastReceipt.summary, "需要确认：要不要改后端接口");
+  assert.deepEqual(status.parsed.lastReceipt.needs, ["后端能否加 filter 参数？", "还是前端本地过滤？"]);
+
+  const human = run(ws, ["task", "status", taskId]);
+  assert.match(human.stdout, /提问\s+· 后端能否加 filter 参数/);
+  assert.match(human.stdout, /偏差\s+· 没有动页面/);
+
+  const ledger = runJson(ws, ["ledger", "query", "--task", taskId]);
+  const blocked = ledger.parsed.events.find((event) => event.type === "task.blocked");
+  assert.deepEqual(blocked.payload.needs, ["后端能否加 filter 参数？", "还是前端本地过滤？"]);
+  assert.equal(blocked.payload.reason, "needs_input");
+});

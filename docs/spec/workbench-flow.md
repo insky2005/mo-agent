@@ -188,6 +188,7 @@ canceled            canceled                failed                  └─> canc
 | B7.3 | 回执 JSON 非法 / taskId 不匹配 | `blocked(bad_receipt)` | `E_BAD_RECEIPT` |
 | B7.4 | 回执被多次写入 | 取最后一次，记 `amendment` 事件 | — |
 | B7.5 | 只能从 stdout 抽取（无文件） | `verified: unverified` + 标记 `derived_from_stdout` | `W_DERIVED` |
+| B7.6 | 回执 `status=blocked` 且 `needs` 非空 | `blocked` + `reason: needs_input`；`needs` / `deviations` 进收件箱、账本与 `task status` | — |
 
 ### 6.8 校验（B8）
 

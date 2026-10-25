@@ -119,12 +119,18 @@ export function ingest({ home, root, card, result }) {
     }
   }
 
+  // 执行者说 blocked 且带 needs：这是"要人拍板"，不是普通回执
+  if (target === "blocked" && reason === "receipt" && checked.receipt.needs.length) {
+    reason = "needs_input";
+  }
+
   const payload = {
     reason,
     status: checked.receipt.status,
     summary: checked.receipt.summary,
     deviations: checked.receipt.deviations,
     pitfalls: checked.receipt.pitfalls,
+    needs: checked.receipt.needs,
   };
   if (verify && verify.results.length) payload.verify = verifyPayload(verify);
 
@@ -168,6 +174,8 @@ function summary(home, root, card, extra) {
       verified: result.verified,
       summary: (extra.receipt && extra.receipt.summary) || null,
       reason: extra.reason || null,
+      needs: (extra.receipt && extra.receipt.needs) || [],
+      deviations: (extra.receipt && extra.receipt.deviations) || [],
     });
   } catch (error) {
     process.stderr.write("[W_INBOX_FAILED] 收件箱写入失败：" + (error && error.message ? error.message : error) + "\n");

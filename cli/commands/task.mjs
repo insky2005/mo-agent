@@ -5,7 +5,7 @@ import { newTaskId } from "../lib/ids.mjs";
 import { all, has, one } from "../lib/args.mjs";
 import { emit, table } from "../lib/output.mjs";
 import { moHome, cardPath } from "../lib/paths.mjs";
-import { appendEvent, listCards, loadCard, readEvents, saveCard } from "../lib/store.mjs";
+import { appendEvent, listCards, loadCard, readEvents, readReceipt, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchTask } from "../lib/dispatch.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
@@ -373,6 +373,18 @@ function statusTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
   const events = readEvents(home).filter((event) => event.taskId === taskId).slice(-8);
   const pending = pendingForTask(home, taskId);
+
+  // 最近一次回执：worker 的提问与偏差都在这里，不然回头看只剩一个 [blocked]
+  const receipt = readReceipt(resolved.root, taskId);
+  const lastReceipt =
+    receipt && !receipt.__parseError
+      ? {
+          status: receipt.status || null,
+          summary: receipt.summary || null,
+          needs: Array.isArray(receipt.needs) ? receipt.needs : [],
+          deviations: Array.isArray(receipt.deviations) ? receipt.deviations : [],
+        }
+      : null;
   const payload = {
     taskId,
     status: card.meta.status,
@@ -382,6 +394,7 @@ function statusTask(ctx, args, home) {
     root: resolved.root,
     verify: verifyItems(card.meta),
     ...(pending ? { approval: { requestId: pending.id, expiresAt: pending.expiresAt } } : {}),
+    ...(lastReceipt ? { lastReceipt } : {}),
     events,
   };
   emit(args.options, payload, () =>
@@ -391,6 +404,13 @@ function statusTask(ctx, args, home) {
       "  项目   " + card.meta.project + "  (" + resolved.root + ")",
       "  验收   " + (payload.verify.length ? payload.verify.length + " 项 · " + payload.verified : "无"),
       ...(pending ? ["  待批   " + pending.id + "   mo task approve " + taskId] : []),
+      ...(lastReceipt && lastReceipt.summary ? ["  结论   " + lastReceipt.summary] : []),
+      ...(lastReceipt && lastReceipt.needs.length
+        ? ["  提问   " + lastReceipt.needs.map((item) => "· " + item).join("\n           ")]
+        : []),
+      ...(lastReceipt && lastReceipt.deviations.length
+        ? ["  偏差   " + lastReceipt.deviations.map((item) => "· " + item).join("\n           ")]
+        : []),
       "",
       "  最近事件",
       ...events.map((event) => "    " + event.at + "  " + event.type),
@@ -554,6 +574,12 @@ export function runDispatch(args, { home, root, taskId }) {
       }
       if (result.knowledge && result.knowledge.ok === false) lines.push("  知识   未注入（知识库不可读）");
       if (result.receipt && result.receipt.summary) lines.push("  结论   " + result.receipt.summary);
+      if (result.receipt && Array.isArray(result.receipt.needs) && result.receipt.needs.length) {
+        lines.push("  提问   " + result.receipt.needs.map((item) => "· " + item).join("\n           "));
+      }
+      if (result.receipt && Array.isArray(result.receipt.deviations) && result.receipt.deviations.length) {
+        lines.push("  偏差   " + result.receipt.deviations.map((item) => "· " + item).join("\n           "));
+      }
       if (result.reason && result.reason !== "receipt") lines.push("  原因   " + result.reason);
       if (result.exitCode !== undefined && result.exitCode !== null) lines.push("  退出码 " + result.exitCode);
       if (result.errors) lines.push("  问题   " + result.errors.join("；"));

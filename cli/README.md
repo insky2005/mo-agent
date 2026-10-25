@@ -584,6 +584,8 @@ MCP 与 CLI 用的是同一套 backend，行为不会分叉；每次调用是一
 
 收件箱是 `B9.3` 的兜底：任务进入 done / blocked / failed 时 core 落一条，主 Agent 没被注入也能靠 `mo inbox pull` 补上。条目在 `~/.mo-agent/inbox/pending/`，pull 后移到 `pulled/`，所以拉取天然幂等；同一任务重复派单只保留最新一条。
 
+回执里的 `needs`（提问）和 `deviations`（没按卡来的地方）会一起带上，`mo task status` 也能看到最近一次回执的这两项——worker 想求助时不用把问题硬塞进 summary。
+
 ## 文件位置
 
 | 内容 | 位置 |

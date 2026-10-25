@@ -33,7 +33,7 @@ const TYPE = {
  * 只有任务"需要人看一眼"时才落收件箱：完成、阻塞、失败。
  * 同一任务重复派单时覆盖旧条目（seq 递增），避免收件箱被重试刷屏。
  */
-export function writeInbox({ home, taskId, project, projectRoot, title, status, verified, summary, reason, source = "core" }) {
+export function writeInbox({ home, taskId, project, projectRoot, title, status, verified, summary, reason, needs, deviations, source = "core" }) {
   if (!taskId || !NOTIFIABLE.has(status)) return null;
   const file = path.join(pendingDir(home), taskId + ".json");
   const previous = readJsonSafe(file, null);
@@ -54,6 +54,8 @@ export function writeInbox({ home, taskId, project, projectRoot, title, status, 
     verified: verified || "unverified",
     summary: summary || null,
     reason: reason || null,
+    needs: Array.isArray(needs) ? needs : [],
+    deviations: Array.isArray(deviations) ? deviations : [],
     source,
   };
   writeJsonAtomic(file, item);

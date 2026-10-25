@@ -186,6 +186,8 @@ draft ──approve──▶ confirmed ──dispatch──▶ running ──┬
 
 ## 7. 回执与补救
 
+回执里的 `needs`（"需要人拍板的事"）和 `deviations`（"没按卡来的地方"）不会丢：`mo task status` 和 `mo inbox pull` 都会显示，账本里也记一份。worker 遇到岔路时把问题写进 `needs` 即可。
+
 正常流程：执行者把 JSON 写到 `$MO_RECEIPT`（路径由 mo 通过环境变量给出），dispatch 自动读取。
 回执至少要有 `taskId`、`status`、`summary`；`status=done` 还要求 `verify` 非空。
 
