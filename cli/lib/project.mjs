@@ -68,7 +68,7 @@ export function attachProject(root, options = {}) {
     writeJsonAtomic(projectFile(absolute), meta);
     writeAtomic(
       path.join(projectDir(absolute), ".gitignore"),
-      "# 回执与执行日志默认不入库（按需 git add -f）\nreceipts/\nlogs/\n",
+      "# 回执、日志、派单脚本与信封默认不入库（按需 git add -f）\nreceipts/\nlogs/\nenvelopes/\nruns/\n",
     );
     writeAtomic(
       path.join(projectDir(absolute), "README.md"),

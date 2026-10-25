@@ -361,6 +361,22 @@ mo project agent --remove     # 只删自己那段
 
 > 目前是 CLI 形态：Agent 通过 shell 调 `mo`。MCP 端点、被唤醒（inbox）还没做，属 P1 的后半段。
 
+## 会话型 worker（过程可见）
+
+内置的 `claude-session`、或自己注册的 `--session` worker，派单时不开子进程，而是在**新终端窗口**里跑交互式 CLI：
+
+```bash
+mo worker add my-claude --command claude --session
+mo task create --title "…" --worker my-claude ...
+mo task dispatch t_x
+# ✓ 已在新窗口启动（iTerm 或 Terminal.app）
+```
+
+- 卡与回执要求写成 `.mo-agent/envelopes/<id>.md`，窗口里只跑一句"请阅读这个文件并执行"；
+- dispatch **立即返回**，结果靠回执文件，超时走 `blocked(timeout)`；
+- `MO_TERMINAL=iterm|terminal|none` 指定终端（默认探测 iTerm，再退 Terminal.app）；
+- `MO_LAUNCHER=print` 只生成脚本不开窗口（CI / 排查用）。
+
 ## 自定义 worker
 
 内置的不够用时，注册自己的执行者：

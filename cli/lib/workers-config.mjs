@@ -70,7 +70,7 @@ export function resolveWorker(name, ctx = {}) {
   return found;
 }
 
-export function addWorker({ name, command, description = "", requires = "", project = false, home, projectRoot }) {
+export function addWorker({ name, command, description = "", requires = "", project = false, session = false, home, projectRoot }) {
   const key = String(name || "").trim();
   if (!NAME_RE.test(key)) {
     throw new MoError("E_USAGE", "名称不合法：" + key, {
@@ -93,6 +93,7 @@ export function addWorker({ name, command, description = "", requires = "", proj
     command: command.trim(),
     description: String(description || "").trim(),
     ...(requires ? { requires: String(requires).trim() } : {}),
+    ...(session ? { session: true } : {}),
   };
   writeWorkers(file, workers);
   return { name: key, file, ...workers[key] };

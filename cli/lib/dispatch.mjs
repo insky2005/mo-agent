@@ -9,6 +9,7 @@ import { ingest, transition } from "./ingest.mjs";
 import { writeRunLog } from "./logs.mjs";
 import { recallKnowledge, cardQuery } from "./knowledge.mjs";
 import { formatKnowledgeBlock } from "../../core/knowledge/recall.mjs";
+import { detectTerminal, launchTerminal, sessionPaths, writeSessionAssets } from "./session-launch.mjs";
 
 /**
  * 召回是"尽力而为"：读不到知识库不能挡住派单，但必须吵一声（B10.5 / I9）。
@@ -32,6 +33,78 @@ function recallForDispatch({ home, card }) {
     process.stderr.write("[W_MEMORY_UNAVAILABLE] " + error.message + "（本次没有注入知识）\n");
     return { block: "", info: { ok: false, error: { code: error.code, message: error.message } } };
   }
+}
+
+/**
+ * 会话型派单：不 spawn 子进程，而是在新终端窗口里跑交互式 CLI。
+ * 人能看到执行过程；dispatch 立即返回，结果靠回执文件（与无头模式的唯一区别）。
+ */
+export function dispatchSession({ home, root, taskId, worker, actor = "agent", env = process.env }) {
+  const card = loadCard(root, taskId);
+  const { meta } = card;
+
+  if (meta.status === "draft") {
+    throw new MoError("E_NOT_CONFIRMED", "任务卡还没确认，先执行 mo task confirm " + taskId + "（确认权属于人）");
+  }
+  if (!["confirmed", "dispatched", "running", "blocked"].includes(meta.status)) {
+    throw new MoError("E_NOT_CONFIRMED", "任务当前状态是 " + meta.status + "，不能派单");
+  }
+  if (!worker || !worker.command) {
+    throw new MoError("E_NO_EXECUTOR", "会话型 worker 需要有启动命令");
+  }
+
+  const kind = detectTerminal(env);
+  const dryRun = String(env.MO_LAUNCHER || "").toLowerCase() === "print";
+  // 先确认有终端可开，再改状态——否则会留下"running 但窗口没起来"的卡
+  if (kind === "none" && !dryRun) {
+    throw new MoError("E_NO_TERMINAL", "没有可用的终端，无法开启会话型 worker", {
+      hint: "macOS 装 iTerm 或直接用 Terminal.app；服务器/CI 请用无头 worker 或 --exec",
+    });
+  }
+
+  if (meta.status === "blocked") {
+    transition({ home, root, card, to: "running", payload: { retry: true, session: kind }, actor });
+  } else if (meta.status === "confirmed") {
+    transition({
+      home,
+      root,
+      card,
+      to: "dispatched",
+      payload: { assignee: worker.name || "auto", session: kind, exec: worker.command },
+      actor,
+    });
+    transition({ home, root, card, to: "running", payload: { session: kind }, actor });
+  }
+
+  const receiptFile = resolveReceiptFile(root, meta);
+  ensureDir(receiptDir(root));
+  const knowledge = recallForDispatch({ home, card });
+  const envelope = buildEnvelope({ meta, body: card.body, root, receiptFile, knowledge: knowledge.block });
+  const files = sessionPaths(root, taskId);
+  const prompt =
+    "请阅读 " + files.envelope + " 并执行其中的任务卡，完成后把回执写到 " + receiptFile + "，并输出一行 RECEIPT_WRITTEN " + receiptFile;
+
+  writeSessionAssets({
+    root,
+    taskId,
+    title: meta.title,
+    command: worker.command,
+    prompt,
+    receipt: receiptFile,
+    envelopeText: envelope,
+  });
+
+  const launched = launchTerminal({ kind, script: files.script, env });
+
+  return {
+    taskId,
+    project: meta.project,
+    status: "running",
+    verified: "unverified",
+    reason: "session",
+    session: { terminal: launched.kind, launched: launched.launched, script: files.script, envelope: files.envelope },
+    knowledge: knowledge.info,
+  };
 }
 
 export function resolveReceiptFile(root, meta) {

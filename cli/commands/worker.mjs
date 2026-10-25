@@ -26,6 +26,7 @@ function list(ctx, args) {
   const workers = listWorkers({ home: moHome(), projectRoot: projectRootFor(ctx.cwd, args.options) });
   const rows = workers.map((worker) => [
     worker.name,
+    worker.session ? "会话" : "无头",
     SOURCE_LABEL[worker.source] || worker.source,
     worker.installed ? "✓" : "✗ 缺 " + worker.missing.map((item) => item.split("/").pop()).join(", "),
     worker.command,
@@ -38,10 +39,11 @@ function list(ctx, args) {
 
   emit(args.options, { workers }, () => {
     const lines = [
-      table(rows, ["执行者", "来源", "已装", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
+      table(rows, ["执行者", "模式", "来源", "已装", "命令", "说明"]).replace(/[ \t]+$/gm, ""),
       "",
       "用法：mo task create --worker <执行者>",
-      "自定义：mo worker add <名称> --command '<命令>'",
+      "自定义：mo worker add <名称> --command '<命令>' [--session]",
+      "会话型 --session：派单时开新终端窗口跑交互式 CLI，过程可见；无头型走 stdin/子进程",
     ];
     if (missing.length) {
       lines.push("不可用：" + [...new Set(missing)].join(" / ") + "（对应执行者选不了）");
@@ -63,13 +65,14 @@ function add(ctx, args) {
     command: one(args.options, "command", ""),
     description: one(args.options, "description", ""),
     requires: one(args.options, "requires", ""),
+    session: has(args.options, "session"),
     project,
     home: moHome(),
     projectRoot,
   });
 
   emit(args.options, { ok: true, ...result, project }, () =>
-    "✓ " + result.name + " → " + result.file + (project ? "（项目）" : "（个人）"));
+    "✓ " + result.name + " → " + result.file + (result.session ? "（会话型）" : "") + (project ? "（项目）" : "（个人）"));
   return 0;
 }
 

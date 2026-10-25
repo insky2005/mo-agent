@@ -27,10 +27,19 @@ test("模板表不为空且字段齐全", () => {
   }
 });
 
-test("模板命令都从 stdin 取 prompt", () => {
+test("无头模板命令都从 stdin 取 prompt", () => {
   for (const [name, preset] of Object.entries(EXECUTORS)) {
+    if (preset.session) continue; // 会话型把 prompt 作为 argv 传，不读 stdin
     const readsStdin = preset.command.includes("$(cat)") || /(^|\s)-$/.test(preset.command);
     assert.ok(readsStdin, name + " 看起来不读 stdin");
+  }
+});
+
+test("会话型模板不读 stdin", () => {
+  for (const [name, preset] of Object.entries(EXECUTORS)) {
+    if (!preset.session) continue;
+    assert.doesNotMatch(preset.command, /\$\(cat\)/, name + " 不该读 stdin");
+    assert.ok(preset.requires || preset.command, name + " 缺少启动命令");
   }
 });
 test("which 能找到 node，找不到的返回 null", () => {

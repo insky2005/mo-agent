@@ -517,6 +517,20 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 **仍未做**：daemon 启动时补推 pending 请求、审批页之外的推送渠道、Streamable HTTP `/mcp`。
 
+### 12.5 会话型执行者（2026-11）
+
+无头 worker（`claude -p`）适合 CI 与批量，但过程对人不可见。会话型 worker 补的是这个：
+
+| | 无头 | 会话 |
+|---|---|---|
+| 启动方式 | mo 起子进程，stdin 传卡 | 新终端窗口跑交互式 CLI |
+| 人能看到 | 只有实时 stderr 日志 | 整个会话，可随时插话 |
+| 回执 | 子进程退出后收 | 只能等它自己写文件 |
+| dispatch | 前台等进程 | **立即返回**，结果靠回执文件 |
+| 超时 | 进程超时 | 等不到回执 → `blocked(timeout)` |
+
+实现：`mo worker add <名> --session --command '<交互式命令>'`，内置 `claude-session`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。`MO_TERMINAL=iterm|terminal|none` 指定终端，`MO_LAUNCHER=print` 只生成不启动。
+
 ## 13. 安装与首次使用
 
 ### 13.1 三种形态，一个 daemon

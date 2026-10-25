@@ -158,6 +158,7 @@ const OPTIONS = {
   ],
   worker: [
     ["--command <命令>", "add：这个执行者怎么启动"],
+    ["--session", "add：会话型——派单时开新终端窗口跑交互式 CLI"],
     ["--description <说明> --requires <能力>", "add：给人看的说明与能力要求"],
     ["--project <名称|路径>", "add：只在某个项目里可用"],
   ],

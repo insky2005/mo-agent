@@ -263,14 +263,17 @@ mo ledger query --task t_01H…
 
 ### 9.1 内置模板
 
-| 名称 | 命令 |
-|---|---|
-| `claude` | `claude -p "$(cat)" --permission-mode acceptEdits` |
+| 名称 | 模式 | 命令 |
+|---|---|---|
+| `claude` | 无头 | `claude -p "$(cat)" --permission-mode acceptEdits` |
 | `codex` | `codex exec -s workspace-write -` |
 | `qodercli` | `qodercli -p "$(cat)" --permission-mode accept_edits` |
 | `qoderclicn` | `qoderclicn -p "$(cat)" --permission-mode accept_edits` |
 | `pi` | `pi -p "$(cat)"` |
-| `qwen` | `qwen --approval-mode auto-edit "$(cat)"` |
+| `qwen` | 无头 | `qwen --approval-mode auto-edit "$(cat)"` |
+| `claude-session` | 会话 | `claude`（新终端窗口，交互式） |
+
+**无头 vs 会话**：无头 worker 由 mo 起子进程、stdin 传卡，适合 CI 与批量；会话型 worker 在**新终端窗口**里跑交互式 CLI，你能看着它干活、随时插话，但回执得它自己写。派单时按卡里记的 worker 自动分流，不用额外加参数。
 
 `mo worker list` 会显示每个模板的来源、是否可用（命令与 `requires` 都要存在）。
 命令不存在的模板选不了；`mo task create --worker` 会警告，`dispatch` 会直接报错。

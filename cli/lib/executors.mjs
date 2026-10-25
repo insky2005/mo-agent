@@ -41,6 +41,15 @@ export const EXECUTORS = {
     description: "Qwen Code，自动批准文件编辑",
     requires: "qwen",
   },
+
+  // ---- 会话型：开一个新窗口跑交互式 CLI，人在旁边看着 ----
+  // 与上面的无头模板并存：无头适合 CI/批量，会话型适合"我想看它干活"。
+  "claude-session": {
+    command: "claude",
+    description: "Claude Code 交互会话（新终端窗口，过程可见）",
+    requires: "claude",
+    session: true,
+  },
 };
 
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "fish"]);

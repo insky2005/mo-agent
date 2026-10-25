@@ -7,7 +7,7 @@ import { emit, table } from "../lib/output.mjs";
 import { moHome, cardPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, readReceipt, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
-import { dispatchTask } from "../lib/dispatch.mjs";
+import { dispatchSession, dispatchTask } from "../lib/dispatch.mjs";
 import { hasVerifyFailure, runVerify, verifyPayload } from "../lib/verify.mjs";
 import { readRunLog } from "../lib/logs.mjs";
 import { resolveWorker } from "../lib/workers-config.mjs";
@@ -538,12 +538,49 @@ function nextStep(result, taskId) {
 }
 
 export function runDispatch(args, { home, root, taskId }) {
-  const chosen = pickExecutor(args.options, { home, projectRoot: root });
+  let chosen = pickExecutor(args.options, { home, projectRoot: root });
+
+  // 没显式指定时，沿用建卡时写进卡里的 worker（会话型/无头型都靠它区分）
+  if (!chosen && !one(args.options, "exec")) {
+    const card = loadCard(root, taskId);
+    const name = card.meta.worker || (card.meta.assignee !== "auto" ? card.meta.assignee : null);
+    if (name) {
+      try {
+        chosen = resolveWorker(name, { home, projectRoot: root });
+      } catch {
+        chosen = null; // 卡里的 worker 已经不在了，退回 meta.exec
+      }
+    }
+  }
+
   if (chosen && !chosen.installed) {
     throw new MoError("E_ASSIGNEE_UNSUPPORTED", "执行者 " + chosen.binary + " 未安装", {
       hint: "先装好它，或换一个 --worker / 用 --exec",
     });
   }
+  // 会话型 worker：开窗口跑，过程可见；dispatch 立即返回，结果等回执
+  if (chosen && chosen.session) {
+    const result = dispatchSession({ home, root, taskId, worker: chosen, actor: "agent" });
+    emit(
+      args.options,
+      { ok: true, ...result },
+      () =>
+        [
+          result.session.launched ? "✓ 已在新窗口启动" : "✓ 已生成启动脚本（未开窗口）",
+          "",
+          "  id     " + taskId,
+          "  终端   " + result.session.terminal,
+          "  脚本   " + path.relative(root, result.session.script),
+          "  信封   " + path.relative(root, result.session.envelope),
+          "",
+          result.session.launched
+            ? "窗口里跑完会写回执；用 mo task status " + taskId + " 看结果。"
+            : "MO_LAUNCHER=print：没有真的开窗口。去掉它或换 MO_TERMINAL 再试。",
+        ].join("\n"),
+    );
+    return 0;
+  }
+
   return dispatchTask({
     home,
     root,

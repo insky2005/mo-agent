@@ -78,7 +78,7 @@ const SPEC = {
   worker: {
     subs: {
       list: { flags: [] },
-      add: { flags: ["--command", "--description", "--requires", "--project"] },
+      add: { flags: ["--command", "--description", "--requires", "--session", "--project"] },
       remove: { flags: [] },
     },
   },
