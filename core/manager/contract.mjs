@@ -37,7 +37,7 @@ export const TOOLS = [
   },
   {
     name: "task_confirm",
-    description: "发起任务卡的确认请求（不是确认本身）。批准只能由人在终端或手机上完成，批准前不能派单。",
+    description: "发起任务卡的确认请求（不是确认本身）。支持 elicitation 的客户端会当场弹表单让用户选；否则返回 pending，等人从终端或网页批准。",
     schema: {
       type: "object",
       properties: {

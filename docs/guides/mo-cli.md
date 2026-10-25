@@ -346,6 +346,8 @@ mo agent describe --json          # 机器可读的能力清单
 
 **故意没有** `task_approve` / `task_reject`（批准得你来）和 `memory_accept`（记忆入库得你拍板）。`task_confirm` 只发请求，不改变卡片状态。每个工具调用是一次 `mo … --json` 子进程，所以 `task_dispatch` 会一直阻塞到执行者跑完。
 
+如果客户端支持 **MCP elicitation**（`initialize` 里声明 `capabilities.elicitation`），`task_confirm` 会当场弹一个表单让你选「允许 / 拒绝」，不用切终端。用户关掉表单或超时都算"没决定"，请求保持 pending；想强制只走带外通道就设 `MO_ELICITATION=0`。
+
 ## 11. 知识与收件箱
 
 **知识库**：纯 markdown，一个 `## 标题` 一个条目；派单时按任务卡内容召回，命中条目的正文直接嵌进执行者拿到的信封，执行者不用再去翻文件。

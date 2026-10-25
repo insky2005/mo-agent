@@ -25,8 +25,8 @@ function run(ws, args) {
   });
 }
 
-/** 起一个 mcp 子进程，按行收发 JSON-RPC */
-function session(ws) {
+/** 起一个 mcp 子进程，按行收发 JSON-RPC；onServerRequest 处理 server→client 请求 */
+function session(ws, options = {}) {
   const child = spawn(process.execPath, [MO, "mcp"], {
     cwd: ws.project,
     env: { ...process.env, MO_AGENT_HOME: ws.home },
@@ -45,6 +45,11 @@ function session(ws) {
       buffer = buffer.slice(index + 1);
       if (!line) continue;
       const message = JSON.parse(line);
+      // server → client 请求（elicitation）：由测试替代客户端应答，不进入回包队列
+      if (options.onServerRequest && message.method) {
+        options.onServerRequest(message);
+        return;
+      }
       const waiter = waiters.shift();
       if (waiter) waiter(message);
       else queued.push(message);
@@ -71,8 +76,8 @@ function session(ws) {
   };
 }
 
-async function handshake(s) {
-  s.send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } });
+async function handshake(s, capabilities = {}) {
+  s.send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities } });
   const init = await s.next();
   s.send({ jsonrpc: "2.0", method: "notifications/initialized" });
   return init;
@@ -218,4 +223,123 @@ test("未知方法与坏 JSON 有稳定回包", async () => {
   const broken = await s.next();
   assert.equal(broken.error.code, -32700);
   await s.close();
+});
+function mcpProject(ws) {
+  run(ws, ["project", "add", "."]);
+  const created = run(ws, ["task", "create", "--title", "加筛选", "--deliverable", "有筛选栏", "--json"]);
+  return JSON.parse(created.stdout.trim()).taskId;
+}
+
+test("声明 elicitation 的客户端：task_confirm 当场批准", async () => {
+  const ws = workspace();
+  const taskId = mcpProject(ws);
+
+  let asked = null;
+  const s = session(ws, {
+    onServerRequest: (message) => {
+      if (message.method !== "elicitation/create") return;
+      asked = message;
+      s.send({ jsonrpc: "2.0", id: message.id, result: { action: "accept", content: { decision: "approve" } } });
+    },
+  });
+  await handshake(s, { elicitation: {} });
+  s.send({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "task_confirm", arguments: { taskId } } });
+  const reply = await s.next();
+
+  assert.ok(asked, "应该向客户端发出 elicitation/create");
+  assert.equal(asked.params.requestedSchema.properties.decision.enum.join(","), "approve,reject");
+  assert.match(asked.params.message, /加筛选/);
+
+  const payload = JSON.parse(reply.result.content[0].text);
+  assert.equal(reply.result.isError, false, JSON.stringify(reply));
+  assert.equal(payload.status, "confirmed");
+
+  const ledger = JSON.parse(run(ws, ["ledger", "query", "--task", taskId, "--json"]).stdout.trim());
+  const confirmed = ledger.events.find((event) => event.type === "task.confirmed");
+  assert.equal(confirmed.payload.channel, "mcp-elicitation");
+  assert.equal(confirmed.actor, "human");
+  await s.close();
+});
+
+test("用户在表单里拒绝：卡保持 draft", async () => {
+  const ws = workspace();
+  const taskId = mcpProject(ws);
+
+  const s = session(ws, {
+    onServerRequest: (message) => {
+      if (message.method === "elicitation/create") {
+        s.send({ jsonrpc: "2.0", id: message.id, result: { action: "accept", content: { decision: "reject" } } });
+      }
+    },
+  });
+  await handshake(s, { elicitation: {} });
+  s.send({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "task_confirm", arguments: { taskId } } });
+  const reply = await s.next();
+  const payload = JSON.parse(reply.result.content[0].text);
+  assert.equal(payload.rejected, true);
+
+  const status = JSON.parse(run(ws, ["task", "status", taskId, "--json"]).stdout.trim());
+  assert.equal(status.status, "draft");
+  await s.close();
+});
+
+test("用户关掉表单（decline）：请求保持 pending", async () => {
+  const ws = workspace();
+  const taskId = mcpProject(ws);
+
+  const s = session(ws, {
+    onServerRequest: (message) => {
+      if (message.method === "elicitation/create") {
+        s.send({ jsonrpc: "2.0", id: message.id, result: { action: "decline" } });
+      }
+    },
+  });
+  await handshake(s, { elicitation: {} });
+  s.send({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "task_confirm", arguments: { taskId } } });
+  const reply = await s.next();
+  const payload = JSON.parse(reply.result.content[0].text);
+  assert.equal(payload.pending, true);
+
+  const requests = JSON.parse(run(ws, ["task", "requests", "--json"]).stdout.trim());
+  assert.equal(requests.total, 1);
+  await s.close();
+});
+
+test("没声明 elicitation 的客户端：退回 pending 流程", async () => {
+  const ws = workspace();
+  const taskId = mcpProject(ws);
+
+  let asked = false;
+  const s = session(ws, {
+    onServerRequest: (message) => {
+      if (message.method === "elicitation/create") asked = true;
+    },
+  });
+  await handshake(s);
+  s.send({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "task_confirm", arguments: { taskId } } });
+  const reply = await s.next();
+  const payload = JSON.parse(reply.result.content[0].text);
+  assert.equal(asked, false, "不应向不支持 elicitation 的客户端发表单");
+  assert.equal(payload.pending, true);
+  await s.close();
+});
+
+test("MO_ELICITATION=0 时即使有能力也不弹表单", async () => {
+  const ws = workspace();
+  const taskId = mcpProject(ws);
+  process.env.MO_ELICITATION = "0";
+
+  let asked = false;
+  const s = session(ws, {
+    onServerRequest: (message) => {
+      if (message.method === "elicitation/create") asked = true;
+    },
+  });
+  await handshake(s, { elicitation: {} });
+  s.send({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "task_confirm", arguments: { taskId } } });
+  const reply = await s.next();
+  assert.equal(asked, false);
+  assert.equal(JSON.parse(reply.result.content[0].text).pending, true);
+  await s.close();
+  delete process.env.MO_ELICITATION;
 });

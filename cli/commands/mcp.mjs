@@ -15,6 +15,91 @@ import { TOOLS as CONTRACT_TOOLS } from "../../core/manager/contract.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
+/** 客户端是否声明了 elicitation 能力（initialize 时告知） */
+let clientElicitation = false;
+/** server → client 的请求（elicitation）等待中的回调 */
+const serverRequests = new Map();
+let serverRequestSeq = 0;
+
+/** 让客户端弹表单；用户关掉/超时都按 cancel 处理，绝不默认通过 */
+function askClient(params, timeoutMs = 5 * 60 * 1000) {
+  const id = "srv-" + (serverRequestSeq += 1);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      serverRequests.delete(id);
+      resolve({ action: "cancel", reason: "timeout" });
+    }, timeoutMs);
+    if (typeof timer.unref === "function") timer.unref();
+    serverRequests.set(id, (result) => {
+      clearTimeout(timer);
+      resolve(result || { action: "cancel" });
+    });
+    send({ jsonrpc: "2.0", id, method: "elicitation/create", params });
+  });
+}
+
+/**
+ * task_confirm 的 elicitation 版本：先落请求，再让客户端弹表单，最后按用户选择施加决定。
+ * 走这条路时账本记 channel=mcp-elicitation，与终端/网页区分开。
+ */
+async function confirmWithElicitation(args) {
+  const taskId = String(args.taskId || "");
+  const prepared = await runCli(["task", "confirm", taskId, "--json"]);
+  const preparedText = (prepared.stdout || prepared.stderr).trim();
+  if (prepared.code !== 0) return { result: textResult(preparedText || "发起确认请求失败", true) };
+
+  let info = null;
+  try {
+    info = JSON.parse(prepared.stdout);
+  } catch {
+    info = null;
+  }
+  if (info && (info.status === "confirmed" || info.alreadyConfirmed)) {
+    return { result: textResult(JSON.stringify(info, null, 2)) };
+  }
+
+  const answer = await askClient({
+    message: "确认任务卡「" + ((info && info.title) || taskId) + "」？批准后主 Agent 才能派单。",
+    requestedSchema: {
+      type: "object",
+      properties: {
+        decision: {
+          type: "string",
+          title: "决定",
+          description: "允许后这张卡才能派发",
+          enum: ["approve", "reject"],
+          enumNames: ["允许", "拒绝"],
+        },
+      },
+      required: ["decision"],
+    },
+  });
+
+  const decision = answer && answer.action === "accept" && answer.content ? String(answer.content.decision || "") : "";
+  if (!decision) {
+    return {
+      result: textResult(
+        JSON.stringify(
+          {
+            ok: true,
+            pending: true,
+            taskId,
+            requestId: info && info.requestId,
+            note: "用户没有在表单里做决定，请求仍然待批",
+          },
+          null,
+          2,
+        ),
+      ),
+    };
+  }
+
+  const action = decision === "approve" ? "approve" : "reject";
+  const applied = await runCli(["task", action, taskId, "--yes", "--channel", "mcp-elicitation", "--json"]);
+  const body = applied.stdout.trim() || applied.stderr.trim() || "（无输出）";
+  return { result: textResult(body, applied.code !== 0) };
+}
+
 /** 自我定位：源码运行时 execPath + cli/mo.mjs，单文件二进制时直接 execPath */
 function selfCommand() {
   try {
@@ -161,6 +246,13 @@ async function callTool(params) {
   const tool = byName(params && params.name);
   if (!tool) return { error: { code: -32602, message: "未知工具：" + (params && params.name) } };
 
+  // 客户端支持 elicitation 时，确认请求当场问人；MO_ELICITATION=0 可强制走带外通道
+  if (tool.name === "task_confirm" && clientElicitation && process.env.MO_ELICITATION !== "0") {
+    const args = (params && params.arguments) || {};
+    if (!args.taskId) return { result: textResult("缺少参数：taskId（工具 task_confirm）", true) };
+    return confirmWithElicitation(args);
+  }
+
   const builder = BUILDERS[tool.name];
   if (!builder) return { error: { code: -32603, message: "工具缺少 CLI 映射：" + tool.name } };
 
@@ -183,6 +275,7 @@ async function handle(message) {
   const { id, method, params } = message || {};
 
   if (method === "initialize") {
+    clientElicitation = Boolean(params && params.capabilities && params.capabilities.elicitation);
     return {
       jsonrpc: "2.0",
       id,
@@ -246,6 +339,14 @@ export function mcpCommand(ctx, args) {
       send({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON 解析失败" } });
       return;
     }
+    // server → client 请求的回包：只有 id 没有 method
+    if (message && message.method === undefined && message.id !== undefined && serverRequests.has(message.id)) {
+      const settle = serverRequests.get(message.id);
+      serverRequests.delete(message.id);
+      settle(message.result || { action: "cancel", reason: message.error ? "error" : "cancel" });
+      return;
+    }
+
     const job = handle(message)
       .then((reply) => {
         if (reply) send(reply);

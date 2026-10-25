@@ -113,6 +113,7 @@ const OPTIONS = {
     ["--from <id>", "这张卡是谁派的（缺省取 MO_AGENT_ID）"],
     ["--wait 60s / --ttl 24h", "confirm：等批准 / 请求有效期"],
     ["--yes / --note <说明>", "approve | reject：非 TTY 的显式逃生口与备注"],
+    ["--channel <名>", "approve | reject：记进账本的批准通道（terminal / web / mcp-elicitation）"],
     ["--tail 50", "logs：只看最后 N 行"],
   ],
   project: [

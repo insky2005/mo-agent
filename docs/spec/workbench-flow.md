@@ -499,11 +499,20 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 发起请求 | 任何 Agent | `mo task confirm`，只写 `approvals/`，状态不变 |
 | 批准（终端） | 人 | `mo task approve` 要求 TTY（`--yes` 是显式逃生口），校验卡片指纹 |
 | 批准（网页/手机） | 人 | `POST /api/task-approvals/<id>`，设备令牌鉴权，账本记 `channel: web`，同样校验指纹 |
+| 批准（MCP 表单） | 人 | 客户端声明 `capabilities.elicitation` 时，`task_confirm` 走 `elicitation/create` 弹表单；账本记 `channel: mcp-elicitation` |
 | 拒绝 | 人 | `mo task reject`，卡保持 `draft` |
 
 指纹 = `sha256(标题 + 正文 + 验收 + workdir + timeout …)`，不含状态与时间。批准时指纹不一致 → `E_CARD_CHANGED`，请求标 `stale`，防止"批准完再偷改卡"。
 
 **审批通道**：终端 `mo task approve` 与网页 `/api/task-approvals` 写的是**同一个决定文件**（`~/.mo-agent/approvals/<id>.json`），所以两边看到的请求一致、批准后另一侧立即失效。
+
+**MCP elicitation（form mode）**：客户端在 `initialize` 里声明 `capabilities.elicitation` 时，`task_confirm` 先落请求，再发 `elicitation/create`（enum：approve / reject），用户的选择直接回到 mo：
+
+- `accept` + `approve` → `applyDecision(channel: "mcp-elicitation")`；
+- `accept` + `reject` → 拒绝，卡留 draft；
+- `decline` / `cancel` / 5 分钟超时 → **保持 pending**，不视为通过；
+- 客户端没声明能力，或设了 `MO_ELICITATION=0` → 回退到 pending + 终端/网页。
+- 信任级别：表单由客户端代传，属于**便利通道**，不是带外边界；账本里的 `channel` 就是为区分这个。
 
 **仍未做**：daemon 启动时补推 pending 请求、审批页之外的推送渠道、Streamable HTTP `/mcp`。
 

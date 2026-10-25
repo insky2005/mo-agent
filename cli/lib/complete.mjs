@@ -21,8 +21,8 @@ const SPEC = {
     subs: {
       create: { flags: ["--title", "--deliverable", "--verify", "--boundary", "--constraint", "--background", "--assignee", "--worker", "--exec", "--timeout", "--from"] },
       confirm: { flags: ["--wait", "--ttl", "--from"], ...taskIds },
-      approve: { flags: ["--yes"], ...taskIds },
-      reject: { flags: ["--yes", "--note"], ...taskIds },
+      approve: { flags: ["--yes", "--channel"], ...taskIds },
+      reject: { flags: ["--yes", "--note", "--channel"], ...taskIds },
       requests: { flags: [] },
       cancel: { flags: [], ...taskIds },
       status: { flags: [], ...taskIds },

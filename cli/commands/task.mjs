@@ -190,7 +190,7 @@ function confirmTask(ctx, args, home) {
 
   emit(
     args.options,
-    { ok: true, pending: true, taskId, requestId: request.id, status: card.meta.status, expiresAt: request.expiresAt, created },
+    { ok: true, pending: true, taskId, title: card.meta.title, requestId: request.id, status: card.meta.status, expiresAt: request.expiresAt, created },
     () =>
       [
         "⏳ 已发出确认请求" + (created ? "" : "（复用未过期的请求）"),
@@ -290,12 +290,13 @@ async function approveTask(ctx, args, home) {
     }
   }
 
+  const channel = String(one(args.options, "channel") || (interactive ? "terminal" : "cli-flag"));
   const decided = applyDecision({
     home,
     root: resolved.root,
     request,
     status: "approved",
-    channel: interactive ? "terminal" : "cli-flag",
+    channel,
   });
 
   emit(
@@ -323,12 +324,13 @@ function rejectTask(ctx, args, home) {
   if (!request) {
     throw new MoError("E_NOT_FOUND", "没有待批准的请求", { hint: "mo task status " + taskId + " 看当前状态" });
   }
+  const channel = String(one(args.options, "channel") || (interactive ? "terminal" : "cli-flag"));
   const decided = applyDecision({
     home,
     root: resolved.root,
     request,
     status: "rejected",
-    channel: interactive ? "terminal" : "cli-flag",
+    channel,
     note: one(args.options, "note") || null,
   });
   emit(args.options, { ok: false, taskId, status: card.meta.status, requestId: decided.id, rejected: true }, () =>
