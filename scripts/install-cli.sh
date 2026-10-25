@@ -277,9 +277,12 @@ fi
 echo "  mo project init         在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
 echo
 echo "基本用法（在项目里）："
-echo "  mo worker list                看可用的执行者"
-echo '  mo task create --title hello --deliverable "print hello world" --verify "run:echo hello world" --worker claude'
-echo "  mo task confirm <id>          人确认；确认前不能派单"
+echo "  mo worker list                看可用的执行者（裸名=会话，-headless=无头）"
+echo '  mo task create --title hello --deliverable "print hello world" \'
+echo '                 --verify "run:echo hello world" --worker claude-headless \'
+echo '                 --workdir .        # 执行目录，必须在项目根内（默认 .）'
+echo "  mo task confirm <id>          发起确认请求（不改状态）"
+echo "  mo task approve <id>          人批准（终端里执行）"
 echo "  mo task dispatch <id>         派给执行者并等回执（自动验收）"
 echo "  mo task status <id>           看状态与最近事件"
 echo "  mo task list                  看本项目的任务"
