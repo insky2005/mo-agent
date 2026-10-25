@@ -95,7 +95,7 @@ echo "基本用法（在项目里）："
 echo "  mo worker list                看可用的执行者（裸名=会话，-headless=无头）"
 echo '  mo task create --title hello --deliverable "print hello world" \'
 echo '                 --verify "run:echo hello world" --worker claude-headless \'
-echo '                 --workdir .        # 执行目录，必须在项目根内（默认 .）'
+echo '                 --workdir .        # 相对项目根（默认就是项目根，不是当前目录）'
 echo "  mo task confirm <id>          发起确认请求（不改状态）"
 echo "  mo task approve <id>          人批准（终端里执行）"
 echo "  mo task dispatch <id>         派给执行者并等回执（自动验收）"
