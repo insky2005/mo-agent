@@ -107,6 +107,8 @@ canceled            canceled                failed                  └─> canc
 
 ## 6. 分支总表
 
+> 本表是**设计全集**，不等于当前实现。哪些行已经有代码、哪些还只是设计，见 §12.7 的对照表。
+
 ### 6.1 会话绑定（B1）
 
 | 编号 | 条件 | 结果 | 错误码 |
@@ -369,7 +371,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 主 Agent 不能自我确认 | 不暴露 `task_confirm` |
 | 不能递归派单 | 执行者工具集无 `task_dispatch`；core 校验 depth ≤ 1 |
 | 不能越界写 | `workdir` 必须在项目根内 |
-| 不能无上限跑 | 卡上的 `budget` + 全局并发/频率限制 |
+| 不能无上限跑 | 卡上的 `budget` + 全局并发/频率限制（**字段已存在，尚未执行**，见 §12.7） |
 | 不能改账本 | 账本只由 core 追加，无写接口 |
 | 不能静默丢记忆 | 知识库不可用时返回错误，不返回空 |
 
@@ -379,7 +381,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 |---|---|---|---|
 | **P0** | `project.json` 认领 + 卡/回执格式 + `mo task create\|dispatch\|status` + 账本 | 一条任务从建卡到 `done`，账本可查 | ✅ 已落地（`cli/` + `core/tasks/`） |
 | **P1** | 主 Agent 接入：skill + CLI + `mo mcp`（HTTP 传输未做） | 任意 Agent 接入后能跑完一轮 | 🟡 skill / stdio MCP / `mo agent describe` / `agent add --mcp` / `inbox pull --wait` 已落地；HTTP 传输未做 |
-| **P2** | `verify` 执行器 + `blocked` 升级（watchdog 未做） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify`） |
+| **P2** | `verify` 执行器 + `blocked` 升级（含 watchdog） | 失败/超时能正确转给人 | ✅ 已落地（`cli/lib/verify.mjs` + `mo task verify` + `mo watchdog run`） |
 | **P3** | `memory_recall` 注入 + `memory_propose` + 候选区 | 避坑条目在一次派单中被自动带上 | ✅ 已落地（`core/knowledge/` + `mo memory`：recall 注入、propose、候选区、冲突裁决） |
 | **P4** | 面板/手机端展示 + `mo manager check` | 换主 Agent 后仍可继续 | ⬜ 未开始 |
 
@@ -389,7 +391,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 - `cli/`：`project|task|receipt|ledger|run|doctor` 六个命令，全部 IO 集中在这里；
 - 派单协议：卡全文走 stdin + `MO_TASK_ID / MO_PROJECT / MO_PROJECT_ROOT / MO_RECEIPT` 环境变量；
 - 账本：`~/.mo-agent/ledger/YYYY-MM.jsonl`，按 taskId 可查；
-- 测试：`core/tasks/*.test.mjs`（17 项）+ `cli/cli.test.mjs`（5 项，含端到端建卡→派单→done）。
+- 测试：`core/tasks/*.test.mjs` + `cli/*.test.mjs`，含端到端建卡→派单→done（具体数量不写死，看 `npm test` 输出）。
 
 **已知偏差**：P0 期间 `verified` 一律为 `unverified`；P2 已补上 `verify` 自动执行（`cli/lib/verify.mjs`），收到 `status=done` 的回执后由 core 决定 `done` / `blocked`。
 
@@ -453,7 +455,8 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 工具 | 落到 |
 |---|---|
 | `task_create` | `mo task create … --json` |
-| `task_dispatch` | `mo task dispatch <id> --json`（前台等待，会阻塞该次调用） |
+| `task_confirm` | `mo task confirm <id> --json`（只发起请求；客户端支持 elicitation 时顺带弹表单） |
+| `task_dispatch` | `mo task dispatch <id> --json`（无头：前台等待；会话型：立即返回 `running`） |
 | `task_status` | `mo task status <id> --json` |
 | `inbox_pull` | `mo inbox pull --json` |
 | `ledger_query` | `mo ledger query … --json` |
@@ -544,7 +547,38 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 命名：**裸名 = 会话型**（`claude` / `codex` …），`-headless` 后缀 = 无头型（`claude-headless` …）。老卡片没有 `session` 字段时按无头解释，避免同名升级后行为变化。
 
-实现：`mo worker add <名> --session --command '<交互式命令>'`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。终端由 `mo terminal list|add|remove|use` 管理（内置 iterm / terminal / print / none，自定义存 `~/.mo-agent/terminals.json`），设了默认就一直用它；一次性覆盖用 `MO_TERMINAL` / `MO_LAUNCH_CMD`，`MO_LAUNCHER=print` 只生成不启动。
+实现：`mo worker add <名> --session --command '<交互式命令>'`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，然后开新终端窗口执行。终端由 `mo terminal list|add|remove|use` 管理（内置 iterm / terminal / print / none，自定义存 `~/.mo-agent/terminals.json`），设了默认就一直用它；一次性覆盖用 `MO_TERMINAL` / `MO_LAUNCH_CMD`，`MO_LAUNCHER=print` 只生成不启动。
+
+### 12.7 实现现状与缺口（2026-11 对照）
+
+**已实现**：项目认领（B1/B2）、建卡（B3.1/3.2/3.4）、确认与三种审批通道（B4.1–4.7）、派单（B5.1/5.2/5.3/5.10/5.11）、执行超时（B6.3 watchdog）、回执（B7.1/7.2/7.3/7.5/7.6）、验收（B8.1–8.6）、收件箱（B9.3）、记忆（B10.1–10.5）、会话型 worker 与终端配置、MCP stdio 薄壳、契约单一真源。
+
+**只有设计、还没有代码**：
+
+| 编号 | 内容 | 缺什么 |
+|---|---|---|
+| B3.3 | 建卡时提示"另有 N 个进行中" | `W_TASKS_IN_FLIGHT` 未实现 |
+| B3.5 | 疑似重复卡提示 | `W_POSSIBLE_DUP` 未实现 |
+| B5.4 | 执行者忙/离线 | 无空闲度概念，`E_ASSIGNEE_BUSY` 未实现 |
+| B5.5–B5.7 | `assignee: auto` 的自动选择 | **默认值就是 `auto`，但没有选择逻辑**：不写 `--worker`/`--exec` 时派单直接 `E_NO_EXECUTOR` |
+| B5.8 | 预算（时间/token/子任务/重试） | 卡上有 `budget` 字段，没人读；`E_BUDGET` 未实现 |
+| B5.9 | 递归派单深度上限 | 靠"不把 `task_dispatch` 暴露给执行者"挡住，没有 `E_DEPTH` 校验 |
+| B6.1/B6.2 | 执行者请求审批 / 反问人 | 无 `blocked(waiting_approval)` / `waiting_answer`；`needs` 只能单向上报，回答要重派 |
+| B7.4 | 回执多次写入 | 后一次直接覆盖，没有 `amendment` 事件 |
+| B9.4 | 声称派发但账本无记录 | `W_UNRECORDED_CLAIM` 未实现（依赖 UI） |
+| I10 | CLI 与 daemon 版本不一致 | 无版本握手 |
+
+**命令缺口**（§13 里承诺、当前不存在）：
+
+| 承诺 | 现状 |
+|---|---|
+| `mo setup` / `mo setup cli [--uninstall]` | 不存在；装 CLI 用 `scripts/install-cli.sh` |
+| `mo daemon start` | 不存在；daemon 只能由桌面端拉起（纯 CLI 形态还跑不起来） |
+| `mo manager check` | 不存在；用 `mo doctor` + 手工建一张卡验证 |
+| `mo agent remove` | 不存在；手工改各家 MCP 配置 |
+| `mo doctor --preflight` | 不存在；`mo doctor` 本身已是只读 |
+
+**服务层**：任务面板（只有审批页与监控页）、daemon 启动补推 pending 审批、审批推送（现在 5s 轮询）、Streamable HTTP `/mcp`、账本轮转与保留期、Windows/Linux 适配、知识库不可写的界面告警。
 
 ## 13. 安装与首次使用
 
@@ -553,7 +587,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 形态 | 适合 | 启动 |
 |---|---|---|
 | **桌面端**（推荐） | 日常使用 | 菜单栏常驻，随登录启动，无窗口 |
-| **纯 CLI** | 无 GUI / 服务器 | `mo daemon start` 或 launchd plist |
+| **纯 CLI** | 无 GUI / 服务器 | `mo daemon start`（**未实现**，见 §12.7）或 launchd plist |
 | **混合** | 实际最常用 | 桌面端常驻，终端里的 `mo` 连同一个 daemon |
 
 无论哪种，**只有一个 daemon 实例**，由 `~/.mo-agent/desktop.lock` 保证；`mo` 只是它的客户端。
@@ -568,6 +602,9 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 一个 git 仓库 | 可选 | 非 git 目录需显式 `mo project init` |
 
 ### 13.3 首次使用的七步
+
+> 本节是**目标形态**，其中 `mo setup` / `mo doctor --preflight` / `mo manager check` 尚未实现（见 §12.7）。
+> 当前可用：`scripts/install-cli.sh` 装 CLI、`mo doctor` 自检、桌面端拉起 daemon。
 
 ```bash
 # 1. 安装桌面端：下载 .app → 拖进 Applications → 首次打开
@@ -657,7 +694,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 | 动作 | 命令 | 影响 |
 |---|---|---|
 | 卸载 CLI | `mo setup cli --uninstall` | 只删 `mo` 软链 |
-| 断开主 Agent | `mo agent remove dsh` | 只删 mo-agent 写入的 MCP 条目，备份保留 |
+| 断开主 Agent | `mo agent remove dsh`（**未实现**，先手工改 MCP 配置） | 只删 mo-agent 写入的 MCP 条目，备份保留 |
 | 清空个人数据 | 手动 `rm -rf ~/.mo-agent` | 偏好、避坑、账本全丢，需二次确认 |
 | 移除项目接入 | `rm -rf <repo>/.mo-agent` | 只影响该项目，不影响其它项目 |
 | 完整卸载 | 拖走 .app + 手动删 `~/.mo-agent` | 文档里明写，因为系统卸载器不认识它 |
@@ -669,7 +706,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 1. 回执是否进 git（建议默认 ignore，可选提交摘要版）；
 2. 账本轮转与保留期；
 3. 记忆检索后端：已按内置纯文本落地（§12.2）；qmd 作为可选后端仍待评估；
-4. `assignee: auto` 的排序权重（空闲度 / 历史成功率 / 最近使用）；
+4. `assignee: auto` 的选择策略与排序权重（空闲度 / 历史成功率 / 最近使用）——**当前连选择逻辑都还没有**（§12.7）；
 5. 人不在场时，`blocked` 的默认超时与升级路径（手机推送？）；
 6. 主 Agent 的工具隔离在 DSH 侧的具体配置方式；
 7. 跨平台（Windows）：暂不支持，方案与差距见 [cli-cross-platform.md](../plans/cli-cross-platform.md)，与桌面端跨平台一并处理。
