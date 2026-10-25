@@ -14,7 +14,7 @@ import { resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 import readline from "node:readline/promises";
 import { applyDecision, expireOverdue, listRequests, pendingForTask, readRequest, requestConfirmation } from "../lib/approvals.mjs";
-import { cardDigest } from "../../core/manager/approval.mjs";
+import { cardDigest, parseApprovalAnswer } from "../../core/manager/approval.mjs";
 import { parseDuration } from "../lib/envelope.mjs";
 
 /** 默认不认领项目：读命令不该顺手创建 .mo-agent/project.json（只有建卡才认领） */
@@ -250,9 +250,8 @@ function requireTerminal(args) {
 async function askYesNo(lines) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
-    process.stdout.write(lines.join("\n") + "\n> ");
-    const answer = (await rl.question("")).trim().toLowerCase();
-    return /^(y|yes|是)$/.test(answer);
+    process.stdout.write(lines.join("\n") + "\n[y/n] > ");
+    return await rl.question("");
   } finally {
     rl.close();
   }
@@ -275,16 +274,25 @@ async function approveTask(ctx, args, home) {
   }
 
   if (interactive) {
-    const approved = await askYesNo([
-      "要批准这张卡吗？",
-      "",
-      "  标题   " + card.meta.title,
-      "  项目   " + card.meta.project,
-      "  验收   " + (verifyItems(card.meta).length ? verifyItems(card.meta).length + " 项" : "无"),
-      "  指纹   " + cardDigest(card).slice(0, 12) + "…",
-      "  请求   " + request.id,
-    ]);
-    if (!approved) {
+    const answer = parseApprovalAnswer(
+      await askYesNo([
+        "要批准这张卡吗？",
+        "",
+        "  标题   " + card.meta.title,
+        "  项目   " + card.meta.project,
+        "  验收   " + (verifyItems(card.meta).length ? verifyItems(card.meta).length + " 项" : "无"),
+        "  指纹   " + cardDigest(card).slice(0, 12) + "…",
+        "  请求   " + request.id,
+        "",
+        "  y 批准 / n 拒绝 / 直接回车取消（不改状态）",
+      ]),
+    );
+
+    if (answer === "cancel") {
+      emit(args.options, { ok: false, cancelled: true, taskId }, "已取消，未做决定（请求仍在待批）");
+      return 1;
+    }
+    if (answer === "no") {
       applyDecision({ home, root: resolved.root, request, status: "rejected", channel: "terminal", note: "人在终端拒绝" });
       emit(args.options, { ok: false, taskId, status: "draft", rejected: true }, "已拒绝，卡保持 draft");
       return 1;

@@ -11,7 +11,7 @@ export const GROUPS = [
     subs: [
       ["create", "建卡（draft）", '例：--title "…" --deliverable "…" --verify "run:npm test" --workdir app/web'],
       ["confirm <id>", "发起确认请求：只写 approvals/，卡保持 draft", "任何 Agent 都能做，不改状态"],
-      ["approve <id>", "人批准：需 TTY，校验卡片指纹", "批准前改卡会作废（E_CARD_CHANGED）"],
+      ["approve <id>", "人批准：需 TTY，校验卡片指纹", "y 批准 / n 拒绝 / 回车取消"],
       ["reject <id>", "人拒绝，卡保持 draft", ""],
       ["requests", "待批准的请求", "顺带把过期请求标掉"],
       ["dispatch <id>", "派单并等待验收", "前台阻塞，可能几分钟"],

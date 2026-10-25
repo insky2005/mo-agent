@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cardDigest, decide, isExpired, isStale, makeRequest } from "./approval.mjs";
+import { cardDigest, decide, isExpired, isStale, makeRequest, parseApprovalAnswer } from "./approval.mjs";
 
 const card = (over = {}) => ({
   meta: { id: "t_1", project: "p_1", title: "加筛选", verify: [{ run: "true" }], status: "draft", updated: "2026-01-01", ...over },
@@ -49,4 +49,11 @@ test("isStale 比对指纹", () => {
   const request = makeRequest({ id: "a_1", taskId: "t_1", digest: "abc" });
   assert.equal(isStale(request, "abc"), false);
   assert.equal(isStale(request, "def"), true);
+});
+test("parseApprovalAnswer：y/n/回车三种语义", () => {
+  for (const value of ["y", "Y", " yes ", "是", "批准", "允许"]) assert.equal(parseApprovalAnswer(value), "yes", value);
+  for (const value of ["n", "No", "否", "拒绝"]) assert.equal(parseApprovalAnswer(value), "no", value);
+  for (const value of ["", "  ", "随便", undefined, null, "maybe"]) {
+    assert.equal(parseApprovalAnswer(value), "cancel", String(value));
+  }
 });

@@ -79,6 +79,17 @@ export function decide(request, { status, channel, at = new Date().toISOString()
   };
 }
 
+/**
+ * 终端里的一行输入怎么解释。
+ * 空回车和看不懂的输入一律当"取消"——绝不能默认成批准，也不该默认成拒绝。
+ */
+export function parseApprovalAnswer(text) {
+  const value = String(text === undefined || text === null ? "" : text).trim().toLowerCase();
+  if (["y", "yes", "是", "批准", "允许"].includes(value)) return "yes";
+  if (["n", "no", "否", "拒绝"].includes(value)) return "no";
+  return "cancel";
+}
+
 /** 人批的卡已经不是现在这张卡 */
 export function isStale(request, currentDigest) {
   return Boolean(request) && request.cardHash !== currentDigest;

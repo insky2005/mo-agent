@@ -165,7 +165,7 @@ draft ──approve──▶ confirmed ──dispatch──▶ running ──┬
 
 | 状态 | 意思 | 下一步 |
 |---|---|---|
-| `draft` | 刚建，等人拍板 | 先 `mo task confirm` 发请求，再由人批准（终端 `mo task approve`，或审批页点「允许」） |
+| `draft` | 刚建，等人拍板 | 先 `mo task confirm` 发请求，再由人批准（终端 `mo task approve` 输 `y`，或审批页点「允许」；直接回车=取消） |
 | `confirmed` | 可以派了 | `mo task dispatch` |
 | `running` | 执行者在跑 | 等 |
 | `done` | 回执合法 + 验收通过 | 验收没过会变 `blocked` |

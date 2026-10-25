@@ -207,7 +207,7 @@ mo task create \
 
 ```bash
 mo task confirm <id>      # 发起确认请求（不改状态）
-mo task approve <id>      # 人批准（需 TTY；--yes 是显式逃生口）
+mo task approve <id>      # 人批准（需 TTY；输入 y 批准 / n 拒绝 / 回车取消）
 mo task reject <id>       # 人拒绝，卡保持 draft
 mo task requests          # 看待批准的请求
 mo task dispatch <id>     # 派单，等回执
