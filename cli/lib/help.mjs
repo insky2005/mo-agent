@@ -95,6 +95,17 @@ export const GROUPS = [
     subs: [["pull", "拉任务通知（done / blocked / failed），拉完归档", "没有就等，见 --wait"]],
   },
   {
+    name: "terminal",
+    title: "终端",
+    blurb: "会话型 worker 派单时用哪个终端开窗口",
+    subs: [
+      ["list", "内置与自定义终端", "带默认标记"],
+      ["add <名> --command '<模板>'", "注册自定义终端", "{script} 会替换成脚本路径"],
+      ["remove <名>", "删除自定义终端", ""],
+      ["use [名]", "设置默认终端；不带名字就打印当前", ""],
+    ],
+  },
+  {
     name: "mcp",
     title: "MCP",
     subs: [["", "stdio MCP 服务，一行一条 JSON-RPC", "给支持 MCP 的 Agent 当后端"]],

@@ -19,6 +19,7 @@ import { memoryCommand } from "./commands/memory.mjs";
 import { inboxCommand } from "./commands/inbox.mjs";
 import { mcpCommand } from "./commands/mcp.mjs";
 import { agentCommand } from "./commands/agent-add.mjs";
+import { terminalCommand } from "./commands/terminal.mjs";
 import { VERSION } from "./lib/version.mjs";
 import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
 
@@ -49,6 +50,7 @@ const ROUTES = {
   inbox: inboxCommand,
   mcp: mcpCommand,
   agent: agentCommand,
+  terminal: terminalCommand,
 };
 
 async function main(argv) {

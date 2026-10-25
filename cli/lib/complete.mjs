@@ -59,6 +59,15 @@ const SPEC = {
       add: { flags: ["--mcp", "--prompt", "--name"] },
     },
   },
+  terminal: {
+    subs: {
+      list: { flags: [] },
+      add: { flags: ["--command", "--description", "--use"] },
+      remove: { flags: [] },
+      use: { flags: [] },
+      current: { flags: [] },
+    },
+  },
   inbox: {
     subs: {
       pull: { flags: ["--peek", "--wait", "--limit", "--task"], ...taskIds },
@@ -104,7 +113,7 @@ const ENUMS = {
   "--mode": ["auto", "skill", "ref", "inline"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };

@@ -17,20 +17,6 @@ import { ensureDir } from "./fsx.mjs";
  * MO_LAUNCHER=print 只打印，不真的开窗口（测试与无 GUI 环境用）。
  */
 
-const ITERM = [
-  "/Applications/iTerm.app",
-  path.join(os.homedir(), "Applications/iTerm.app"),
-];
-
-export function detectTerminal(env = process.env) {
-  if (String(env.MO_LAUNCH_CMD || "").trim()) return "custom";
-  const forced = String(env.MO_TERMINAL || "").toLowerCase();
-  if (forced === "iterm" || forced === "terminal" || forced === "none") return forced;
-  if (ITERM.some((candidate) => fs.existsSync(candidate))) return "iterm";
-  if (process.platform === "darwin") return "terminal";
-  return "none";
-}
-
 /** POSIX shell 单引号转义 */
 export function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
@@ -93,29 +79,33 @@ function applescript(kind, scriptPath) {
   ].join("\n");
 }
 
-/** @returns {{kind: string, launched: boolean}} */
-export function launchTerminal({ kind, script, env = process.env }) {
-  if (String(env.MO_LAUNCHER || "").toLowerCase() === "print") {
-    return { kind: "print", launched: false };
-  }
+/**
+ * @param {{spec: {kind: string, name?: string, command?: string}, script: string}} input
+ * @returns {{kind: string, launched: boolean}}
+ */
+export function launchTerminal({ spec, script }) {
+  const kind = spec && spec.kind;
+  if (kind === "print") return { kind: "print", launched: false };
+
   if (kind === "custom") {
-    const template = String(env.MO_LAUNCH_CMD || "").trim();
     // {script} 是已转义的路径；{raw} 原样，方便自己拼
-    const command = template.split("{script}").join(shellQuote(script)).split("{raw}").join(script);
+    const command = String(spec.command || "").split("{script}").join(shellQuote(script)).split("{raw}").join(script);
     const result = spawnSync("/bin/sh", ["-c", command], { encoding: "utf8" });
     if (result.error) {
-      throw new MoError("E_DISPATCH_FAILED", "MO_LAUNCH_CMD 执行失败：" + result.error.message);
+      throw new MoError("E_DISPATCH_FAILED", "自定义终端执行失败：" + result.error.message);
     }
     if (result.status !== 0) {
-      throw new MoError("E_DISPATCH_FAILED", "MO_LAUNCH_CMD 退出码 " + result.status + "：" + String(result.stderr || "").trim());
+      throw new MoError("E_DISPATCH_FAILED", "自定义终端退出码 " + result.status + "：" + String(result.stderr || "").trim());
     }
     return { kind: "custom", launched: true };
   }
+
   if (kind === "none") {
     throw new MoError("E_NO_TERMINAL", "没有可用的终端，无法开启会话型 worker", {
-      hint: "macOS 装 iTerm / 用 Terminal.app，或设 MO_LAUNCH_CMD 指定自己的终端命令；服务器/CI 请用无头 worker",
+      hint: "mo terminal list 看可用终端，mo terminal use iterm 设默认；服务器/CI 请用无头 worker",
     });
   }
+
   const result = spawnSync("osascript", ["-e", applescript(kind, script)], { encoding: "utf8" });
   if (result.error) {
     throw new MoError("E_DISPATCH_FAILED", "打开终端失败：" + result.error.message);

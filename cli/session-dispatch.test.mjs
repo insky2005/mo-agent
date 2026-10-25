@@ -59,7 +59,9 @@ test("会话型 worker：派单写信封 + 脚本，立即返回 running", () =>
   const dispatched = runJson(ws, ["task", "dispatch", taskId], { MO_LAUNCHER: "print", MO_TERMINAL: "iterm" });
   assert.equal(dispatched.status, 0, dispatched.stderr);
   assert.equal(dispatched.parsed.status, "running");
-  assert.equal(dispatched.parsed.session.terminal, "print");
+  // print 只是"不真的开窗口"，记录的仍是本来会用的终端
+  assert.equal(dispatched.parsed.session.terminal, "iterm");
+  assert.equal(dispatched.parsed.session.kind, "print");
   assert.equal(dispatched.parsed.session.launched, false);
 
   const script = fs.readFileSync(dispatched.parsed.session.script, "utf8");

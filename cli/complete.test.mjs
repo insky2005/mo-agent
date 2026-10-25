@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "completion", "version", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "completion", "version", "help",
   ]);
 });
 
@@ -86,7 +86,7 @@ test("help 的补全：列出所有话题，按前缀过滤", () => {
   for (const name of ["task", "memory", "agent", "project", "doctor", "completion", "help"]) {
     assert.ok(all.includes(name), "缺少话题 " + name);
   }
-  assert.deepEqual(values(complete({ cwd: ws.project, words: ["help", "t"] })), ["task"]);
+  assert.deepEqual(values(complete({ cwd: ws.project, words: ["help", "t"] })), ["task", "terminal"]);
 });
 
 test("每个组都补出 help 子命令", () => {

@@ -531,7 +531,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 命名：**裸名 = 会话型**（`claude` / `codex` …），`-headless` 后缀 = 无头型（`claude-headless` …）。老卡片没有 `session` 字段时按无头解释，避免同名升级后行为变化。
 
-实现：`mo worker add <名> --session --command '<交互式命令>'`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。`MO_TERMINAL=iterm|terminal|none` 指定终端；其他终端用 `MO_LAUNCH_CMD='<命令>'`（`{script}` 替换成脚本路径，如 `tmux new-window "bash {script}"`）。`MO_LAUNCHER=print` 只生成不启动。
+实现：`mo worker add <名> --session --command '<交互式命令>'`。派单时把卡写成 `.mo-agent/envelopes/<id>.md`，再生成 `.mo-agent/runs/<id>.sh`，用 AppleScript 在 iTerm / Terminal.app 开新窗口执行。终端由 `mo terminal list|add|remove|use` 管理（内置 iterm / terminal / print / none，自定义存 `~/.mo-agent/terminals.json`），设了默认就一直用它；一次性覆盖用 `MO_TERMINAL` / `MO_LAUNCH_CMD`，`MO_LAUNCHER=print` 只生成不启动。
 
 ## 13. 安装与首次使用
 

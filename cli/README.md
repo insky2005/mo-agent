@@ -386,14 +386,18 @@ mo task dispatch t_x
 
 - 卡与回执要求写成 `.mo-agent/envelopes/<id>.md`，窗口里只跑一句"请阅读这个文件并执行"；
 - dispatch **立即返回**，结果靠回执文件，超时走 `blocked(timeout)`；
-- `MO_TERMINAL=iterm|terminal|none` 指定终端（默认探测 iTerm，再退 Terminal.app）；
-- `MO_LAUNCH_CMD='<命令模板>'` 用你自己的终端，`{script}` 会替换成脚本路径，例如：
-  ```bash
-  MO_LAUNCH_CMD='tmux new-window "bash {script}"'
-  MO_LAUNCH_CMD='alacritty -e bash {script}'
-  MO_LAUNCH_CMD='open -a Terminal {script}'
-  ```
-- `MO_LAUNCHER=print` 只生成脚本不开窗口（CI / 排查用）。
+终端由 `mo terminal` 管理，和 worker 一样可注册、可设默认：
+
+```bash
+mo terminal list                  # 内置（iterm / terminal / print / none）+ 自定义
+mo terminal add my-tmux --command 'tmux new-window "bash {script}"' --use
+mo terminal use iterm             # 设默认
+mo terminal remove my-tmux
+```
+
+- 模板里 `{script}` 会被替换成**已转义**的脚本路径（`{raw}` 是原样）；
+- 优先级：`MO_LAUNCHER=print` > `MO_LAUNCH_CMD` > `MO_TERMINAL` > 默认 > 自动探测（iTerm → Terminal.app）；
+- 环境变量只对单次生效，长期用 `mo terminal use`。
 
 ## 自定义 worker
 

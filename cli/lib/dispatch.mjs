@@ -9,7 +9,8 @@ import { ingest, transition } from "./ingest.mjs";
 import { writeRunLog } from "./logs.mjs";
 import { recallKnowledge, cardQuery } from "./knowledge.mjs";
 import { formatKnowledgeBlock } from "../../core/knowledge/recall.mjs";
-import { detectTerminal, launchTerminal, sessionPaths, writeSessionAssets } from "./session-launch.mjs";
+import { launchTerminal, sessionPaths, writeSessionAssets } from "./session-launch.mjs";
+import { resolveTerminal } from "./terminals.mjs";
 
 /**
  * 召回是"尽力而为"：读不到知识库不能挡住派单，但必须吵一声（B10.5 / I9）。
@@ -68,28 +69,28 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
     throw new MoError("E_NO_EXECUTOR", "会话型 worker 需要有启动命令");
   }
 
-  const kind = detectTerminal(env);
+  const terminal = resolveTerminal({ home, env });
   const workdir = resolveWorkdir(root, meta);
-  const dryRun = String(env.MO_LAUNCHER || "").toLowerCase() === "print";
+  const dryRun = terminal.kind === "print";
   // 先确认有终端可开，再改状态——否则会留下"running 但窗口没起来"的卡
-  if (kind === "none" && !dryRun) {
+  if (terminal.kind === "none" && !dryRun) {
     throw new MoError("E_NO_TERMINAL", "没有可用的终端，无法开启会话型 worker", {
-      hint: "macOS 装 iTerm 或直接用 Terminal.app；服务器/CI 请用无头 worker 或 --exec",
+      hint: "mo terminal list 看可用终端，mo terminal use iterm 设默认；服务器/CI 请用无头 worker",
     });
   }
 
   if (meta.status === "blocked") {
-    transition({ home, root, card, to: "running", payload: { retry: true, session: kind }, actor });
+    transition({ home, root, card, to: "running", payload: { retry: true, session: terminal.name }, actor });
   } else if (meta.status === "confirmed") {
     transition({
       home,
       root,
       card,
       to: "dispatched",
-      payload: { assignee: worker.name || "auto", session: kind, exec: worker.command },
+      payload: { assignee: worker.name || "auto", session: terminal.name, exec: worker.command },
       actor,
     });
-    transition({ home, root, card, to: "running", payload: { session: kind }, actor });
+    transition({ home, root, card, to: "running", payload: { session: terminal.name }, actor });
   }
 
   const receiptFile = resolveReceiptFile(root, meta);
@@ -118,7 +119,7 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
     envelopeText: envelope,
   });
 
-  const launched = launchTerminal({ kind, script: files.script, env });
+  const launched = launchTerminal({ spec: terminal, script: files.script });
 
   return {
     taskId,
@@ -126,7 +127,14 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
     status: "running",
     verified: "unverified",
     reason: "session",
-    session: { terminal: launched.kind, launched: launched.launched, script: files.script, envelope: files.envelope },
+    session: {
+      terminal: terminal.name,
+      kind: launched.kind,
+      reason: terminal.reason,
+      launched: launched.launched,
+      script: files.script,
+      envelope: files.envelope,
+    },
     knowledge: knowledge.info,
   };
 }
