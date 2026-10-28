@@ -70,6 +70,22 @@ function firstString(obj, keys) {
   return "";
 }
 
+/**
+ * Qoder CN IDE 1.37+ 的运行时换了 PermissionRequest 的输出 schema：
+ *   hookSpecificOutput.permissionDecision = "allow" | "deny"
+ * 桌面端的老运行时仍然只认：
+ *   hookSpecificOutput.decision.behavior = "allow" | "deny"
+ *
+ * 两者不能同时输出：新运行时把 decision 声明为 string，看到对象会导致整段 JSON 解析失败，
+ * 结果就是手机上点了允许、hook 也输出了 allow，但客户端判成「no parsed output」并继续弹窗。
+ *
+ * IDE 的 transcript 固定在 <project>/transcript/ 下，桌面端是 <project>/<session>.jsonl，
+ * 所以用这个路径特征区分两套运行时（Stop hook 也是同一判据）。
+ */
+function usesPermissionDecisionSchema(input) {
+  return /[\\/]transcript[\\/]/.test(firstString(input, ["transcript_path", "transcriptPath"]));
+}
+
 async function main() {
   if (!TARGET) process.exit(0);
 
@@ -160,14 +176,23 @@ async function main() {
   if (decision === "defer") process.exit(0);
 
   const behavior = decision.indexOf("allow") === 0 ? "allow" : "deny";
-  const detail = behavior === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "用户在手机上拒绝了该操作" };
   // 只在手机真的选了答案时才回填，避免把空 answers 交给工具。
   const answers = result && result.answers && typeof result.answers === "object" ? result.answers : null;
-  if (behavior === "allow" && isQuestion && answers && Object.keys(answers).length) {
-    detail.behavior = "allow";
-    detail.updatedInput = Object.assign({}, toolInput || {}, { answers });
+  const answered = behavior === "allow" && isQuestion && answers && Object.keys(answers).length;
+  const updatedInput = answered ? Object.assign({}, toolInput || {}, { answers }) : null;
+  const hookSpecificOutput = { hookEventName: "PermissionRequest" };
+
+  if (usesPermissionDecisionSchema(input)) {
+    hookSpecificOutput.permissionDecision = behavior;
+    if (behavior === "deny") hookSpecificOutput.permissionDecisionReason = "用户在手机上拒绝了该操作";
+    if (updatedInput) hookSpecificOutput.updatedInput = updatedInput;
+  } else {
+    const detail = behavior === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "用户在手机上拒绝了该操作" };
+    if (updatedInput) detail.updatedInput = updatedInput;
+    hookSpecificOutput.decision = detail;
   }
-  const out = { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: detail } };
+
+  const out = { hookSpecificOutput };
   // 必须等 stdout 真正写进管道再退出：直接 process.exit 会吞掉决策，Agent 收不到 allow。
   process.stdout.write(JSON.stringify(out), () => process.exit(0));
   // 定时器不要 unref：stdout 是管道时 write 不负责撑住事件循环。

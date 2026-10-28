@@ -61,6 +61,38 @@ function collect(adapter, events) {
   return events;
 }
 
+/** 起一个假 host，跑真实的 hook-cli，返回它写给 Agent 的 JSON。 */
+async function runHookCli({ input, decision, answers }) {
+  const http = await import("node:http");
+  const { spawn } = await import("node:child_process");
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      requests.push({ url: req.url, body: body ? JSON.parse(body) : null });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(answers ? { decision, answers } : { decision }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  const cli = path.join(process.cwd(), "approvals", "hook-cli.mjs");
+  const child = spawn(process.execPath, [cli, "event", "PermissionRequest", "qoder-cn"], {
+    env: { ...process.env, MO_AGENT_URL: "http://127.0.0.1:" + port, MO_AGENT_TOKEN: "test-token" },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  child.stdin.end(JSON.stringify(input));
+  const output = await new Promise((resolve, reject) => {
+    let data = "";
+    child.stdout.on("data", (chunk) => (data += chunk));
+    child.on("error", reject);
+    child.on("close", (code) => (code === 0 ? resolve(data) : reject(new Error("hook-cli exited " + code))));
+  });
+  await new Promise((resolve) => server.close(resolve));
+  return { requests, parsed: output ? JSON.parse(output) : null };
+}
+
 test("Qoder CN：会话观测、标题、完成事件", () => {
   const { root, file, project } = makeRoot();
   fs.writeFileSync(file, transcript({ prompt: "优化客户端权限交互", answer: "改完了" }).map(line).join(""));
@@ -177,6 +209,72 @@ test("Qoder CN：history 按轮次返回", async () => {
     { turn: 2, prompt: "第二问", response: "第二答" },
   ]);
   fs.rmSync(path.dirname(project), { recursive: true, force: true });
+});
+
+test("Qoder CN IDE：PermissionRequest 用 permissionDecision，不能输出对象 decision", async () => {
+  const { requests, parsed } = await runHookCli({
+    input: {
+      session_id: "ide-hook-1",
+      transcript_path: "/Users/x/.qoder-cn/projects/p/transcript/s.jsonl",
+      tool_name: "Bash",
+      tool_input: { command: "echo hi" },
+      cwd: "/tmp/ide",
+    },
+    decision: "allow_once",
+  });
+  assert.equal(requests.length, 1);
+  assert.equal(parsed.hookSpecificOutput.hookEventName, "PermissionRequest");
+  assert.equal(parsed.hookSpecificOutput.permissionDecision, "allow");
+  assert.equal(parsed.hookSpecificOutput.decision, undefined, "新运行时把 decision 当 string，不能出现对象");
+});
+
+test("Qoder CN IDE：拒绝用 permissionDecision=deny 并带原因", async () => {
+  const { parsed } = await runHookCli({
+    input: {
+      session_id: "ide-hook-2",
+      transcript_path: "/Users/x/.qoder-cn/projects/p/transcript/s.jsonl",
+      tool_name: "Bash",
+      tool_input: { command: "rm -rf /tmp/x" },
+      cwd: "/tmp/ide",
+    },
+    decision: "reject_once",
+  });
+  assert.equal(parsed.hookSpecificOutput.permissionDecision, "deny");
+  assert.match(parsed.hookSpecificOutput.permissionDecisionReason, /拒绝/);
+  assert.equal(parsed.hookSpecificOutput.decision, undefined);
+});
+
+test("Qoder CN IDE：AskUserQuestion 的答案写回 updatedInput", async () => {
+  const questions = [{ question: "选哪个？", options: [{ label: "A" }, { label: "B" }] }];
+  const { parsed } = await runHookCli({
+    input: {
+      session_id: "ide-hook-3",
+      transcript_path: "/Users/x/.qoder-cn/projects/p/transcript/s.jsonl",
+      tool_name: "AskUserQuestion",
+      tool_input: { questions },
+      cwd: "/tmp/ide",
+    },
+    decision: "allow_once",
+    answers: { "选哪个？": "A" },
+  });
+  assert.equal(parsed.hookSpecificOutput.permissionDecision, "allow");
+  assert.deepEqual(parsed.hookSpecificOutput.updatedInput.questions, questions);
+  assert.equal(parsed.hookSpecificOutput.updatedInput.answers["选哪个？"], "A");
+});
+
+test("Qoder CN 桌面端：PermissionRequest 保持 decision.behavior", async () => {
+  const { parsed } = await runHookCli({
+    input: {
+      session_id: "desktop-hook-1",
+      transcript_path: "/Users/x/.qoder-cn/projects/p/s.jsonl",
+      tool_name: "Bash",
+      tool_input: { command: "echo hi" },
+      cwd: "/tmp/desktop",
+    },
+    decision: "allow_once",
+  });
+  assert.equal(parsed.hookSpecificOutput.decision.behavior, "allow");
+  assert.equal(parsed.hookSpecificOutput.permissionDecision, undefined, "老运行时只认 decision.behavior");
 });
 
 test("Qoder CN：profile 的 hook 映射与一键配置命令", () => {

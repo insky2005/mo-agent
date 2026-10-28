@@ -144,8 +144,15 @@ content block：`thinking` / `text` / `tool_use`。
 deny 形态是 `{"behavior":"deny","message":"…","interrupt":false}`；
 另有 PreToolUse 风格的 `permissionDecision: "allow" | "deny" | "ask"` 与 `updatedInput`。
 
-**这与 `approvals/hook-cli.mjs` 现在吐出的 JSON 完全一致**（第 124–131 行），
-也就是说 hook 脚本一行不用改，只需要给 profile 声明事件映射。
+**桌面端与 `approvals/hook-cli.mjs` 原来的 JSON 完全一致**，
+只需要给 profile 声明事件映射。
+
+> **2026-10 补充：IDE 1.37+ 换了 schema。** 它的 `QoderCN` 运行时把 `hookSpecificOutput.decision` 声明为
+> **string**，不再有 `decision.behavior`；放行改读 `permissionDecision = "allow"`，拒绝读
+> `permissionDecision = "deny"`。如果继续输出 `decision: {behavior}`，IDE 会判成
+> `no parsed output` 并继续弹自己的授权框（手机上的允许看起来“没效果”）。
+> `hook-cli.mjs` 现在按 `transcript_path` 是否含 `/transcript/` 自动切换两套格式；
+> 两种格式不能同时输出，否则新运行时整段解析失败。
 
 **AskUserQuestion 也走 PermissionRequest**：日志实测会收到
 `Tool AskUserQuestion requires confirmation`，`tool_input.questions` 里带着完整问题与选项。
