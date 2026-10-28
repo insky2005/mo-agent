@@ -28,6 +28,7 @@ import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
+import { handleSettingsRoutes } from "./settings-page.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
 import QRCode from "qrcode";
 import { scanProcesses } from "../adapters/process-scan.mjs";
@@ -43,6 +44,8 @@ const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "ap
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
 // 已配对设备令牌落盘，host 重启后不丢（否则每次「重启服务」都要重新配对）
 const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), ".mo-agent", "devices.json");
+// 本机会话凭证：令牌跨 host 重启复用，避免书签/管理 Cookie 每次重启失效。
+const sessionFile = path.join(os.homedir(), ".mo-agent", "session.json");
 
 const config = loadConfig(process.argv);
 config.transcriptPollMs = config.transcriptPollMs || 2000;
@@ -64,7 +67,19 @@ for (const channel of loadNotifyChannels({ log, mobileMode: loadMobileMode({ log
   log.info("已注册通知通道: " + channel.name);
 }
 notifier.start();
-const localToken = process.env.MO_AGENT_LOCAL_TOKEN || randomBytes(24).toString("base64url");
+
+function readPersistedLocalToken() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+    return typeof parsed.token === "string" && parsed.token.length >= 16 ? parsed.token : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+const localToken = process.env.MO_AGENT_LOCAL_TOKEN
+  || readPersistedLocalToken()
+  || randomBytes(24).toString("base64url");
 // profiles 是运行时从磁盘读的，打包成单文件后必须显式指向运行时目录
 const profiles = loadProfiles(path.join(root, "adapters", "profiles"));
 // Agent hook 配置管理：设置页 / CLI 共用，只写自己认识的 hook，改前备份
@@ -106,8 +121,10 @@ function readVoiceConfig() {
   }
 }
 
-const voiceEnabled = process.env.MO_AGENT_VOICE === "1"
-  || (process.env.MO_AGENT_VOICE !== "0" && readVoiceConfig());
+function voiceRuntimeEnabled() {
+  return process.env.MO_AGENT_VOICE === "1"
+    || (process.env.MO_AGENT_VOICE !== "0" && readVoiceConfig());
+}
 const voiceRoot = path.join(root, "voice");
 const voiceSmallModel = firstExisting([
   path.join(voiceRoot, "models", "ggml-small-q8_0.bin"),
@@ -150,62 +167,15 @@ const voiceEventLog = function (event) {
   }
   if (typeof log.debug === "function") log.debug(JSON.stringify(event));
 };
-const voiceSpeaker = voiceEnabled
-  ? createSpeaker({ dryRun: process.env.MO_AGENT_VOICE_DRY === "1", log: voiceEventLog })
-  : null;
+let voiceSpeaker = null;
 // 常驻 helper：open 启动一次，之后所有命令走本地 socket。
-const voiceClient = voiceEnabled && !process.env.MO_AGENT_VOICE_SCRIPT
-  ? createHelperClient({ app: voicePaths.bridge, log })
-  : null;
+let voiceClient = null;
 let voice = null;
 let voiceStatus = "未启用";
-if (voiceEnabled) {
-  const script = process.env.MO_AGENT_VOICE_SCRIPT;
-  if (script) {
-    const lines = script.split(/[,，\n]/).map(function (item) { return item.trim(); }).filter(Boolean);
-    voice = createVoiceChannel(Object.assign({
-      listener: createScriptedListener(lines, { log: voiceEventLog }),
-      nonceFactory: () => process.env.MO_AGENT_VOICE_NONCE || makeNonce(4),
-      speaker: voiceSpeaker,
-      eventLog: voiceEventLog,
-      log,
-    }, voicePaths));
-    voiceStatus = "已启用（脚本应答）";
-    log.info("语音以脚本应答启用（调试）");
-  } else {
-    const ready = await checkVoiceReady(Object.assign({ log, client: voiceClient }, voicePaths));
-    if (ready.ready) {
-      voice = createVoiceChannel(Object.assign({
-        timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
-        maxAttempts: Number(process.env.MO_AGENT_VOICE_ATTEMPTS || 3),
-        speaker: voiceSpeaker,
-        client: voiceClient,
-        eventLog: voiceEventLog,
-        log,
-      }, voicePaths));
-      voiceStatus = ready.micStatus === 0 ? "已启用（首次会请求麦克风）" : "已启用";
-      log.info("语音已启用");
-    } else {
-      voiceStatus = "不可用：" + ready.reason;
-      log.warn("语音未启用：" + ready.reason);
-    }
-  }
-}
-
 let voiceCommands = null;
-
-if (voice) {
-  // 静音只影响语音播报与语音审批，手机/终端通知不受影响。
-  notifier.register(createVoiceNotifier({
-    speaker: voiceSpeaker,
-    log,
-    isMuted: function () { return voiceCommands ? voiceCommands.isMuted() : false; },
-  }));
-  // 保活：helper 空闲 5 分钟会退出，下一次授权又要冷启动；
-  // 每分钟 ping 一次，让它保持热状态。
-  if (voiceClient && typeof voiceClient.keepalive === "function") voiceClient.keepalive();
-  log.info("语音播报已挂到 critical 通知");
-}
+let dictateRunner = null;
+let voiceNotifierChannel = null;
+let voiceReloadPromise = Promise.resolve();
 
 async function testVoice() {
   if (!voice) return { ok: false, error: "voice-disabled" };
@@ -324,21 +294,6 @@ const voiceEvents = {
   },
 };
 
-if (voice) {
-  voiceCommands = createCommandExecutor({
-    hub,
-    broker,
-    speak: voiceSpeaker,
-    listen: voice.listen,
-    prepare: voice.prepare,
-    onEvent: broadcastVoiceEvent,
-    log,
-    muteMinutes: Number(process.env.MO_AGENT_VOICE_MUTE_MINUTES || 15),
-    timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
-    listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
-  });
-}
-
 async function runVoiceCommand() {
   if (!voice || !voiceCommands) {
     log.warn("语音命令: 未启用，忽略本机请求");
@@ -414,24 +369,153 @@ decisionRouter = createDecisionRouter({ broker, monitor, dsh, log });
 for (const adapter of created.adapters) hub.register(adapter);
 
 // P2 语音口述任务：沿用 P1 的「当前关注会话」，先成草稿，严格确认后只发送一次。
-const dictateRunner = voice
-  ? createDictationRunner({
-    hub,
-    getTargetSessionId: () => (voiceCommands ? voiceCommands.targetSessionId() : null),
-    sendPrompt: (sessionId, text) => dsh.prompt(sessionId, text),
-    listen: voice.listen,
-    speak: voiceSpeaker,
-    prepare: voice.prepare,
-    onEvent: broadcastVoiceEvent,
-    log,
-    maxChars: Number(process.env.MO_AGENT_VOICE_DICTATE_MAX_CHARS || 4000),
-    listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
-    timeoutMs: 45000,
-    confirmTimeoutMs: 15000,
-    silence: 1.6,
-    maxSeconds: 30,
-  })
-  : null;
+function buildDictateRunner() {
+  return voice
+    ? createDictationRunner({
+      hub,
+      getTargetSessionId: () => (voiceCommands ? voiceCommands.targetSessionId() : null),
+      sendPrompt: (sessionId, text) => dsh.prompt(sessionId, text),
+      listen: voice.listen,
+      speak: voiceSpeaker,
+      prepare: voice.prepare,
+      onEvent: broadcastVoiceEvent,
+      log,
+      maxChars: Number(process.env.MO_AGENT_VOICE_DICTATE_MAX_CHARS || 4000),
+      listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
+      timeoutMs: 45000,
+      confirmTimeoutMs: 15000,
+      silence: 1.6,
+      maxSeconds: 30,
+    })
+    : null;
+}
+
+function buildVoiceCommands() {
+  return voice
+    ? createCommandExecutor({
+      hub,
+      broker,
+      speak: voiceSpeaker,
+      listen: voice.listen,
+      prepare: voice.prepare,
+      onEvent: broadcastVoiceEvent,
+      log,
+      muteMinutes: Number(process.env.MO_AGENT_VOICE_MUTE_MINUTES || 15),
+      timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
+      listenDelayMs: Number(process.env.MO_AGENT_VOICE_LISTEN_DELAY_MS || 500),
+    })
+    : null;
+}
+
+/** 创建一套语音运行时；enabled=false 时只返回空运行时。 */
+async function createVoiceRuntime(enabled) {
+  const speaker = enabled
+    ? createSpeaker({ dryRun: process.env.MO_AGENT_VOICE_DRY === "1", log: voiceEventLog })
+    : null;
+  const client = enabled && !process.env.MO_AGENT_VOICE_SCRIPT
+    ? createHelperClient({ app: voicePaths.bridge, log })
+    : null;
+  let channel = null;
+  let status = "未启用";
+
+  if (enabled) {
+    const script = process.env.MO_AGENT_VOICE_SCRIPT;
+    if (script) {
+      const lines = script.split(/[,，\n]/).map(function (item) { return item.trim(); }).filter(Boolean);
+      channel = createVoiceChannel(Object.assign({
+        listener: createScriptedListener(lines, { log: voiceEventLog }),
+        nonceFactory: () => process.env.MO_AGENT_VOICE_NONCE || makeNonce(4),
+        speaker,
+        eventLog: voiceEventLog,
+        log,
+      }, voicePaths));
+      status = "已启用（脚本应答）";
+      log.info("语音以脚本应答启用（调试）");
+    } else {
+      const ready = await checkVoiceReady(Object.assign({ log, client }, voicePaths));
+      if (ready.ready) {
+        channel = createVoiceChannel(Object.assign({
+          timeoutMs: Number(process.env.MO_AGENT_VOICE_TIMEOUT_MS || 15000),
+          maxAttempts: Number(process.env.MO_AGENT_VOICE_ATTEMPTS || 3),
+          speaker,
+          client,
+          eventLog: voiceEventLog,
+          log,
+        }, voicePaths));
+        status = ready.micStatus === 0 ? "已启用（首次会请求麦克风）" : "已启用";
+        log.info("语音已启用");
+      } else {
+        status = "不可用：" + ready.reason;
+        log.warn("语音未启用：" + ready.reason);
+      }
+    }
+  }
+
+  return { speaker, client, channel, status };
+}
+
+/** 停掉旧通道和 helper；必须在创建新 helper 之前调用，避免 shutdown 误杀新 helper。 */
+async function stopVoiceRuntime() {
+  if (voiceNotifierChannel) {
+    notifier.unregister(voiceNotifierChannel);
+    voiceNotifierChannel = null;
+  }
+  if (voice && typeof voice.stop === "function") voice.stop();
+  if (voiceClient && typeof voiceClient.shutdown === "function") {
+    try { await voiceClient.shutdown(); } catch (error) { /* helper 可能已退出 */ }
+  }
+  voice = null;
+  voiceClient = null;
+  voiceSpeaker = null;
+  voiceCommands = null;
+  dictateRunner = null;
+}
+
+/** 挂载新语音运行时，并重新注册通知播报。 */
+async function applyVoiceRuntime(runtime) {
+  voiceSpeaker = runtime.speaker;
+  voiceClient = runtime.client;
+  voice = runtime.channel;
+  voiceStatus = runtime.status;
+  voiceCommands = buildVoiceCommands();
+  dictateRunner = buildDictateRunner();
+
+  if (voice) {
+    // 静音只影响语音播报与语音审批，手机/终端通知不受影响。
+    voiceNotifierChannel = createVoiceNotifier({
+      speaker: voiceSpeaker,
+      log,
+      isMuted: function () { return voiceCommands ? voiceCommands.isMuted() : false; },
+    });
+    notifier.register(voiceNotifierChannel);
+    // 保活：helper 空闲 5 分钟会退出，下一次授权又要冷启动；
+    // 每分钟 ping 一次，让它保持热状态。
+    if (voiceClient && typeof voiceClient.keepalive === "function") voiceClient.keepalive();
+    log.info("语音播报已挂到 critical 通知");
+  }
+}
+
+/** 串行重载，避免两个设置请求同时启停语音。 */
+async function reloadVoiceRuntime() {
+  const task = voiceReloadPromise.then(async function () {
+    const enabled = voiceRuntimeEnabled();
+    try {
+      await stopVoiceRuntime();
+      const runtime = await createVoiceRuntime(enabled);
+      await applyVoiceRuntime(runtime);
+      log.info("语音运行时: " + voiceStatus);
+      return { ok: true, enabled, ready: !!voice, status: voiceStatus };
+    } catch (error) {
+      voiceStatus = "不可用：" + (error && error.message ? error.message : String(error));
+      log.warn("语音运行时重载失败: " + voiceStatus);
+      return { ok: false, enabled, ready: false, status: voiceStatus, error: voiceStatus };
+    }
+  });
+  voiceReloadPromise = task.then(function () {}, function () {});
+  return task;
+}
+
+await reloadVoiceRuntime();
 
 async function runDictate() {
   if (!voice || !dictateRunner) {
@@ -517,11 +601,13 @@ const moHost = createMoAgentServer({
     dingtalkBot = null;
   },
   pairing,
+  voiceReload: reloadVoiceRuntime,
   voiceTest: testVoice,
   voiceCommand: runVoiceCommand,
   dictate: runDictate,
   voiceEvents,
   pairHandler: handlePairRoutes,
+  settingsHandler: handleSettingsRoutes,
   hooksManager,
   apkPath,
   logFile,
@@ -531,8 +617,8 @@ const moHost = createMoAgentServer({
 runtime.clientCount = moHost.clientCount;
 
 function writeSessionFile(port) {
-  const dir = path.join(os.homedir(), ".mo-agent");
-  const file = path.join(dir, "session.json");
+  const dir = path.dirname(sessionFile);
+  const file = sessionFile;
   try {
     fs.mkdirSync(dir, { recursive: true });
     // 管理页鉴权也读这个令牌，文件权限收紧到仅当前用户。

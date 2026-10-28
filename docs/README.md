@@ -70,6 +70,7 @@ docs/
 | [p2-prompt.md](plans/p2-prompt.md) | 历史交接提示词 |
 | [cleanup-plan.md](plans/cleanup-plan.md) | 已完成（0.2.0 清理） |
 | [desktop-cross-platform.md](plans/desktop-cross-platform.md) | 进行中（Linux / Windows） |
+| [settings-center.md](plans/settings-center.md) | 已实现（设置中心） |
 
 ### research/ — 预研
 

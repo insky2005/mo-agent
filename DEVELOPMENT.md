@@ -51,6 +51,7 @@
 设置（安装与配对）、一键配置、配对二维码和日志页只允许在**电脑本机**打开，并且必须带 host 生成的本机令牌：
 
 - 桌面 App 的菜单会打开对应页面并自动带上令牌；
+- 本机令牌持久化在 `~/.mo-agent/session.json`，host 重启后复用同一个 token；书签和管理 Cookie 不会因为重启失效；
 - 直接用本机浏览器访问时，从 `~/.mo-agent/session.json` 取 `token`，例如：
 
       TOKEN=$(node -p 'require(process.env.HOME + "/.mo-agent/session.json").token')
@@ -90,8 +91,14 @@ Claude Code 的 Notification 类型、标题与正文模板见 [docs/reference/c
 
 ### Qoder CN（桌面端「智能工作台」）
 
-Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同构，所以观测可以直接用；
-授权卡走同一套 hook 格式（`hookSpecificOutput.decision.behavior`），**hook 脚本不用改**。
+Qoder CN 桌面版底层跑的就是 Qoder CLI，transcript 与 Claude Code 同构，所以观测可以直接用。
+授权卡有两种输出格式，由 `approvals/hook-cli.mjs` 按 `transcript_path` 自动选择：
+
+- 桌面端（老运行时）：`hookSpecificOutput.decision.behavior = "allow" | "deny"`；
+- IDE 1.37+（新运行时）：`hookSpecificOutput.permissionDecision = "allow" | "deny"`。
+
+两种格式**不能同时输出**：新运行时把 `decision` 声明为 string，遇到对象会整段解析失败
+（表现为手机上点了允许、hook 也输出了 allow，但 IDE 判成 `no parsed output` 并继续弹窗）。
 
 会话标题直接读 Qoder CN 自己的标题：桌面端取 `main.sqlite` 的 `chat_sessions.title`，
 IDE 取 `workspaceStorage/*/state.vscdb` 里的 `aicoding.chat.views`；
@@ -189,13 +196,16 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 
 菜单项：
 
-- 一键配置 Agent…：弹出「一键配置」窗口，用单个列表列出所有已启用的 Agent；需要 hook 的显示将写入的 hook、状态和按钮，原生接入的只显示状态
-- 设置（安装与配对）：弹出面板窗口，里面是「扫码装 App」「扫码配对」两个二维码
-- 语音：启用语音 / 麦克风权限设置… / 语音命令 / 语音测试（详见 [docs/guides/voice.md](docs/guides/voice.md)）
+- 设置：打开统一设置中心，左侧是「App 安装与配对 / 钉钉机器人 / Agent 配置 / 语音 / 重启与日志」；
+  托盘里的「一键配置 Agent…」「查看日志」也会落到对应 tab
+- App 安装与配对：扫码装 App、扫码配对两个二维码
+- 钉钉机器人：扫码创建、手动填写、6 位配对码和解绑
+- Agent 配置：用单个列表列出所有已启用的 Agent；需要 hook 的显示将写入的 hook、状态和按钮，原生接入的只显示状态
+- 语音：启用语音 / 麦克风权限设置… / 语音命令 / 语音口述 / 语音测试（详见 [docs/guides/voice.md](docs/guides/voice.md)）
 - 打开监控屏：常驻桌面大窗，实时显示所有会话的运行状态、最近一轮内容、等待处理项和事件流；
-  另有筛选、搜索、会话详情和 SSE 实时推送（断线自动轮询兜底），只读展示，不会替你做决定
-- 重启服务：重启本地 host 服务，随后自动打开「设置」面板
-- 查看日志：在面板窗口里实时查看 host 日志（仅本机可打开 /logs）
+  另有筛选、搜索、会话详情和 SSE 实时推送（断线自动轮询兜底），只读展示，不会替你做决定；顶栏「设置」可直接打开设置中心
+- 重启服务：重启本地 host 服务，随后自动打开「重启与日志」设置
+- 查看日志：打开「重启与日志」设置，上方可重启，下方直接看 host 日志
 - 退出
 
 托盘会自己把 host 服务拉起来（默认端口 7788），退出时一并结束。
@@ -216,6 +226,7 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 ![会话详情](docs/assets/monitor-detail.jpg)
 
 监控屏和日志页一样只允许本机访问（回环地址 + 本机令牌），并且**只读**：批准和回答仍在手机或终端完成。
+顶栏的「设置」会打开设置中心；设置中心关闭后监控屏保持原样。
 
 ### 运行时与升级
 
@@ -287,7 +298,7 @@ Agent 卡在授权时，host 用 TTS 念出动作、目标和 4 位口令，你�
 3. 之后 Agent 卡住时会念出草稿和口令，你复述口令即可。
 
 同一子菜单还有 **「麦克风权限设置…」**、**「语音命令」** 和 **「语音测试」**；勾选状态存在 `~/.mo-agent/voice.json`，
-取消勾选会重启 host 并关闭语音。
+取消勾选会停用语音组件并关闭语音，不会重启 host。
 
 **语音命令（P1，click-to-talk）**：托盘「语音」→「语音命令」，说一句话。支持「汇报状态」「暂停」「继续」
 「切到第 2 个」「切换到 <会话名>」「帮助」。暂停只静音语音播报与语音审批（默认 15 分钟），
@@ -384,11 +395,12 @@ mo-agent 的处理：
 
 ## 接口速查
 
-    GET  /setup                设置页（装 App + 配对两个二维码；回环地址 + 本机令牌）
-    GET  /agents               一键配置页（已启用 Agent 列表 / 写入内容 / 状态 / 按钮；回环地址 + 本机令牌）
+    GET  /settings             设置中心（?tab=app|dingtalk|agents|voice|system；回环地址 + 本机令牌）
+    GET  /setup                旧版设置页（装 App + 配对两个二维码；回环地址 + 本机令牌）
+    GET  /agents               旧版一键配置页（已启用 Agent 列表 / 写入内容 / 状态 / 按钮；回环地址 + 本机令牌）
     GET  /pair                 二维码配对页（回环地址 + 本机令牌）
     GET  /pair/qr.svg          二维码图片（回环地址 + 本机令牌，?ip= 可指定网卡）
-    GET  /logs                 日志页（回环地址 + 本机令牌；桌面「查看日志」打开）
+    GET  /logs                 独立日志页（回环地址 + 本机令牌；设置中心内嵌同一个查看器）
     GET  /logs/data            日志尾部若干行 JSON（回环地址 + 本机令牌）
     GET  /monitor              实时监控屏（回环地址 + 本机令牌；桌面「打开监控屏」进入）
     GET  /monitor/state        监控快照：会话汇总 + 待办 + 进程 + 数据源（回环地址 + 本机令牌）
@@ -401,8 +413,9 @@ mo-agent 的处理：
     POST /api/prompt           发送指令（仅 control 含 prompt 的会话；Claude 只读返回 409）
     GET  /local/hooks          各 Agent hook 配置状态（仅回环地址）
     POST /local/hooks/apply    hooks 安装/卸载：{agentId, action, dryRun}（仅回环地址）
-    POST /setup/hooks/apply    设置页表单动作（回环地址 + 本机令牌 + csrf，303 回 /agents）
+    POST /setup/hooks/apply    设置页表单动作（回环地址 + 本机令牌 + csrf，303 回 next 白名单或 /agents）
     POST /local/approval       hook 回调（本机令牌）
+    POST /local/voice/reload   动态启停语音组件（本机令牌；不重启 host）
     GET  /local/pair-payload   取当前二维码载荷（本机令牌，供桌面端渲染）
 
     SSE  event: message        {v,seq,at,type,payload}（M4 起唯一格式）；type=notify 为通知出口

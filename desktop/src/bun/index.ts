@@ -16,9 +16,27 @@ try {
 
 const PORT = Number(process.env.MO_AGENT_PORT || 7788);
 const BASE = "http://127.0.0.1:" + PORT;
-const PANEL_URL = BASE + "/setup";
-const DINGTALK_URL = BASE + "/setup/dingtalk";
-const AGENTS_URL = BASE + "/agents";
+const SETTINGS_TABS = ["app", "dingtalk", "agents", "voice", "system"] as const;
+type SettingsTab = typeof SETTINGS_TABS[number];
+function isSettingsTab(value: unknown): value is SettingsTab {
+  return typeof value === "string" && (SETTINGS_TABS as readonly string[]).includes(value);
+}
+function settingsUrl(tab: SettingsTab = "app"): string {
+  return BASE + "/settings?tab=" + tab;
+}
+function settingsTabOf(rawUrl: string): SettingsTab | null {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.pathname !== "/settings") return null;
+    const tab = parsed.searchParams.get("tab");
+    return isSettingsTab(tab) ? tab : "app";
+  } catch (error) {
+    return null;
+  }
+}
+const PANEL_URL = settingsUrl("app");
+const DINGTALK_URL = settingsUrl("dingtalk");
+const AGENTS_URL = settingsUrl("agents");
 const MONITOR_URL = BASE + "/monitor";
 // 开发态：显式 MO_AGENT_ROOT 直接用源码；否则使用打包进 .app 的 runtime。
 const DEV_ROOT = process.env.MO_AGENT_ROOT || "";
@@ -39,27 +57,47 @@ const LOG_KEEP = 3;
 // 与 host 共用同一份开关；勾选后重启服务生效。
 const VOICE_CONFIG = join(homedir(), ".mo-agent", "voice.json");
 
-function readVoiceEnabled(): boolean {
+type VoiceConfig = { enabled: boolean; overlay: boolean };
+
+function readVoiceConfig(): VoiceConfig {
   try {
     const parsed = JSON.parse(readFileSync(VOICE_CONFIG, "utf8"));
-    return Boolean(parsed && parsed.enabled === true);
+    return {
+      enabled: Boolean(parsed && parsed.enabled === true),
+      // 兼容旧文件：没有 overlay 字段时默认显示浮层。
+      overlay: !(parsed && parsed.overlay === false),
+    };
   } catch (error) {
-    return false;
+    return { enabled: false, overlay: true };
   }
 }
 
-function writeVoiceEnabled(enabled: boolean): void {
+function readVoiceEnabled(): boolean {
+  return readVoiceConfig().enabled;
+}
+
+function readVoiceOverlayPreference(): boolean {
+  return readVoiceConfig().overlay;
+}
+
+/** 合并写 voice.json：保留未来字段，不再整文件覆盖。 */
+function writeVoiceConfig(patch: Partial<VoiceConfig>): VoiceConfig {
+  const next = Object.assign(readVoiceConfig(), patch);
   try {
     mkdirSync(dirname(VOICE_CONFIG), { recursive: true });
-    writeFileSync(VOICE_CONFIG, JSON.stringify({ enabled }, null, 2) + "\n");
+    writeFileSync(VOICE_CONFIG, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
   } catch (error) {
     logLine("写入语音配置失败: " + error);
   }
+  return next;
+}
+
+function writeVoiceEnabled(enabled: boolean): void {
+  writeVoiceConfig({ enabled });
 }
 
 let host: ChildProcess | null = null;
 let panel: BrowserWindow | null = null;
-let logs: BrowserWindow | null = null;
 let monitor: BrowserWindow | null = null;
 // 托盘在确认自己是主实例之后才创建，否则第二次启动会多出一个菜单栏图标。
 let tray: Tray | null = null;
@@ -377,18 +415,163 @@ function adminUrl(url: string): string {
   return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
 }
 
+type SettingsRequest = {
+  type?: string;
+  requestId?: string;
+  action?: string;
+  payload?: unknown;
+};
+
+/** 设置页 → 桌面 → 设置页的回包；requestId 由页面生成。 */
+function replySettings(win: BrowserWindow, requestId: string, result: Record<string, unknown>): void {
+  if (!requestId) return;
+  const json = JSON.stringify(Object.assign({ requestId }, result))
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+  const webview = win.webview as { executeJavascript?: (js: string) => void } | undefined;
+  try {
+    webview?.executeJavascript?.("window.__moSettingsReply&&window.__moSettingsReply(" + json + ");");
+  } catch (error) {
+    logLine("设置页回包失败: " + error);
+  }
+}
+
+function settingsStatePayload(): Record<string, unknown> {
+  const config = readVoiceConfig();
+  return {
+    voiceEnabled: config.enabled,
+    overlay: {
+      preference: config.overlay,
+      visible: voiceOverlayVisible,
+    },
+    shortcut: voiceOverlayShortcutLabel(),
+    hostReady: !!host,
+    platform: process.platform,
+  };
+}
+
+/** 只接受白名单 action；页面不能传路径/命令/任意 JS。 */
+function handleSettingsRequest(win: BrowserWindow, detail: SettingsRequest): void {
+  const requestId = typeof detail.requestId === "string" ? detail.requestId : "";
+  const action = typeof detail.action === "string" ? detail.action : "";
+  const payload = detail.payload && typeof detail.payload === "object"
+    ? detail.payload as Record<string, unknown>
+    : {};
+  const reply = (result: Record<string, unknown>) => replySettings(win, requestId, result);
+
+  void (async () => {
+    try {
+      if (action === "state") {
+        reply({ ok: true, data: settingsStatePayload() });
+        return;
+      }
+      if (action === "voice-enable") {
+        const enabled = payload.enabled === true;
+        writeVoiceConfig({ enabled });
+        syncVoiceOverlayShortcut();
+        const result = await postLocal("/local/voice/reload", 60000);
+        refreshTrayMenu();
+        if (enabled) {
+          await syncVoiceOverlay();
+          syncVoiceOrb();
+        } else {
+          hideVoiceOverlay(false);
+          hideVoiceOrb();
+        }
+        if (result && result.ok === false) {
+          reply({ ok: false, error: result.error || "voice-reload-failed", data: result });
+          return;
+        }
+        reply({
+          ok: true,
+          data: {
+            enabled: result && typeof result.enabled === "boolean" ? result.enabled : enabled,
+            ready: !!(result && result.ready),
+            status: (result && result.status) || "",
+          },
+        });
+        return;
+      }
+      if (action === "overlay") {
+        const visible = payload.visible === true;
+        writeVoiceConfig({ overlay: visible });
+        const shown = await setVoiceOverlayVisible(visible);
+        refreshTrayMenu();
+        reply({ ok: true, data: { visible: shown, preference: visible } });
+        return;
+      }
+      if (action === "mic-settings") {
+        openMicSettings();
+        reply({ ok: true, data: { opened: true } });
+        return;
+      }
+      if (action === "accessibility-settings") {
+        openAccessibilitySettings();
+        reply({ ok: true, data: { opened: true } });
+        return;
+      }
+      if (action === "voice-command") {
+        const result = await runVoiceCommand();
+        reply({ ok: true, data: result || {} });
+        return;
+      }
+      if (action === "dictate") {
+        const result = await runDictate();
+        reply({ ok: true, data: result || {} });
+        return;
+      }
+      if (action === "voice-test") {
+        const result = await runVoiceTest();
+        reply({ ok: true, data: result || {} });
+        return;
+      }
+      if (action === "restart") {
+        reply({ ok: true, data: { restarting: true } });
+        setTimeout(() => { void restartService({ reopenTab: "system" }); }, 120);
+        return;
+      }
+      if (action === "open-log-folder") {
+        try { Utils.openExternal("file://" + LOG_DIR); } catch (error) { logLine("打开日志目录失败: " + error); }
+        reply({ ok: true, data: { opened: true } });
+        return;
+      }
+      reply({ ok: false, error: "unknown-action" });
+    } catch (error) {
+      reply({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  })();
+}
+
+/** 设置窗口尽量宽，但不超出当前屏幕工作区。 */
+function settingsPanelFrame(): { width: number; height: number } {
+  try {
+    const display = Screen.getPrimaryDisplay();
+    const area = display.workArea && display.workArea.width > 0 ? display.workArea : display.bounds;
+    return {
+      width: Math.max(760, Math.min(1040, Math.round(area.width - 80))),
+      height: Math.max(640, Math.min(800, Math.round(area.height - 80))),
+    };
+  } catch (error) {
+    return { width: 1040, height: 800 };
+  }
+}
+
 function createPanel(url: string = PANEL_URL): void {
-  const isAgents = url === AGENTS_URL;
-  const isDingTalk = url === DINGTALK_URL;
-  const title = isAgents
-    ? "mo-agent · 一键配置 Agent"
-    : isDingTalk
-      ? "mo-agent · 钉钉机器人绑定"
-      : "mo-agent · 设置";
+  const tab = settingsTabOf(url);
+  const isSettings = tab !== null;
+  const isAgents = !isSettings && url === AGENTS_URL;
+  const isDingTalk = !isSettings && url === DINGTALK_URL;
+  const title = isSettings
+    ? "mo-agent · 设置"
+    : isAgents
+      ? "mo-agent · 一键配置 Agent"
+      : isDingTalk
+        ? "mo-agent · 钉钉机器人绑定"
+        : "mo-agent · 设置";
   const win = new BrowserWindow({
     title,
     url: adminUrl(url),
-    frame: { width: 760, height: 760 },
+    frame: isSettings ? settingsPanelFrame() : { width: 760, height: 760 },
   });
   panel = win;
   const webview = win.webview as unknown as {
@@ -397,8 +580,12 @@ function createPanel(url: string = PANEL_URL): void {
   if (webview && typeof webview.on === "function") {
     webview.on("host-message", (event: unknown) => {
       const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
-      if (detail && typeof detail === "object" && (detail as { type?: string }).type === "panel-close") {
+      if (!detail || typeof detail !== "object") return;
+      const type = (detail as { type?: string }).type;
+      if (type === "panel-close") {
         try { win.close(); } catch (error) { /* 已经关闭 */ }
+      } else if (type === "settings-request") {
+        handleSettingsRequest(win, detail as SettingsRequest);
       }
     });
     webview.on("dom-ready", () => focusPanelWebview(win));
@@ -412,7 +599,8 @@ function createPanel(url: string = PANEL_URL): void {
     });
     win.on("close", () => {
       if (panel === win) panel = null;
-      if (url === DINGTALK_URL) void cancelDingTalkOnboard();
+      // 设置页在 tab 间整页跳转时不会触发 close；页面自己也有 pagehide 兜底。
+      if ((isSettings && tab === "dingtalk") || url.includes("/setup/dingtalk")) void cancelDingTalkOnboard();
       // 设置窗口关闭后才显示常驻浮层，避免两个窗口同时挡住桌面。
       syncVoiceOverlay();
     });
@@ -441,45 +629,6 @@ async function openPanel(url: string = PANEL_URL): Promise<void> {
   }
 }
 
-function createLogsWindow(): void {
-  const win = new BrowserWindow({
-    title: "mo-agent · 日志",
-    url: adminUrl(BASE + "/logs"),
-    frame: { width: 900, height: 640 },
-  });
-  logs = win;
-  try {
-    win.on("close", () => { if (logs === win) logs = null; });
-  } catch (error) {
-    logLine("注册日志窗口关闭事件失败: " + error);
-  }
-}
-
-/** 日志也走面板窗口：加载 host 的 /logs 页面，可实时刷新。 */
-async function openLogs(): Promise<void> {
-  const ready = await ensureHost();
-  if (!ready) {
-    // 服务没起来时日志页打不开，退回系统默认程序
-    try {
-      if (existsSync(LOG_FILE)) Utils.openPath(LOG_FILE);
-      else Utils.openExternal("file://" + LOG_DIR);
-    } catch (error) {
-      logLine("打开日志失败: " + error);
-    }
-    return;
-  }
-  if (logs) {
-    try {
-      logs.show();
-      logs.activate();
-      return;
-    } catch (error) {
-      logs = null;
-    }
-  }
-  createLogsWindow();
-}
-
 function createMonitorWindow(): void {
   const win = new BrowserWindow({
     title: "mo-agent · 实时监控",
@@ -493,8 +642,13 @@ function createMonitorWindow(): void {
   if (webview && typeof webview.on === "function") {
     webview.on("host-message", (event: unknown) => {
       const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
-      if (detail && typeof detail === "object" && (detail as { type?: string }).type === "panel-close") {
+      if (!detail || typeof detail !== "object") return;
+      const type = (detail as { type?: string }).type;
+      if (type === "panel-close") {
         try { win.close(); } catch (error) { /* 已经关闭 */ }
+      } else if (type === "open-settings") {
+        const tab = isSettingsTab((detail as { tab?: unknown }).tab) ? (detail as { tab: SettingsTab }).tab : "app";
+        void openPanel(settingsUrl(tab));
       }
     });
   }
@@ -539,7 +693,8 @@ async function openMonitor(): Promise<void> {
   createMonitorWindow();
 }
 
-async function restartService(openPanelAfter: boolean): Promise<void> {
+async function restartService(options: { reopenTab?: SettingsTab | null } = {}): Promise<void> {
+  const reopenMonitor = !!monitor;
   disposePanel();
   if (voiceOverlay) {
     const current = voiceOverlay;
@@ -549,17 +704,14 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
     } catch (error) { /* 忽略 */ }
     voiceOverlay = null;
     voiceOverlayToken = "";
+    voiceOverlayVisible = false;
+    voiceOverlayCursorInside = false;
     try { current.close(); } catch (error) { /* 已经销毁 */ }
   }
   if (voiceOrb) {
     const current = voiceOrb;
     stopVoiceOrbDrag();
     voiceOrb = null;
-    try { current.close(); } catch (error) { /* 已经销毁 */ }
-  }
-  if (logs) {
-    const current = logs;
-    logs = null;
     try { current.close(); } catch (error) { /* 已经销毁 */ }
   }
   if (monitor) {
@@ -573,14 +725,16 @@ async function restartService(openPanelAfter: boolean): Promise<void> {
   }
   await new Promise((resolve) => setTimeout(resolve, 500));
   await ensureHost();
-  if (openPanelAfter) await openPanel();
+  // 重启前开着监控屏的话，host 就绪后一起恢复；设置窗口最后打开，保持在最前面。
+  if (reopenMonitor) await openMonitor();
+  if (options.reopenTab) await openPanel(settingsUrl(options.reopenTab));
   // 语音开启时浮层常驻：服务重启后自动恢复，不再等下一次命令才出现。
   await syncVoiceOverlay();
   syncVoiceOrb();
 }
 
 async function restartHost(): Promise<void> {
-  return restartService(true);
+  return restartService({ reopenTab: "app" });
 }
 
 /** 让设置窗口一打开就把焦点交给 WebView，否则 Esc 不会进网页。 */
@@ -648,6 +802,8 @@ function setupApplicationMenu(): void {
 function trayMenu(): any[] {
   const voice = readVoiceEnabled();
   const voiceMenu: any[] = [
+    { type: "normal", label: "语音设置…", action: "voice-settings" },
+    { type: "divider" },
     { type: "normal", label: "启用语音", action: "voice", checked: voice },
     { type: "normal", label: "麦克风权限设置…", action: "mic-settings" },
     { type: "normal", label: "辅助功能权限设置…", action: "accessibility-settings" },
@@ -668,11 +824,11 @@ function trayMenu(): any[] {
     { type: "normal", label: "一键配置 Agent…", action: "agents" },
     {
       type: "normal",
-      label: (voiceOverlayVisible ? "隐藏语音浮层" : "显示语音浮层")
+      label: ((voiceOverlayVisible || readVoiceOverlayPreference()) ? "隐藏语音浮层" : "显示语音浮层")
         + "（" + voiceOverlayShortcutLabel() + "）",
       action: "toggle-overlay",
-      // 设置窗口打开时浮层固定收起，等设置窗口关闭后再显示。
-      enabled: voice && !panel,
+      // 设置页也能改浮层开关；这里不再因为 panel 打开而禁用。
+      enabled: voice,
     },
     { type: "normal", label: "语音", submenu: voiceMenu },
     { type: "divider" },
@@ -699,7 +855,20 @@ async function toggleVoice(): Promise<void> {
   refreshTrayMenu();
   syncVoiceOverlayShortcut();
   logLine("启用语音: " + (enabled ? "开启" : "关闭"));
-  await restartService(false);
+  try {
+    const result = await postLocal("/local/voice/reload", 60000);
+    if (!result || result.ok === false) logLine("语音重载失败: " + ((result && result.error) || "unknown"));
+  } catch (error) {
+    logLine("语音重载请求失败: " + error);
+  }
+  refreshTrayMenu();
+  if (enabled) {
+    await syncVoiceOverlay();
+    syncVoiceOrb();
+  } else {
+    hideVoiceOverlay(false);
+    hideVoiceOrb();
+  }
 }
 
 function openMicSettings(): void {
@@ -747,8 +916,9 @@ async function postLocal(pathname: string, timeoutMs: number): Promise<any> {
   }
 }
 
-function hideVoiceOverlay(showOrb: boolean = true): void {
+function hideVoiceOverlay(showOrb: boolean = true, persist: boolean = false): void {
   cancelVoiceOverlaySnap();
+  if (persist) writeVoiceConfig({ overlay: false });
   if (!voiceOverlay) {
     if (showOrb) void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
     return;
@@ -922,7 +1092,9 @@ async function showVoiceOrb(): Promise<void> {
           const message = detail as { type?: string; dx?: number; dy?: number };
           if (message.type === "overlay-show") {
             placeVoiceOverlayAtOrb();
-            syncVoiceOverlay().catch((error) => logLine("显示语音浮层失败: " + error));
+            // 点 Logo 展开是显式操作：即使之前用 × 隐藏过，也要重新打开浮层。
+            writeVoiceConfig({ overlay: true });
+            setVoiceOverlayVisible(true).catch((error) => logLine("显示语音浮层失败: " + error));
             return;
           }
           if (message.type === "orb-drag-start") {
@@ -1016,9 +1188,9 @@ function syncVoiceOrb(): void {
   void showVoiceOrb().catch((error) => logLine("显示语音浮层球失败: " + error));
 }
 
-/** 语音开启时浮层常驻；关闭语音、设置窗口打开或手动隐藏时保持收起。 */
+/** 语音开启且用户没有隐藏浮层时，按需显示；设置窗口/监控屏打开时临时收起。 */
 async function syncVoiceOverlay(): Promise<void> {
-  if (!readVoiceEnabled() || panel || monitor) return;
+  if (!readVoiceEnabled() || !readVoiceOverlayPreference() || panel || monitor) return;
   try {
     await ensureVoiceOverlay();
   } catch (error) {
@@ -1037,10 +1209,22 @@ function voiceOverlayShortcutLabel(): string {
     .replace(/\+/g, "");
 }
 
+async function setVoiceOverlayVisible(visible: boolean): Promise<boolean> {
+  if (!readVoiceEnabled()) return false;
+  if (visible) {
+    try { await ensureVoiceOverlay(); } catch (error) { logLine("显示语音浮层失败: " + error); }
+  } else {
+    hideVoiceOverlay(true, true);
+  }
+  return voiceOverlayVisible;
+}
+
 async function toggleVoiceOverlay(): Promise<void> {
-  if (!readVoiceEnabled() || panel || monitor) return;
-  if (voiceOverlayVisible) hideVoiceOverlay();
-  else await syncVoiceOverlay();
+  if (!readVoiceEnabled() || monitor) return;
+  const next = !voiceOverlayVisible;
+  writeVoiceConfig({ overlay: next });
+  await setVoiceOverlayVisible(next);
+  refreshTrayMenu();
 }
 
 const CARBON_KEY_CODES: Record<string, number> = {
@@ -1388,7 +1572,7 @@ async function ensureVoiceOverlay(): Promise<boolean> {
         const detail = (event as { data?: { detail?: unknown } } | null)?.data?.detail;
         if (!detail || typeof detail !== "object") return;
         const type = (detail as { type?: string }).type;
-        if (type === "overlay-hide") hideVoiceOverlay();
+        if (type === "overlay-hide") hideVoiceOverlay(true, true);
         else if (type === "overlay-focus") {
           // 鼠标移入浮层时主动拿焦点，键盘/快捷键操作不再落到后面的窗口。
           try { win.show(); win.activate(); } catch (error) { logLine("语音浮层获取焦点失败: " + error); }
@@ -1439,17 +1623,17 @@ async function ensureVoiceOverlay(): Promise<boolean> {
 }
 
 /** P1：点一次、说一条命令；实时识别与结果都显示在浮层，播报由 host 负责。 */
-async function runVoiceCommand(): Promise<void> {
+async function runVoiceCommand(): Promise<Record<string, unknown>> {
   const ready = await ensureHost();
   if (!ready) {
     await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
-    return;
+    return { ok: false, error: "host-not-ready", reply: "本地服务没起来" };
   }
 
   const token = readLocalToken();
   if (!token) {
     await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "找不到本机令牌", detail: "先重启一次服务" });
-    return;
+    return { ok: false, error: "missing-token", reply: "找不到本机令牌" };
   }
 
   let overlayReady = false;
@@ -1470,26 +1654,28 @@ async function runVoiceCommand(): Promise<void> {
         detail: result.heard && result.heard.text ? ("听到：" + result.heard.text) : "没有识别到有效命令。",
       });
     }
+    return result;
   } catch (error) {
     logLine("语音命令请求失败: " + error);
     if (!overlayReady) {
       await Utils.showMessageBox({ type: "warning", title: "语音命令", message: "请求失败", detail: String(error) });
     }
+    return { ok: false, error: String(error), reply: "请求失败" };
   }
 }
 
 /** P2：点一次、说一段任务；草稿与「已发送给 X」都显示在同一个浮层。 */
-async function runDictate(): Promise<void> {
+async function runDictate(): Promise<Record<string, unknown>> {
   const ready = await ensureHost();
   if (!ready) {
     await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
-    return;
+    return { ok: false, error: "host-not-ready", reply: "本地服务没起来" };
   }
 
   const token = readLocalToken();
   if (!token) {
     await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "找不到本机令牌", detail: "先重启一次服务" });
-    return;
+    return { ok: false, error: "missing-token", reply: "找不到本机令牌" };
   }
 
   let overlayReady = false;
@@ -1512,25 +1698,27 @@ async function runDictate(): Promise<void> {
         detail: target + draft,
       });
     }
+    return result;
   } catch (error) {
     logLine("语音口述请求失败: " + error);
     if (!overlayReady) {
       await Utils.showMessageBox({ type: "warning", title: "语音口述", message: "请求失败", detail: String(error) });
     }
+    return { ok: false, error: String(error), reply: "请求失败" };
   }
 }
 
-async function runVoiceTest(): Promise<void> {
+async function runVoiceTest(): Promise<Record<string, unknown>> {
   const ready = await ensureHost();
   if (!ready) {
     await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "本地服务没起来", detail: "先看菜单里的「查看日志」" });
-    return;
+    return { ok: false, error: "host-not-ready", reply: "本地服务没起来" };
   }
 
   const token = readLocalToken();
   if (!token) {
     await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "找不到本机令牌", detail: "先重启一次服务" });
-    return;
+    return { ok: false, error: "missing-token", reply: "找不到本机令牌" };
   }
 
   let overlayReady = false;
@@ -1554,11 +1742,13 @@ async function runVoiceTest(): Promise<void> {
         detail: heard ? ("听到：" + heard) : "没有识别到有效回答。",
       });
     }
+    return result;
   } catch (error) {
     logLine("语音测试请求失败: " + error);
     if (!overlayReady) {
       await Utils.showMessageBox({ type: "warning", title: "语音测试", message: "请求失败", detail: String(error) });
     }
+    return { ok: false, error: String(error), reply: "请求失败" };
   }
 }
 
@@ -1606,9 +1796,10 @@ async function startShell(): Promise<void> {
 
   created.on("tray-clicked", async (event: any) => {
     const action = event?.data?.action;
-    if (action === "agents") await openPanel(AGENTS_URL);
-    else if (action === "dingtalk") await openPanel(DINGTALK_URL);
-    else if (action === "panel") await openPanel();
+    if (action === "agents") await openPanel(settingsUrl("agents"));
+    else if (action === "dingtalk") await openPanel(settingsUrl("dingtalk"));
+    else if (action === "panel") await openPanel(settingsUrl("app"));
+    else if (action === "voice-settings") await openPanel(settingsUrl("voice"));
     else if (action === "voice") await toggleVoice();
     else if (action === "voice-command") await runVoiceCommand();
     else if (action === "dictate") await runDictate();
@@ -1618,7 +1809,7 @@ async function startShell(): Promise<void> {
     else if (action === "accessibility-settings") openAccessibilitySettings();
     else if (action === "restart") await restartHost();
     else if (action === "monitor") await openMonitor();
-    else if (action === "logs") await openLogs();
+    else if (action === "logs") await openPanel(settingsUrl("system"));
     else if (action === "quit") {
       unregisterCarbonHotkey();
       GlobalShortcut.unregisterAll();

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { buildMonitorSnapshot, handleMonitorRoutes, summarizeSessions } from "./monitor-http.mjs";
@@ -138,6 +139,12 @@ test("handleMonitorRoutes 对非监控路径返回 false", async () => {
   assert.equal(res.statusCode, 0);
 });
 
+test("监控页脚本包含打开设置中心的桌面桥", () => {
+  const js = fs.readFileSync(path.join(WEB_DIR, "monitor.js"), "utf8");
+  assert.match(js, /open-settings/);
+  assert.match(js, /\/settings\?tab=app/);
+});
+
 test("handleMonitorRoutes 非 GET 返回 405", async () => {
   const res = fakeRes();
   const handled = await handleMonitorRoutes(fakeReq({ method: "POST" }), res, new URL("http://x/monitor"), ctxFor(makeHub([])));
@@ -179,6 +186,7 @@ test("handleMonitorRoutes 返回监控页并下发 Cookie", async () => {
   assert.match(res.headers["content-type"], /text\/html/);
   assert.match(res.body, /mo-agent · 实时监控/);
   assert.match(res.body, /monitor\.js/);
+  assert.match(res.body, /id="btnSettings"/);
   assert.match(res.headers["set-cookie"] || "", new RegExp("mo_agent_admin=" + adminCookieValue(LOCAL_TOKEN)));
 });
 

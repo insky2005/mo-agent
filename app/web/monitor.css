@@ -126,6 +126,16 @@ b, strong { font-weight: 650; }
 }
 .ghost:hover { border-color: var(--line2); background: rgba(30, 44, 80, 0.8); }
 .ghost.on { color: var(--amber); border-color: rgba(245, 185, 66, 0.36); }
+.ghost.iconOnly {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.ghost.iconOnly svg { display: block; }
 
 .banner {
   flex: none;

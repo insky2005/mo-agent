@@ -68,6 +68,7 @@
     clock: $("clock"),
     uptime: $("uptime"),
     conn: $("conn"),
+    btnSettings: $("btnSettings"),
     btnPause: $("btnPause"),
     banner: $("banner"),
     stats: $("stats"),
@@ -1181,9 +1182,21 @@
     if (id) openDetail(id);
   });
 
+  dom.btnSettings.addEventListener("click", function () {
+    if (typeof window.__electrobunSendToHost === "function") {
+      try {
+        window.__electrobunSendToHost({ type: "open-settings", tab: "app" });
+        return;
+      } catch (error) { /* 退化为同页跳转 */ }
+    }
+    location.assign("/settings?tab=app");
+  });
+
   dom.btnPause.addEventListener("click", function () {
     state.paused = !state.paused;
     dom.btnPause.textContent = state.paused ? "继续" : "暂停";
+    dom.btnPause.title = state.paused ? "继续界面刷新" : "暂停界面刷新，不影响 Agent 运行";
+    dom.btnPause.setAttribute("aria-pressed", state.paused ? "true" : "false");
     dom.btnPause.classList.toggle("on", state.paused);
     if (!state.paused) renderAll();
   });

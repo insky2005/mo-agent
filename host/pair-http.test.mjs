@@ -335,6 +335,56 @@ test("POST /setup/hooks/apply：一键写入并重定向回 /agents", async () =
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
+test("POST /setup/hooks/apply：next 白名单回设置中心 agents tab", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const page = await get("/agents", ctx);
+  const csrf = csrfOf(page.res.out.body);
+  const res = fakeResponse();
+  await handlePairRoutes(
+    request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install&next=" + encodeURIComponent("/settings?tab=agents"), {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    res,
+    new URL("http://x/setup/hooks/apply"),
+    ctx,
+  );
+  assert.equal(res.out.status, 303);
+  assert.match(res.out.headers.location, /^\/settings\?tab=agents&/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("POST /setup/hooks/apply：非法 next 回退 /agents", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const page = await get("/agents", ctx);
+  const csrf = csrfOf(page.res.out.body);
+  const res = fakeResponse();
+  await handlePairRoutes(
+    request("POST", "csrf=" + csrf + "&agentId=claude-code&action=install&next=" + encodeURIComponent("//evil.example"), {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    res,
+    new URL("http://x/setup/hooks/apply"),
+    ctx,
+  );
+  assert.equal(res.out.status, 303);
+  assert.match(res.out.headers.location, /^\/agents\?/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("GET /setup/renew：next 只允许设置中心 app tab", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const allowed = await get("/setup/renew?next=" + encodeURIComponent("/settings?tab=app"), ctx);
+  assert.equal(allowed.res.out.status, 302);
+  assert.equal(allowed.res.out.headers.location, "/settings?tab=app");
+  const denied = await get("/setup/renew?next=" + encodeURIComponent("//evil.example"), ctx);
+  assert.equal(denied.res.out.status, 302);
+  assert.equal(denied.res.out.headers.location, "/setup");
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
 test("缺少表单令牌的跨站 POST 被拒绝", async () => {
   const ws = workspace();
   const ctx = context(ws);

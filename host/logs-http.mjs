@@ -82,6 +82,12 @@ const STYLE = [
   "pre.empty{color:#8b97bd}",
 ].join("");
 
+export const LOGS_STYLE = STYLE + [
+  ".logViewer{display:flex;flex-direction:column;height:440px;min-height:260px;border:1px solid #263054;border-radius:12px;overflow:hidden;background:#0d1326}",
+  ".logViewer .logBar{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #263054;background:#111931;flex:none}",
+  ".logViewer .logBar h2{font-size:13px;margin:0;white-space:nowrap}",
+].join("");
+
 const SCRIPT = [
   "(function(){",
   "var pre=document.getElementById('log');",
@@ -100,26 +106,48 @@ const SCRIPT = [
   "  if(atBottom&&auto)pre.scrollTop=pre.scrollHeight;",
   "}",
   "function tick(){",
-  "  if(!auto)return;",
+  "  if(!auto||document.hidden)return;",
   "  fetch('/logs/data?lines=400',{cache:'no-store'}).then(function(r){return r.json();}).then(render).catch(function(){dot.className='dot off';});",
   "}",
   "toggle.addEventListener('click',function(){auto=!auto;toggle.textContent=auto?'暂停':'继续';if(auto)tick();});",
   "document.getElementById('refresh').addEventListener('click',function(){auto=true;toggle.textContent='暂停';tick();});",
+  "document.addEventListener('visibilitychange',function(){if(!document.hidden)tick();});",
   "tick();setInterval(tick,1500);",
   "})();",
 ].join("");
 
+/** 日志查看器片段：standalone 是整页，inline 给设置中心「重启与日志」用。 */
+export function renderLogViewer({ file, mode } = {}) {
+  const inline = mode === "inline";
+  const body = inline
+    ? [
+      "<div class='logViewer'>",
+      "<div class='logBar'><span id='dot' class='dot'></span><h2>日志</h2>",
+      "<span class='path' id='path'>" + escapeHtml(file) + "</span>",
+      "<button class='btn' id='refresh'>刷新</button>",
+      "<button class='btn' id='toggle'>暂停</button></div>",
+      "<pre id='log' class='empty'>加载中…</pre>",
+      "</div>",
+    ].join("")
+    : [
+      "<header><span id='dot' class='dot'></span><h1>日志</h1>",
+      "<span class='path' id='path'>" + escapeHtml(file) + "</span>",
+      "<button class='btn' id='refresh'>刷新</button>",
+      "<button class='btn' id='toggle'>暂停</button></header>",
+      "<pre id='log' class='empty'>加载中…</pre>",
+    ].join("");
+  return { body, script: "<script>" + SCRIPT + "</script>" };
+}
+
 function page(file) {
+  const viewer = renderLogViewer({ file, mode: "standalone" });
   return [
     "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
     "<meta name='viewport' content='width=device-width, initial-scale=1' />",
     "<title>mo-agent · 日志</title><style>" + STYLE + "</style></head><body>",
-    "<header><span id='dot' class='dot'></span><h1>日志</h1>",
-    "<span class='path' id='path'>" + escapeHtml(file) + "</span>",
-    "<button class='btn' id='refresh'>刷新</button>",
-    "<button class='btn' id='toggle'>暂停</button></header>",
-    "<pre id='log' class='empty'>加载中…</pre>",
-    "<script>" + SCRIPT + "</script></body></html>",
+    viewer.body,
+    viewer.script,
+    "</body></html>",
   ].join("");
 }
 

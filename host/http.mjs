@@ -89,6 +89,7 @@ export function createMoAgentServer(options) {
   const webDir = options.webDir;
   const localToken = options.localToken;
   const pairHandler = options.pairHandler;
+  const settingsHandler = options.settingsHandler || null;
   const apkPath = options.apkPath;
   const logFile = options.logFile;
   const deviceFile = options.deviceFile;
@@ -256,6 +257,31 @@ export function createMoAgentServer(options) {
         if (handled) return;
       }
 
+      // ---- 统一设置中心（仅本机；五个 tab 复用现有设置片段） ----
+      if (settingsHandler && url.pathname === "/settings") {
+        let apkInfo = {};
+        try { apkInfo = JSON.parse(fs.readFileSync(apkPath.replace(/[^/]+$/, "version.json"), "utf8")); } catch (error) { apkInfo = {}; }
+        const handled = await settingsHandler(req, res, url, {
+          pairing: options.pairing,
+          pin: pairingPin(),
+          port: boundPort(),
+          preferredAddress: options.preferredAddress || null,
+          apkExists: !!(apkPath && fs.existsSync(apkPath)),
+          apkSizeText: apkPath && fs.existsSync(apkPath) ? (fs.statSync(apkPath).size / 1048576).toFixed(1) + " MB" : "",
+          apkVersionText: apkInfo.versionCode ? "构建 v" + apkInfo.versionCode + " · " + String(apkInfo.builtAt || "").slice(0, 16).replace("T", " ") : "",
+          apkVersionCode: apkInfo.versionCode || 0,
+          renewPairing,
+          hooksManager,
+          dingtalk: getDingTalk(),
+          dingtalkSetup,
+          onDingTalkReset,
+          localToken,
+          logFile,
+          isLoopback: isLoopbackAddress(req.socket && req.socket.remoteAddress),
+        });
+        if (handled) return;
+      }
+
       // ---- 日志页面（仅本机） ----
       if (logFile) {
         const handled = await handleLogRoutes(req, res, url, { logFile, localToken });
@@ -312,6 +338,14 @@ export function createMoAgentServer(options) {
         if (!payload.sessionTitle && session && session.title) payload.sessionTitle = session.title;
         if (session && session.agentLabel) payload.agentLabel = session.agentLabel;
         const result = await broker.request(payload);
+        return json(res, 200, result);
+      }
+      if (pathname === "/local/voice/reload" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (typeof options.voiceReload !== "function") {
+          return json(res, 503, { ok: false, error: "voice-reload-unavailable" });
+        }
+        const result = await options.voiceReload();
         return json(res, 200, result);
       }
       if (pathname === "/local/voice-test" && req.method === "POST") {

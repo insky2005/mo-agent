@@ -193,6 +193,128 @@ const STYLE = [
   "line-height:1.6;margin:6px 0 0;color:#cdd7f7;white-space:pre-wrap;word-break:break-all}",
 ].join("");
 
+export const PAGE_STYLE = STYLE;
+
+/** 计算配对页/设置页共用的一套二维码状态。fresh=false 时沿用当前码。 */
+function setupState(ctx, url, options) {
+  const address = pickAddress(url.searchParams.get("ip"), ctx);
+  const baseUrl = baseFor(address, ctx.port);
+  const fresh = !options || options.fresh !== false;
+  const issued = fresh ? ctx.pairing.issue() : ctx.pairing.peek();
+  const pairPayload = buildPairPayload(baseUrl, issued.token);
+  const installUrl = baseUrl + "/app.apk" + (ctx.apkVersionCode ? "?v=" + ctx.apkVersionCode : "");
+  const list = candidateAddresses(localIPv4List());
+  return { address, baseUrl, issued, pairPayload, installUrl, list };
+}
+
+function setupPollScript(ctx, closeOnPair) {
+  return [
+    "<script>(function(){",
+    "var base=" + ctx.pairing.status().redeemedCount + ";",
+    "var banner=document.getElementById('pairedBanner');",
+    "var ttlEl=document.getElementById('ttl');",
+    "var stopped=false;",
+    "function closePanel(){",
+    closeOnPair
+      ? "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});}catch(err){}}"
+        + "  try{window.close();}catch(err){}"
+      : "  /* 设置中心里不关闭整个窗口，刷新当前 tab 即可 */",
+    "}",
+    "function tick(){",
+    "  if(stopped)return;",
+    "  fetch('/setup/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){",
+    "    if(!s||!s.ok)return;",
+    "    if(s.redeemedCount>base){",
+    "      stopped=true;",
+    "      if(banner){banner.textContent='" + (closeOnPair ? "✓ 配对成功，正在关闭窗口…" : "✓ 配对成功，正在刷新…") + "';banner.style.display='block';}",
+    closeOnPair ? "      closePanel();" : "",
+    "      setTimeout(function(){location.reload();},1500);",
+    "      return;",
+    "    }",
+    "    if(s.remainingMs<=0){location.reload();return;}",
+    "    var sec=Math.round(s.remainingMs/1000);var m=Math.floor(sec/60);var r2=sec%60;",
+    "    if(ttlEl)ttlEl.textContent=m+':'+(r2<10?'0':'')+r2;",
+    "  }).catch(function(){});",
+    "}",
+    "setInterval(tick,1500);",
+    "})();</script>",
+  ].join("");
+}
+
+function escScriptMarkup() {
+  return [
+    "<script>(function(){",
+    "document.addEventListener('keydown',function(e){",
+    "  if(e.key!=='Escape')return;",
+    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});return;}catch(err){}}",
+    "  try{window.close();}catch(err){}",
+    "});",
+    "})();</script>",
+  ].join("");
+}
+
+/**
+ * 安装与配对内容片段。
+ * mode=standalone：旧 /setup 整页用；mode=settings：/settings?tab=app 用。
+ */
+export function renderSetupSection(ctx, url, options = {}) {
+  const mode = options.mode === "settings" ? "settings" : "standalone";
+  const state = options.state || setupState(ctx, url, { fresh: options.fresh !== false });
+  const address = state.address;
+  const list = state.list;
+  const buttons = list
+    .map((item) => {
+      const href = mode === "settings"
+        ? "/settings?tab=app&ip=" + encodeURIComponent(item.address)
+        : "/setup?ip=" + encodeURIComponent(item.address);
+      return '<a class="ip' + (item.address === address ? " on" : "") + '" href="' + href + '">'
+        + escapeHtml(item.address) + " · " + escapeHtml(item.name) + "</a>";
+    })
+    .join("");
+  const ttlMinutes = Math.round((ctx.pairing.ttlMs || 300000) / 60000);
+  const renewHref = mode === "settings"
+    ? "/setup/renew?next=" + encodeURIComponent("/settings?tab=app")
+    : "/setup/renew";
+
+  const body = [
+    "<div class='grid'>",
+    "<div class='card'><div class='step'>第 1 步</div><h2>装 App</h2>",
+    "<p>用手机相机或扫码工具扫描，下载 APK 后按提示安装（需要允许「安装未知来源应用」）。</p>",
+    "<div class='qr'><img src='/setup/qr/install.svg?ip=" + encodeURIComponent(address) + "' alt='install qr' width='240' height='240' /></div>",
+    "<p style='margin-top:12px;min-height:0'>" + (ctx.apkExists ? "安装包已就绪 · " + ctx.apkSizeText + (ctx.apkVersionText ? " · " + ctx.apkVersionText : "") : "尚未打包 APK，先跑 scripts/build-android.sh") + "</p>",
+    "</div>",
+    "<div class='card'><div class='step b'>第 2 步</div><h2>配对</h2>",
+    "<p>用手机相机直接扫这个码（已装 App 会跳进来自动配对）；也可以在 App 里点「扫码配对」。</p>",
+    "<div class='qr'><img src='/setup/qr/pair.svg?ip=" + encodeURIComponent(address) + "' alt='pair qr' width='240' height='240' /></div>",
+    "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功</p>",
+    "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='" + renewHref + "'>换一个配对码</a></p>",
+    "</div>",
+    "</div>",
+    "<div class='meta'>配对码 <b>" + escapeHtml(ctx.pin) + "</b>（也可以手动输入）",
+    "<div class='ips'>" + buttons + "</div></div>",
+    "<div class='warn'>手机连不上时，多半是二维码里选错了网卡——点上面的地址，切换成和手机同一网段的那个。</div>",
+  ].join("");
+
+  return {
+    title: "App 安装与配对",
+    body,
+    script: setupPollScript(ctx, mode !== "settings") + (mode === "settings" ? "" : escScriptMarkup()),
+  };
+}
+
+function renderSetupPage(res, ctx, url) {
+  const section = renderSetupSection(ctx, url, { mode: "standalone", fresh: true });
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent 设置</title><style>" + STYLE + "</style></head><body>",
+    "<h1>mo-agent</h1><div class='sub'>手机扫两下就能用</div>",
+    section.body,
+    section.script,
+  ].join("");
+  html(res, 200, page);
+}
+
 /** 处理 /pair、/setup、/agents 及其二维码；已处理返回 true。 */
 export async function handlePairRoutes(req, res, url, ctx) {
   const pathname = url.pathname;
@@ -252,7 +374,8 @@ export async function handlePairRoutes(req, res, url, ctx) {
     }
     const summary = summarize(results, action, thrown);
     const query = new URLSearchParams({ msg: summary.msg, bad: summary.bad ? "1" : "0" });
-    redirect(res, "/agents?" + query.toString());
+    const base = safeHooksNext(form.next);
+    redirect(res, base + (base.includes("?") ? "&" : "?") + query.toString());
     return true;
   }
 
@@ -274,13 +397,7 @@ export async function handlePairRoutes(req, res, url, ctx) {
     return true;
   }
 
-  const address = pickAddress(url.searchParams.get("ip"), ctx);
-  const baseUrl = baseFor(address, ctx.port);
-  // 打开/刷新设置页就换一张新码：页面上的码永远是可用的
-  const issued = pathname === "/setup" ? ctx.pairing.issue() : ctx.pairing.peek();
-  const pairPayload = buildPairPayload(baseUrl, issued.token);
-  // 带版本参数：每个构建一个独立 URL，避免手机下载器复用同名旧包
-  const installUrl = baseUrl + "/app.apk" + (ctx.apkVersionCode ? "?v=" + ctx.apkVersionCode : "");
+  const state = setupState(ctx, url, { fresh: pathname === "/setup" });
 
   if (pathname === "/setup/status") {
     // 注意：必须返回 true。json() 返回 undefined，
@@ -290,88 +407,27 @@ export async function handlePairRoutes(req, res, url, ctx) {
   }
   if (pathname === "/setup/renew") {
     if (typeof ctx.renewPairing === "function") ctx.renewPairing(); else ctx.pairing.issue();
-    res.writeHead(302, { location: "/setup", "cache-control": "no-store" });
+    const next = safeRenewNext(url.searchParams.get("next"));
+    res.writeHead(302, { location: next, "cache-control": "no-store" });
     res.end();
     return true;
   }
 
-  if (pathname === "/pair/qr.svg" || pathname === "/setup/qr/pair.svg") return svg(res, pairPayload).then(() => true);
-  if (pathname === "/setup/qr/install.svg") return svg(res, installUrl).then(() => true);
+  if (pathname === "/pair/qr.svg" || pathname === "/setup/qr/pair.svg") return svg(res, state.pairPayload).then(() => true);
+  if (pathname === "/setup/qr/install.svg") return svg(res, state.installUrl).then(() => true);
 
-  const list = candidateAddresses(localIPv4List());
-  const buttons = list
-    .map((item) => '<a class="ip' + (item.address === address ? " on" : "") + '" href="/setup?ip=' + encodeURIComponent(item.address) + '">' + escapeHtml(item.address) + " · " + escapeHtml(item.name) + "</a>")
-    .join("");
-  const ttlMinutes = Math.round((ctx.pairing.ttlMs || 300000) / 60000);
-
-  // 配对成功 / 快过期时页面自己换新码，不依赖用户手动刷新；
-  // 配对成功后直接把这个设置窗口关掉（桌面端），浏览器里则退化成刷新出新码。
-  const pollScript = [
-    "<script>(function(){",
-    "var base=" + ctx.pairing.status().redeemedCount + ";",
-    "var banner=document.getElementById('pairedBanner');",
-    "var ttlEl=document.getElementById('ttl');",
-    "var stopped=false;",
-    "function closePanel(){",
-    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});}catch(err){}}",
-    "  try{window.close();}catch(err){}",
-    "}",
-    "function tick(){",
-    "  if(stopped)return;",
-    "  fetch('/setup/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){",
-    "    if(!s||!s.ok)return;",
-    "    if(s.redeemedCount>base){",
-    "      stopped=true;",
-    "      if(banner){banner.textContent='✓ 配对成功，正在关闭窗口…';banner.style.display='block';}",
-    "      closePanel();",
-    "      setTimeout(function(){location.reload();},1500);",
-    "      return;",
-    "    }",
-    "    if(s.remainingMs<=0){location.reload();return;}",
-    "    var sec=Math.round(s.remainingMs/1000);var m=Math.floor(sec/60);var r2=sec%60;",
-    "    if(ttlEl)ttlEl.textContent=m+':'+(r2<10?'0':'')+r2;",
-    "  }).catch(function(){});",
-    "}",
-    "setInterval(tick,1500);",
-    "})();</script>"
-  ].join("");
-
-  const escScript = [
-    "<script>(function(){",
-    "document.addEventListener('keydown',function(e){",
-    "  if(e.key!=='Escape')return;",
-    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});return;}catch(err){}}",
-    "  try{window.close();}catch(err){}",
-    "});",
-    "})();</script>",
-  ].join("");
-  const page = [
-    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
-    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
-    "<title>mo-agent 设置</title><style>" + STYLE + "</style></head><body>",
-    "<h1>mo-agent</h1><div class='sub'>手机扫两下就能用</div>",
-    "<div class='grid'>",
-    "<div class='card'><div class='step'>第 1 步</div><h2>装 App</h2>",
-    "<p>用手机相机或扫码工具扫描，下载 APK 后按提示安装（需要允许「安装未知来源应用」）。</p>",
-    "<div class='qr'><img src='/setup/qr/install.svg?ip=" + encodeURIComponent(address) + "' alt='install qr' width='240' height='240' /></div>",
-    "<p style='margin-top:12px;min-height:0'>" + (ctx.apkExists ? "安装包已就绪 · " + ctx.apkSizeText + (ctx.apkVersionText ? " · " + ctx.apkVersionText : "") : "尚未打包 APK，先跑 scripts/build-android.sh") + "</p>",
-    "</div>",
-    "<div class='card'><div class='step b'>第 2 步</div><h2>配对</h2>",
-    "<p>用手机相机直接扫这个码（已装 App 会跳进来自动配对）；也可以在 App 里点「扫码配对」。</p>",
-    "<div class='qr'><img src='/setup/qr/pair.svg?ip=" + encodeURIComponent(address) + "' alt='pair qr' width='240' height='240' /></div>",
-    "<p id='pairedBanner' style='display:none;color:#35d19a;font-weight:600;margin-top:10px'>✓ 配对成功，正在关闭窗口…</p>",
-    "<p style='margin-top:12px;min-height:0'>有效期 <b id='ttl'>" + ttlMinutes + ":00</b> · 用一次即失效 · <a href='/setup/renew'>换一个配对码</a></p>",
-    "</div>",
-    "</div>",
-    "<div class='meta'>配对码 <b>" + escapeHtml(ctx.pin) + "</b>（也可以手动输入）",
-    "<div class='ips'>" + buttons + "</div></div>",
-    "<div class='warn'>手机连不上时，多半是二维码里选错了网卡——点上面的地址，切换成和手机同一网段的那个。</div>",
-    pollScript,
-    escScript,
-  ].join("");
-
-  html(res, 200, page);
+  renderSetupPage(res, ctx, url);
   return true;
+}
+
+/** 换配对码后的落点只允许两个固定页面，避免开放重定向。 */
+function safeRenewNext(value) {
+  return value === "/settings?tab=app" ? value : "/setup";
+}
+
+/** hook 操作的 303 落点同样只允许两个固定页面。 */
+function safeHooksNext(value) {
+  return value === "/settings?tab=agents" ? value : "/agents";
 }
 
 function handleDingTalkRoutes(req, res, url, ctx) {
@@ -381,7 +437,7 @@ function handleDingTalkRoutes(req, res, url, ctx) {
       html(res, 405, "method not allowed");
       return true;
     }
-    renderDingTalkPage(res);
+    renderDingTalkPage(res, ctx);
     return true;
   }
 
@@ -467,7 +523,7 @@ function handleDingTalkRoutes(req, res, url, ctx) {
   return true;
 }
 
-function renderDingTalkPage(res) {
+export function renderDingTalkSection(ctx, mode = "standalone") {
   const script = [
     "<script>(function(){",
     "function $(id){return document.getElementById(id)}",
@@ -576,14 +632,11 @@ function renderDingTalkPage(res) {
     "};",
     "$('manualSave').onclick=function(){post('/setup/dingtalk/manual',{clientId:$('manualId').value.trim(),clientSecret:$('manualSecret').value.trim(),robotCode:$('manualRobot').value.trim()}).then(function(){refresh()}).catch(function(err){setText('diag','保存失败：'+(err&&err.message||'未知错误'));});};",
     "refresh().then(function(s){var bot=(s&&s.bot)||{},on=(s&&s.onboarding)||{};if(!bot.configured&&on.state==='idle'){startScan();}});",
+    "window.addEventListener('pagehide',function(){try{fetch('/setup/dingtalk/onboard/cancel',{method:'POST',headers:{'x-mo-agent-local':'1'},keepalive:true});}catch(e){}});",
     "setInterval(refresh,2000);",
     "})();</script>",
   ].join("");
-  const page = [
-    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
-    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
-    "<title>mo-agent · 钉钉机器人绑定</title><style>" + STYLE + "</style></head><body>",
-    "<h1>钉钉机器人绑定</h1><div class='sub'>不安装 App，也能在钉钉里接收审批、回复批准或拒绝。</div>",
+  const body = [
     "<div class='grid' id='stepGrid'>",
     "<div class='card' id='createCard'>",
     "<div class='step'>第 1 步 · 创建机器人</div>",
@@ -628,8 +681,8 @@ function renderDingTalkPage(res) {
     "<button class='ip' id='unbind' type='button'>解绑并清除配置</button>",
     "<p id='unbindHint' style='color:#8b97bd;font-size:11px'>解绑会同时清除本机的 Client ID/Secret，之后需要重新扫码创建。</p>",
     "</div>",
-    "<div class='panel' style='max-width:840px;width:100%;text-align:left'>",
-    "<h2 style='margin-top:0'>操作说明</h2>",
+    "<details class='panel' style='max-width:840px;width:100%;text-align:left'>",
+    "<summary style='cursor:pointer;color:#e7ecff;font-size:14px;font-weight:700'>操作说明</summary>",
     "<h3 style='font-size:13px;color:#e7ecff'>创建机器人</h3>",
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>在钉钉里创建一个企业内部应用和机器人，用来接收审批消息。用手机钉钉扫码，按提示确认创建即可。若一直失败，可展开左侧「手动填写已有应用」，粘贴 Client ID / Client Secret。</p>",
     "<h3 style='font-size:13px;color:#e7ecff'>配对</h3>",
@@ -637,8 +690,21 @@ function renderDingTalkPage(res) {
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收到审批时：回复「A A3F2」表示同意，回复「D A3F2」表示拒绝（A3F2 是审批消息里的短码）。</p>",
     "<h3 style='font-size:13px;color:#e7ecff'>常见问题</h3>",
     "<p style='font-size:12.5px;color:#8b97bd;line-height:1.8'>收不到审批：检查电脑是否开机、mo-agent 是否运行、钉钉是否免打扰、绑定账号是否当前登录账号。解绑后需要重新配对。</p>",
-    "</div>",
-    script,
+    "</details>",
+  ].join("");
+
+  return { title: "钉钉机器人", body, script };
+}
+
+function renderDingTalkPage(res, ctx) {
+  const section = renderDingTalkSection(ctx, "standalone");
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent · 钉钉机器人绑定</title><style>" + STYLE + "</style></head><body>",
+    "<h1>钉钉机器人绑定</h1><div class='sub'>不安装 App，也能在钉钉里接收审批、回复批准或拒绝。</div>",
+    section.body,
+    section.script,
   ].join("");
   html(res, 200, page);
 }
@@ -674,7 +740,7 @@ function configRow(event) {
     + "</div>";
 }
 
-function renderAgentRow(item, canWrite) {
+function renderAgentRow(item, canWrite, nextPath) {
   const supported = !!item.supported;
   const badge = supported
     ? statusBadge(item)
@@ -715,6 +781,7 @@ function renderAgentRow(item, canWrite) {
       + "<form method='post' action='/setup/hooks/apply'>"
       + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
       + "<input type='hidden' name='agentId' value='" + escapeHtml(item.id) + "' />"
+      + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
       + "<input type='hidden' name='action' value='install' />"
       + "<button class='btn" + (installed && !item.outdated ? " ghost" : "") + "' type='submit'"
       + (item.runnerMissing ? " disabled" : "") + ">" + label + "</button>"
@@ -723,6 +790,7 @@ function renderAgentRow(item, canWrite) {
         ? "<form method='post' action='/setup/hooks/apply' onsubmit=\"return confirm('确定要移除 " + escapeHtml(item.label) + " 的 mo-agent hook 吗？其它配置会保留。');\">"
           + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
           + "<input type='hidden' name='agentId' value='" + escapeHtml(item.id) + "' />"
+          + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
           + "<input type='hidden' name='action' value='uninstall' />"
           + "<button class='btn danger' type='submit'>移除</button>"
           + "</form>"
@@ -732,7 +800,7 @@ function renderAgentRow(item, canWrite) {
   return "<div class='agent'><div class='agent-main'>" + title + detail + "</div>" + actions + "</div>";
 }
 
-function renderAgentsPage(res, url, ctx) {
+export function renderAgentsSection(ctx, url, mode = "standalone") {
   const agents = ctx.hooksManager ? ctx.hooksManager.status() : [];
   // 只列当前启用的 Agent；未启用的档案不算「目前支持」。
   const visible = agents.filter((item) => item.enabled !== false);
@@ -740,26 +808,19 @@ function renderAgentsPage(res, url, ctx) {
   visible.sort((a, b) => Number(!!b.supported) - Number(!!a.supported));
   const configurable = visible.filter((item) => item.supported);
   const ready = configurable.filter((item) => item.installed && !item.outdated && !item.error);
-  // 鉴权在 handlePairRoutes 入口完成：能走到这里的都是本机 + 已授权请求。
+  // 鉴权在 handlePairRoutes / handleSettingsRoutes 入口完成：能走到这里的都是本机 + 已授权请求。
   const canWrite = true;
   const msg = url.searchParams.get("msg") || "";
   const bad = url.searchParams.get("bad") === "1";
-  const escScript = [
-    "<script>(function(){",
-    "document.addEventListener('keydown',function(e){",
-    "  if(e.key!=='Escape')return;",
-    "  if(window.__electrobunSendToHost){try{window.__electrobunSendToHost({type:'panel-close'});return;}catch(err){}}",
-    "  try{window.close();}catch(err){}",
-    "});",
-    "})();</script>",
-  ].join("");
+  const nextPath = mode === "settings" ? "/settings?tab=agents" : "/agents";
 
-  const rows = visible.map((item) => renderAgentRow(item, canWrite)).join("");
+  const rows = visible.map((item) => renderAgentRow(item, canWrite, nextPath)).join("");
 
   const topAction = configurable.length
     ? "<form method='post' action='/setup/hooks/apply'>"
       + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
       + "<input type='hidden' name='agentId' value='all' />"
+      + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
       + "<input type='hidden' name='action' value='install' />"
       + "<button class='btn' type='submit'>" + (ready.length === configurable.length ? "全部重新写入" : "一键配置全部") + "</button>"
       + "</form>"
@@ -775,11 +836,7 @@ function renderAgentsPage(res, url, ctx) {
     ? "进度：已配置 " + ready.length + " / " + configurable.length + "。"
     : "当前没有需要 hook 配置的 Agent。";
 
-  const page = [
-    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
-    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
-    "<title>mo-agent · 一键配置</title><style>" + STYLE + "</style></head><body>",
-    "<h1>一键配置</h1><div class='sub'>所有已启用的 Agent 都在这里</div>",
+  const body = [
     banner,
     unavailable,
     "<div class='panel'>",
@@ -792,8 +849,21 @@ function renderAgentsPage(res, url, ctx) {
     "<div class='note'>" + progress
       + "设置文件损坏（不是合法 JSON）时会拒绝写入，不会覆盖你的原文件。</div>",
     "</div>",
+  ].join("");
+
+  return { title: "Agent 配置", body, script: mode === "settings" ? "" : escScriptMarkup() };
+}
+
+function renderAgentsPage(res, url, ctx) {
+  const section = renderAgentsSection(ctx, url, "standalone");
+  const page = [
+    "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8' />",
+    "<meta name='viewport' content='width=device-width, initial-scale=1' />",
+    "<title>mo-agent · 一键配置</title><style>" + STYLE + "</style></head><body>",
+    "<h1>一键配置</h1><div class='sub'>所有已启用的 Agent 都在这里</div>",
+    section.body,
     "<div class='meta'><a href='/setup'>← 设置（安装与配对）</a></div>",
-    escScript,
+    section.script,
   ].join("");
 
   html(res, 200, page);
