@@ -131,6 +131,17 @@ test("MO_AGENT_CONFIG 改配置文件位置", () => {
   assert.equal(fs.existsSync(ws.file), false);
 });
 
+test("memoryPath 支持 ~/ 展开", () => {
+  const ws = workspace();
+  const result = runJson(ws, ["config", "set", "memoryPath", "~/my-memory"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.parsed.value, path.join(ws.home, "my-memory"));
+  assert.equal(JSON.parse(fs.readFileSync(ws.file, "utf8")).memoryPath, path.join(ws.home, "my-memory"));
+
+  const get = runJson(ws, ["config", "get", "memoryPath"]);
+  assert.equal(get.parsed.value, path.join(ws.home, "my-memory"));
+});
+
 test("未知子命令 → E_USAGE", () => {
   const ws = workspace();
   const result = run(ws, ["config", "nope"]);

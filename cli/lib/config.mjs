@@ -8,6 +8,7 @@
  *   DEFAULTS < config.json < 环境变量（命令行参数只对 daemon 有意义，见 host/config.mjs）
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { readJsonSafe, writeJsonAtomic } from "./fsx.mjs";
@@ -21,9 +22,17 @@ function parseText(value) {
   return { ok: true, value: text };
 }
 
+/** 展开 ~ / ~/xxx；其它原样返回 */
+export function expandHomePath(value) {
+  const text = String(value ?? "").trim();
+  if (text === "~") return os.homedir();
+  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
+  return text;
+}
+
 function parsePath(value) {
   // 空字符串 = 用默认目录，允许
-  return { ok: true, value: String(value ?? "").trim() };
+  return { ok: true, value: expandHomePath(value) };
 }
 
 function parsePort(value) {

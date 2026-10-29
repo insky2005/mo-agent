@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
@@ -12,6 +11,7 @@ import {
   configFile,
   configKey,
   effectiveConfig,
+  expandHomePath,
   readGlobalConfig,
   writeGlobalConfig,
 } from "../lib/config.mjs";
@@ -105,18 +105,11 @@ async function chooseWorker(installed, prompter) {
   return Number.isInteger(pick) && pick >= 1 && pick <= installed.length ? installed[pick - 1] : installed[0];
 }
 
-function expandPath(input) {
-  const text = String(input || "").trim();
-  if (text === "~") return os.homedir();
-  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
-  return text;
-}
-
 async function chooseRoot(ctx, fallback) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const answer = await ctx.prompter.ask("数据目录根目录（回车=" + fallback + "，可输入其它路径，q 跳过）：");
     if (answer.toLowerCase() === "q") return null;
-    const dir = path.resolve(expandPath(answer || fallback));
+    const dir = path.resolve(expandHomePath(answer || fallback));
     if (fs.existsSync(dir) && !fs.statSync(dir).isDirectory()) {
       process.stderr.write("[W_HOME] 不是目录：" + dir + "\n");
       continue;
@@ -511,7 +504,7 @@ async function stepMcp(ctx) {
         ctx.choices.mcpSkipped = true;
         return skipped("已跳过 MCP 配置");
       }
-      target = path.resolve(expandPath(answer || fallback));
+      target = path.resolve(expandHomePath(answer || fallback));
     } else {
       process.stdout.write("找到 MCP 配置：" + target + "\n将合并 mcpServers.mo-agent（写前备份）。\n");
       const answer = (await ctx.prompter.ask("写入吗？(y/N) ")).toLowerCase();

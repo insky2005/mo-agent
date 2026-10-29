@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { effectiveConfig } from "./config.mjs";
+import { effectiveConfig, expandHomePath } from "./config.mjs";
 import { moHome } from "./paths.mjs";
 import { parseKnowledgeFile } from "../../core/knowledge/entry.mjs";
 import { recall } from "../../core/knowledge/recall.mjs";
@@ -30,10 +30,10 @@ export function defaultMemoryDir(home) {
 
 export function memoryDir(home, env = process.env) {
   if (env.MO_AGENT_MEMORY) {
-    return { dir: path.resolve(env.MO_AGENT_MEMORY), explicit: true, source: "env" };
+    return { dir: path.resolve(expandHomePath(env.MO_AGENT_MEMORY)), explicit: true, source: "env" };
   }
   if (env.MO_AGENT_KNOWLEDGE) {
-    return { dir: path.resolve(env.MO_AGENT_KNOWLEDGE), explicit: true, source: "legacy-env" };
+    return { dir: path.resolve(expandHomePath(env.MO_AGENT_KNOWLEDGE)), explicit: true, source: "legacy-env" };
   }
 
   const configured = effectiveConfig({ home, env }).memoryPath.value;
