@@ -73,6 +73,7 @@ docs/
 | [desktop-cross-platform.md](plans/desktop-cross-platform.md) | 进行中（Linux / Windows） |
 | [settings-center.md](plans/settings-center.md) | 已实现（设置中心） |
 | [cli-cross-platform.md](plans/cli-cross-platform.md) | ⏳ 未实现：Windows/Linux 差距与改造计划 |
+| [setup-config-prompt.md](plans/setup-config-prompt.md) | 已实现（`mo config` / `mo setup`，见 spec §12.8） |
 
 ### research/ — 预研
 
