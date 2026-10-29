@@ -74,6 +74,7 @@ docs/
 | [settings-center.md](plans/settings-center.md) | 已实现（设置中心） |
 | [cli-cross-platform.md](plans/cli-cross-platform.md) | ⏳ 未实现：Windows/Linux 差距与改造计划 |
 | [setup-config-prompt.md](plans/setup-config-prompt.md) | 已实现（`mo config` / `mo setup`，见 spec §12.8） |
+| [cli-cross-platform-verify.md](plans/cli-cross-platform-verify.md) | 验收备忘：Linux Docker / Windows 验证步骤 |
 
 ### research/ — 预研
 

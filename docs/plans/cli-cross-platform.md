@@ -61,6 +61,8 @@ runner 增加 `resolveShell(platform)`：POSIX 用 `/bin/sh`，Windows 用 `powe
 
 SKILL.md 的安装段按平台分支：Windows 给 `irm ... | iex` 或下载 `.ps1` 后执行；技能安装路径继续用 `os.homedir()`，即 `C:\Users\<user>\.agents\skills\mo`。
 
+验证步骤与 Docker 方案见 [cli-cross-platform-verify.md](cli-cross-platform-verify.md)。
+
 ## 3. 验收
 
 Windows 10/11 x64 上：
