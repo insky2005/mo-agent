@@ -24,7 +24,8 @@ test("mo help 给主线与分组，不是一长串命令", () => {
   const result = run(["help"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /第一次用/);
-  assert.match(result.stdout, /一次派活/);
+  assert.match(result.stdout, /一个新项目/);
+  assert.match(result.stdout, /一个新任务/);
   assert.match(result.stdout, /mo task approve <id>/);
   assert.match(result.stdout, /mo help <组>/);
   assert.match(result.stdout, /全部子命令/);
