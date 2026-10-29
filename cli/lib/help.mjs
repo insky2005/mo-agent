@@ -125,7 +125,7 @@ export const GROUPS = [
     blurb: "幂等：已存在的步骤跳过；不碰仓库、不启动 daemon",
     subs: [
       ["", "交互式装配；非 TTY 等同 --yes", "可改根目录与全局配置，选执行者/终端/技能/MCP"],
-      ["--dry-run", "只报告；逐步预览，最后确认是否执行", ""],
+      ["--dry-run", "只报告；逐步预览，绝不写文件", ""],
       ["--only 步骤 / --skip 步骤", "只做 / 不做某些步骤", "dirs config memory worker terminal skill mcp"],
       ["--json", "每步的 status 与汇总", ""],
     ],
@@ -219,7 +219,7 @@ const OPTIONS = {
   ],
   setup: [
     ["--yes", "不问，取默认（非 TTY 也是这个行为）"],
-    ["--dry-run", "只检查、只报告，不写文件；交互时最后可确认执行"],
+    ["--dry-run", "只检查、只报告，不写任何文件（不会执行）"],
     ["--only memory,mcp", "只跑这些步骤"],
     ["--skip skill", "跳过这些步骤"],
     ["--json", "机器可读：每步 status / doctor / remaining"],

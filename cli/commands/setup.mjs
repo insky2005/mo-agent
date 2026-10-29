@@ -37,8 +37,8 @@ import { doctorReport } from "./doctor.mjs";
  * <repo>/.mo-agent/、不改 AGENTS.md），也不启动 daemon。
  *
  * 交互（TTY + 没给 --yes）时可以改数据目录根目录、逐键改全局配置、选默认
- * 执行者/终端/技能目标，并确认 MCP；--dry-run 交互时先走一遍这些选择，
- * 最后问"按这个计划真实执行吗"。
+ * 执行者/终端/技能目标，并确认 MCP。--dry-run 只是预演：交互选择照常走，
+ * 但任何回答都不会写文件。
  */
 
 const STATUS_ICON = { created: "✓", skipped: "⏭", planned: "·", warn: "⚠", failed: "✗" };
@@ -557,7 +557,7 @@ export async function setupCommand(ctx, args) {
   const explicitYes = has(options, "yes");
   // --json 是自动化出口：不弹问题，免得提示混进 JSON
   const interactive = Boolean(process.stdin.isTTY) && !explicitYes && !isJson(options);
-  // 交互 dry-run：逐步展示 + 最后确认是否执行
+  // 交互 dry-run：逐步展示，只预演，不执行
   const paged = interactive && dryRun;
 
   const runCtx = {
@@ -573,7 +573,6 @@ export async function setupCommand(ctx, args) {
   const selected = STEPS.filter((step) => (only.length ? only.includes(step.id) : true) && !skip.includes(step.id));
 
   let results = [];
-  let applied = false;
   try {
     if (paged) {
       process.stdout.write(
@@ -581,13 +580,6 @@ export async function setupCommand(ctx, args) {
       );
       await runCtx.prompter.ask("");
       results = await runPaged(runCtx, selected, runCtx.prompter);
-      if (results.some((entry) => entry.status === "planned")) {
-        const answer = (await runCtx.prompter.ask("\n按这个计划真实执行吗？(y/N) ")).toLowerCase();
-        if (answer === "y" || answer === "yes") {
-          results = await runSteps({ ...runCtx, dryRun: false, interactive: false }, selected);
-          applied = true;
-        }
-      }
     } else {
       results = await runSteps(runCtx, selected);
     }
@@ -595,7 +587,6 @@ export async function setupCommand(ctx, args) {
     if (runCtx.prompter) runCtx.prompter.close();
   }
 
-  const effectiveDryRun = dryRun && !applied;
   const report = doctorReport(ctx.cwd, { home: runCtx.home });
   const remaining = remainingActions(report);
   const ok = !results.some((entry) => entry.status === "warn" || entry.status === "failed");
@@ -604,8 +595,7 @@ export async function setupCommand(ctx, args) {
     ok,
     home: runCtx.home,
     homeIsDefault,
-    dryRun: effectiveDryRun,
-    applied,
+    dryRun,
     steps: results,
     doctor: { ok: report.ok, checks: report.checks },
     remaining,
@@ -617,13 +607,8 @@ export async function setupCommand(ctx, args) {
       : ["", "数据目录不在默认位置：" + runCtx.home, "  其它 mo 命令要加 MO_AGENT_HOME=" + runCtx.home + " 才会用它"];
 
   if (paged) {
-    if (applied) {
-      const lines = ["\n已按计划执行："];
-      for (const entry of results) lines.push(...entryLines(entry));
-      process.stdout.write(lines.join("\n") + "\n");
-    } else {
-      process.stdout.write("\n（没有执行任何操作）\n");
-    }
+    process.stdout.write("\n（--dry-run：没有写任何文件）\n");
+    process.stdout.write("要真正执行：去掉 --dry-run 再跑一次 mo setup\n");
     process.stdout.write("\n" + [...summaryLines(report, remaining), ...homeNote()].join("\n") + "\n");
     return ok ? 0 : 1;
   }
