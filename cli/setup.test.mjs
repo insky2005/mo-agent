@@ -64,7 +64,7 @@ test("干净 home：一次装配建好目录、配置、记忆、默认执行者
   assert.equal(result.parsed.ok, true);
 
   assert.deepEqual(result.parsed.steps.map((step) => step.id), ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"]);
-  for (const id of ["dirs", "config", "memory", "worker", "terminal", "skill"]) {
+  for (const id of ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"]) {
     assert.equal(statusOf(result.parsed, id), "created", id + " 应该是 created：" + JSON.stringify(result.parsed.steps.find((s) => s.id === id)));
   }
 
@@ -81,6 +81,7 @@ test("干净 home：一次装配建好目录、配置、记忆、默认执行者
   assert.equal(JSON.parse(fs.readFileSync(path.join(ws.home, "workers.json"), "utf8")).default, "claude");
   assert.equal(JSON.parse(fs.readFileSync(path.join(ws.home, "terminals.json"), "utf8")).default, "iterm");
   assert.equal(fs.existsSync(path.join(ws.home, ".agents", "skills", "mo", "SKILL.md")), true);
+  assert.equal(fs.existsSync(path.join(ws.home, "mcp.json")), true);
 });
 
 test("连跑两次：第二次每步都是 skipped，且不重复写", () => {
@@ -92,6 +93,10 @@ test("连跑两次：第二次每步都是 skipped，且不重复写", () => {
     second.parsed.steps.map((step) => step.status),
     ["skipped", "skipped", "skipped", "skipped", "skipped", "skipped", "skipped"],
   );
+
+  // 已装技能要说明是哪份、装在哪
+  const skill = second.parsed.steps.find((step) => step.id === "skill");
+  assert.ok(skill.lines.some((line) => line.endsWith(path.join("skills", "mo", "SKILL.md"))), "要列出技能文件路径");
 });
 
 test("--dry-run 不写任何文件", () => {
@@ -197,7 +202,7 @@ test("MCP：找到配置文件就合并并备份，第二次跳过", () => {
   assert.match(second.parsed.steps[0].message, /已有 mo 条目/);
 });
 
-test("MCP：已有 mo 条目时不重复写；没有配置文件时跳过而不是猜路径", () => {
+test("MCP：已有 mo 条目时不重复写；没有配置时写 mo 自己的 mcp.json", () => {
   const ws = workspace();
   const target = path.join(ws.home, ".claude.json");
   fs.writeFileSync(target, JSON.stringify({ mcpServers: { mo: { command: "mo" } } }), "utf8");
@@ -206,8 +211,14 @@ test("MCP：已有 mo 条目时不重复写；没有配置文件时跳过而不�
 
   const empty = workspace();
   const none = runJson(empty, ["setup", "--yes", "--only", "mcp"]);
-  assert.equal(statusOf(none.parsed, "mcp"), "skipped");
-  assert.match(none.parsed.steps[0].message, /没有找到 MCP 配置文件/);
+  assert.equal(statusOf(none.parsed, "mcp"), "created");
+  const fallback = JSON.parse(fs.readFileSync(path.join(empty.home, "mcp.json"), "utf8"));
+  assert.equal(fallback.mcpServers["mo-agent"].args.includes("mcp"), true);
+  assert.match(none.parsed.steps[0].message, /已写入 MCP 配置/);
+
+  const again = runJson(empty, ["setup", "--yes", "--only", "mcp"]);
+  assert.equal(statusOf(again.parsed, "mcp"), "skipped");
+  assert.match(again.parsed.steps[0].message, /已有 mo 条目/);
 });
 
 test("没有可用执行者时给 ⚠，而不是假装装好了", () => {

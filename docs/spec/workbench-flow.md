@@ -673,13 +673,13 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 | 3 | 记忆骨架 | `memory/README.md` 等 | 只补 `README.md`、`preferences.md`、`pitfalls/_template.md`、`decisions/_template.md` |
 | 4 | 默认执行者 | `defaultWorkerName()` 非空 | 列已安装的内置 worker，`--yes` 取第一个，交互时让选 |
 | 5 | 默认终端 | `currentTerminal()` 非空 | 探测 iTerm → Terminal.app；都没有就设 `print` 并 `⚠` |
-| 6 | 技能 | 目标目录里已有 `mo/SKILL.md` | 调 `mo skill install` 的写入函数；非 TTY 且没给 `--yes` 时跳过并说明 |
-| 7 | MCP | 已知配置文件里已有 `mo` / `mo-agent` 条目 | 合并 `mcpServers`（写前备份）；找不到配置就跳过，不猜路径 |
+| 6 | 技能 | 目标目录里已有 `mo/SKILL.md` | 已装时交互问是否重装（非交互只报告目标与文件路径）；否则调 `mo skill install` 的写入函数；非 TTY 且没给 `--yes` 时跳过并说明 |
+| 7 | MCP | 已知配置文件里已有 `mo` / `mo-agent` 条目 | 合并 `mcpServers`（写前备份）；找不到已知配置时交互问写哪，非交互写 `~/.mo-agent/mcp.json` 并提示 `mo agent add --mcp`，不猜别人的配置 |
 | 8 | 汇总 | — | 跑 `doctor` 检查项，打印剩余动作 |
 
 选项：`--yes`（不问）、`--dry-run`（不写任何文件）、`--only dirs,memory`、`--skip skill`、`--json`（每步 `status`）。退出码：有 `⚠` / `✗` 为 1，否则 0。
 
-交互（TTY 且没给 `--yes`）：可以改数据目录根目录（默认 `~/.mo-agent`，支持输入其它路径）、逐键改全局配置、选默认执行者/终端/技能目标，并确认是否写 MCP；改到非默认根目录时结尾提示其它命令需 `MO_AGENT_HOME`。`--dry-run` 交互时按步骤分页展示：需要你选/填的步骤做完直接进下一步，只有纯展示的步骤（如记忆骨架）才停「按 Enter 继续...」；最后问「按这个计划真实执行吗 (y/N)」，答 y 才用同一批选择真实落地；`--json` 不弹任何问题。
+交互（TTY 且没给 `--yes`）：可以改数据目录根目录（默认 `~/.mo-agent`，支持输入其它路径）、逐键改全局配置、选默认执行者/终端/技能目标、在技能已装时选择是否重装、在找不到 MCP 配置时指定写入路径；改到非默认根目录时结尾提示其它命令需 `MO_AGENT_HOME`。`--dry-run` 交互时按步骤分页展示：需要你选/填的步骤做完直接进下一步，只有纯展示的步骤（如记忆骨架）才停「按 Enter 继续...」；最后问「按这个计划真实执行吗 (y/N)」，答 y 才用同一批选择真实落地；`--json` 不弹任何问题。
 
 每步在人类可读输出里都会列出真实操作与具体路径（目录、文件、`mo worker use` / `mo terminal use` 的目标、MCP 服务名与备份文件）；`--dry-run` 只是把这些操作"不落地"，输出格式与真实执行一致。
 

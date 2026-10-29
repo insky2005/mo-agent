@@ -321,9 +321,33 @@ async function stepTerminal(ctx) {
 }
 
 async function stepSkill(ctx) {
-  const installed = allTargets().filter((target) => target.installed);
-  if (installed.length) return skipped("技能已装：" + installed.map((target) => target.name).join(" / "));
   if (ctx.choices.skillSkipped) return skipped("已跳过技能");
+
+  const installed = allTargets().filter((target) => target.installed);
+  let reinstall = Boolean(ctx.choices.skillReinstall);
+
+  if (installed.length && !reinstall) {
+    const names = installed.map((target) => target.name).join(" / ");
+    const details = installed.map((target) => target.name + " → " + path.join(target.dir, SKILL_NAME, "SKILL.md"));
+
+    // 已装就问要不要重装；非交互只报告具体装在哪
+    if (ctx.interactive && !ctx.choices.skillAsked) {
+      ctx.choices.skillAsked = true;
+      ctx.asked = true;
+      const answer = (
+        await ctx.prompter.ask("技能 " + SKILL_NAME + " 已装在 " + names + "（重装会覆盖）；要重装吗？(y/N) ")
+      ).toLowerCase();
+      if (answer === "y" || answer === "yes") {
+        reinstall = true;
+        ctx.choices.skillReinstall = true;
+        ctx.choices.skillTargets = installed;
+      } else {
+        return result("skipped", "技能已装：" + names, { targets: installed.map((target) => target.name) }, details);
+      }
+    } else {
+      return result("skipped", "技能已装：" + names, { targets: installed.map((target) => target.name) }, details);
+    }
+  }
 
   let chosen;
   if (ctx.choices.skillTargets) {
@@ -340,26 +364,30 @@ async function stepSkill(ctx) {
     chosen = resolveTargets([]);
   }
 
+  const label = reinstall ? "重装" : "安装";
   const destinations = chosen.map((target) => path.join(target.dir, SKILL_NAME, "SKILL.md"));
-  if (ctx.dryRun) return planned("将安装到 " + chosen.length + " 个目标", { targets: chosen.map((target) => target.name) }, destinations);
-  if (!ctx.explicitYes && !ctx.interactive && !ctx.choices.skillTargets) {
+  if (ctx.dryRun) return planned("将" + label + "技能到 " + chosen.length + " 个目标", { targets: chosen.map((target) => target.name) }, destinations);
+  if (!ctx.explicitYes && !ctx.interactive && !ctx.choices.skillTargets && !reinstall) {
     return skipped("非交互且未加 --yes；手动：mo skill install");
   }
   const written = installSkillTargets(chosen);
-  return created("已装技能 " + written.length + " 处", { written: written.map((item) => item.path) }, written.map((item) => item.path));
+  return created("已" + label + "技能 " + written.length + " 处", { written: written.map((item) => item.path) }, written.map((item) => item.path));
 }
 
 /** 只认已知路径；找不到就跳过，不猜别人的配置往哪写 */
 function mcpCandidates(home) {
-  return [path.join(home, ".claude.json"), path.join(home, ".mcp.json"), path.join(home, ".agents", "mcp.json")].filter((file) =>
-    fs.existsSync(file),
-  );
+  return [
+    path.join(home, ".claude.json"),
+    path.join(home, ".mcp.json"),
+    path.join(home, ".agents", "mcp.json"),
+    // 没找到别的配置时 setup 会写这一份；下次要认得它
+    path.join(home, "mcp.json"),
+  ].filter((file) => fs.existsSync(file));
 }
 
 async function stepMcp(ctx) {
-  const candidates = mcpCandidates(ctx.home);
-  if (!candidates.length) return skipped("没有找到 MCP 配置文件；手动：mo agent add --mcp <文件>");
   if (ctx.choices.mcpSkipped) return skipped("已跳过 MCP 配置");
+  const candidates = mcpCandidates(ctx.home);
 
   let target = null;
   let existing = null;
@@ -380,30 +408,52 @@ async function stepMcp(ctx) {
   }
 
   if (existing) return skipped("MCP 配置已有 mo 条目：" + existing);
-  if (!target) return skipped("找到的 MCP 配置不是合法 JSON；手动：mo agent add --mcp <文件>");
 
-  if (!ctx.choices.mcpConfirmed && ctx.interactive) {
-    const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
+  // 没找到已知配置：交互时问写哪儿，非交互时写 mo 自己的 mcp.json（不碰别人的配置）
+  const fallback = path.join(ctx.home, "mcp.json");
+  const creating = !target;
+  if (ctx.choices.mcpTarget) {
+    target = ctx.choices.mcpTarget;
+  } else if (ctx.interactive) {
     ctx.asked = true;
-    if (answer !== "y" && answer !== "yes") {
-      ctx.choices.mcpSkipped = true;
-      return skipped("已跳过 MCP 配置");
+    if (creating) {
+      const answer = (
+        await ctx.prompter.ask("没有找到已知的 MCP 配置。写到哪里？（回车=新建 " + fallback + "，可输入其它路径，q 跳过）：")
+      ).toLowerCase();
+      if (answer.toLowerCase() === "q") {
+        ctx.choices.mcpSkipped = true;
+        return skipped("已跳过 MCP 配置");
+      }
+      target = path.resolve(expandPath(answer || fallback));
+    } else {
+      const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
+      if (answer !== "y" && answer !== "yes") {
+        ctx.choices.mcpSkipped = true;
+        return skipped("已跳过 MCP 配置");
+      }
     }
-    ctx.choices.mcpConfirmed = target;
+    ctx.choices.mcpTarget = target;
+  } else {
+    target = target || fallback;
   }
 
-  const details = ["服务名：mo-agent", "写前备份：" + target + ".bak-<时间>"];
-  if (ctx.dryRun) return planned("将合并 mcpServers → " + target, { file: target }, details);
+  const existedBefore = fs.existsSync(target);
+  const details = ["服务名：mo-agent", ...(existedBefore ? ["写前备份：" + target + ".bak-<时间>"] : ["新建文件：" + target])];
+  if (ctx.dryRun) {
+    return planned((creating && !existedBefore ? "将新建 MCP 配置 → " : "将合并 mcpServers → ") + target, { file: target }, details);
+  }
 
   const merged = mergeMcpConfig({ target, serverName: "mo-agent" });
+  const lines = [
+    "服务名：" + merged.server,
+    ...(merged.backup ? ["备份：" + merged.backup] : []),
+  ];
+  if (!existedBefore) lines.push("把这段合并进你的 Agent：mo agent add --mcp <该 Agent 的配置>");
   return created((merged.changed ? "已写入 MCP 配置 → " : "MCP 配置已是最新 → ") + merged.file, {
     file: merged.file,
     server: merged.server,
     backup: merged.backup,
-  }, [
-    "服务名：" + merged.server,
-    ...(merged.backup ? ["备份：" + merged.backup] : []),
-  ]);
+  }, lines);
 }
 
 const STEPS = [
