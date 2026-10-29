@@ -175,6 +175,7 @@ async function stepDirs(ctx) {
   if (ctx.choices.homeSkipped) return skipped("已跳过数据目录");
   if (ctx.interactive && !ctx.choices.home) {
     const chosen = await chooseRoot(ctx, defaultHome);
+    ctx.asked = true;
     if (!chosen) {
       ctx.choices.homeSkipped = true;
       return skipped("已跳过数据目录");
@@ -206,6 +207,7 @@ async function stepConfig(ctx) {
     const lines = ["全局配置（当前生效值；回车=只补缺省，输入 key=value 修改，q 跳过）：", ...configValueLines(ctx), ""];
     process.stdout.write(lines.join("\n") + "\n");
     const answer = await ctx.prompter.ask("改哪些（如 port=7799 authRequired=false）：");
+    ctx.asked = true;
     if (answer.toLowerCase() === "q") {
       ctx.choices.configSkipped = true;
       return skipped("已跳过全局配置");
@@ -269,6 +271,7 @@ async function stepWorker(ctx) {
     picked = installed.find((worker) => worker.name === ctx.choices.worker) || installed[0];
   } else if (ctx.interactive) {
     const chosen = await chooseWorker(installed, ctx.prompter);
+    ctx.asked = true;
     if (!chosen) {
       ctx.choices.workerSkipped = true;
       return skipped("已跳过默认执行者");
@@ -297,6 +300,7 @@ async function stepTerminal(ctx) {
   let name = ctx.choices.terminal;
   if (!name && ctx.interactive) {
     name = await chooseTerminal(ctx, fallback);
+    ctx.asked = true;
     if (!name) {
       ctx.choices.terminalSkipped = true;
       return skipped("已跳过默认终端");
@@ -326,6 +330,7 @@ async function stepSkill(ctx) {
     chosen = ctx.choices.skillTargets;
   } else if (ctx.interactive) {
     chosen = await chooseTargets(ctx.prompter);
+    ctx.asked = true;
     if (!chosen.length) {
       ctx.choices.skillSkipped = true;
       return skipped("已跳过技能");
@@ -379,6 +384,7 @@ async function stepMcp(ctx) {
 
   if (!ctx.choices.mcpConfirmed && ctx.interactive) {
     const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
+    ctx.asked = true;
     if (answer !== "y" && answer !== "yes") {
       ctx.choices.mcpSkipped = true;
       return skipped("已跳过 MCP 配置");
@@ -451,12 +457,14 @@ async function runSteps(runCtx, selected) {
   for (const step of STEPS) {
     if (!selected.includes(step)) continue;
     const entry = { id: step.id, title: step.title };
+    runCtx.asked = false;
     try {
       Object.assign(entry, await step.run(runCtx));
     } catch (error) {
       const message = error instanceof MoError ? "[" + error.code + "] " + error.message : String((error && error.message) || error);
       Object.assign(entry, failed(message));
     }
+    entry.asked = Boolean(runCtx.asked);
     results.push(entry);
   }
   return results;
@@ -469,15 +477,18 @@ async function runPaged(runCtx, selected, prompter) {
   for (let index = 0; index < steps.length; index += 1) {
     const step = steps[index];
     const entry = { id: step.id, title: step.title };
+    runCtx.asked = false;
     try {
       Object.assign(entry, await step.run(runCtx));
     } catch (error) {
       const message = error instanceof MoError ? "[" + error.code + "] " + error.message : String((error && error.message) || error);
       Object.assign(entry, failed(message));
     }
+    entry.asked = Boolean(runCtx.asked);
     results.push(entry);
     process.stdout.write(entryLines(entry).join("\n") + "\n");
-    if (index < steps.length - 1) {
+    // 已经让你选过的步骤不再多要一次回车
+    if (index < steps.length - 1 && !entry.asked) {
       process.stdout.write("\n按 Enter 继续...");
       await prompter.ask("");
     }
