@@ -11,7 +11,8 @@ import { memoryDir } from "../lib/knowledge.mjs";
  * 自检：只有必需项失败才算失败。
  * ledger / memory / cwd-project 属于"还没用到"，用 ⚠ 提示，不阻塞。
  */
-export function doctorCommand(ctx, args) {
+/** 只读检查项：mo doctor 与 mo setup 的汇总共用 */
+export function doctorReport(cwd) {
   const home = moHome();
   const memory = memoryDir(home);
   const projects = listProjects(home);
@@ -24,13 +25,29 @@ export function doctorCommand(ctx, args) {
     { name: "ledger", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
     { name: "memory", required: false, ok: fs.existsSync(memory.dir), value: memory.dir },
     { name: "projects", required: false, ok: projects.length > 0, value: projects.length + " 个" },
-    { name: "cwd-project", required: false, ok: projects.some((p) => (p.paths || []).includes(ctx.cwd)), value: ctx.cwd },
+    { name: "cwd-project", required: false, ok: projects.some((p) => (p.paths || []).includes(cwd)), value: cwd },
   ];
 
   const ok = checks.filter((check) => check.required).every((check) => check.ok);
-  emit(args.options, { ok, home, memory: memory.dir, memorySource: memory.source, checks, projects }, () =>
-    checks
-      .map((check) => (check.ok ? "✓ " : check.required ? "✗ " : "⚠ ") + check.name.padEnd(12) + " " + check.value)
-      .join("\n"));
-  return ok ? 0 : 1;
+  return { ok, home, memory: memory.dir, memorySource: memory.source, checks, projects };
+}
+
+export function doctorCommand(ctx, args) {
+  const report = doctorReport(ctx.cwd);
+  emit(
+    args.options,
+    {
+      ok: report.ok,
+      home: report.home,
+      memory: report.memory,
+      memorySource: report.memorySource,
+      checks: report.checks,
+      projects: report.projects,
+    },
+    () =>
+      report.checks
+        .map((check) => (check.ok ? "✓ " : check.required ? "✗ " : "⚠ ") + check.name.padEnd(12) + " " + check.value)
+        .join("\n"),
+  );
+  return report.ok ? 0 : 1;
 }

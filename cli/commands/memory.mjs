@@ -205,24 +205,38 @@ const TEMPLATE = [
   "",
 ].join("\n");
 
-function initCommand(args, home) {
+/**
+ * 建记忆骨架，只补缺、不覆盖。mo setup 直接复用它。
+ * dryRun 只算"会建哪些"，不落盘。
+ * @returns {{dir: string, created: string[], written: boolean}}
+ */
+export function initMemory({ home, dryRun = false } = {}) {
   const { dir } = memoryDir(home);
-  ensureDir(path.join(dir, "pitfalls"));
-  ensureDir(path.join(dir, "decisions"));
-  ensureDir(path.join(dir, "candidates"));
+  const wanted = [
+    ["README.md", README],
+    ["preferences.md", "# 偏好\n\n"],
+    [path.join("pitfalls", "_template.md"), TEMPLATE],
+    [path.join("decisions", "_template.md"), TEMPLATE],
+  ];
+
+  if (!dryRun) {
+    ensureDir(path.join(dir, "pitfalls"));
+    ensureDir(path.join(dir, "decisions"));
+    ensureDir(path.join(dir, "candidates"));
+  }
 
   const created = [];
-  const ensure = (file, content) => {
-    if (fs.existsSync(file)) return;
-    fs.writeFileSync(file, content, "utf8");
-    created.push(path.relative(dir, file));
-  };
+  for (const [relative, content] of wanted) {
+    const file = path.join(dir, relative);
+    if (fs.existsSync(file)) continue;
+    if (!dryRun) fs.writeFileSync(file, content, "utf8");
+    created.push(relative);
+  }
+  return { dir, created, written: !dryRun };
+}
 
-  ensure(path.join(dir, "README.md"), README);
-  ensure(path.join(dir, "preferences.md"), "# 偏好\n\n");
-  ensure(path.join(dir, "pitfalls", "_template.md"), TEMPLATE);
-  ensure(path.join(dir, "decisions", "_template.md"), TEMPLATE);
-
+function initCommand(args, home) {
+  const { dir, created } = initMemory({ home });
   emit(
     args.options,
     { ok: true, dir, created },

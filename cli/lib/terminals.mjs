@@ -121,7 +121,8 @@ export function currentTerminal({ home }) {
   return config.default || "";
 }
 
-function autoDetect() {
+/** 探测本机有哪些图形终端；给 mo terminal current 与 mo setup 用 */
+export function detectTerminal() {
   if (ITERM_APP.some((candidate) => fs.existsSync(candidate))) return "iterm";
   if (process.platform === "darwin") return "terminal";
   return "none";
@@ -152,7 +153,7 @@ export function resolveTerminal({ home, env = process.env }) {
       const found = terminalByName({ home, name: config.default });
       if (found) return { ...found, reason: "default" };
     }
-    const detected = autoDetect();
+    const detected = detectTerminal();
     return { ...terminalByName({ home, name: detected }), reason: "auto" };
   })();
 

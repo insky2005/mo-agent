@@ -122,6 +122,30 @@ async function chooseTargets() {
   }
 }
 
+/**
+ * 把技能写到选中的目录，返回实际写入的文件。mo setup 也走这里。
+ * agents 与 pi 共用同一目录，写前去重。
+ */
+export function installSkillTargets(chosen) {
+  const written = [];
+  const done = new Set();
+  for (const { name, dir } of chosen) {
+    if (done.has(dir)) continue;
+    done.add(dir);
+    const dest = path.join(dir, SKILL_NAME, "SKILL.md");
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, SKILL_MD);
+    } catch (error) {
+      throw new MoError("E_SKILL_WRITE", "写入失败：" + dir + "（" + (error.code || error.message) + "）", {
+        hint: "检查目录权限，或用 --target 指定可写目录",
+      });
+    }
+    written.push({ target: name, path: dest });
+  }
+  return written;
+}
+
 export async function skillCommand(ctx, args) {
   const sub = args.positional[0] || "list";
   const targets = resolveTargets(all(args.options, "target"));
@@ -169,22 +193,7 @@ export async function skillCommand(ctx, args) {
         return 0;
       }
     }
-    const written = [];
-    const done = new Set();
-    for (const { name, dir } of chosen) {
-      if (done.has(dir)) continue; // agents 与 pi 共用同一目录
-      done.add(dir);
-      const dest = path.join(dir, SKILL_NAME, "SKILL.md");
-      try {
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, SKILL_MD);
-      } catch (error) {
-        throw new MoError("E_SKILL_WRITE", "写入失败：" + dir + "（" + (error.code || error.message) + "）", {
-          hint: "检查目录权限，或用 --target 指定可写目录",
-        });
-      }
-      written.push({ target: name, path: dest });
-    }
+    const written = installSkillTargets(chosen);
     emit(args.options, { ok: true, written, moOnPath: Boolean(which("mo")) }, () => {
       const lines = written.map((item) => "✓ " + item.path);
       lines.push("技能已装，新开会话后生效。");

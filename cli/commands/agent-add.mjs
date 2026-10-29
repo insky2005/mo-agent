@@ -98,6 +98,49 @@ function stamp(date = new Date()) {
   return date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) + "-" + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
 }
 
+/**
+ * 合并 mcpServers：幂等（内容没变就不写）、写前备份。
+ * mo agent add 与 mo setup 共用这一份逻辑。
+ */
+export function mergeMcpConfig({ target, serverName = "mo", entry } = {}) {
+  const file = path.resolve(String(target));
+  const server = String(serverName || "mo");
+  const self = entry || selfEntry();
+
+  let config = {};
+  let backup = null;
+  if (fs.existsSync(file)) {
+    try {
+      config = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      throw new MoError("E_USAGE", "现有配置不是合法 JSON：" + file, { hint: "先修好它，或换个 --mcp 目标" });
+    }
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      throw new MoError("E_USAGE", "现有配置不是 JSON 对象：" + file);
+    }
+  }
+
+  const before = JSON.stringify(config);
+  config.mcpServers = config.mcpServers && typeof config.mcpServers === "object" ? config.mcpServers : {};
+  config.mcpServers[server] = self;
+  const after = JSON.stringify(config);
+  const changed = before !== after;
+
+  if (changed) {
+    if (fs.existsSync(file)) {
+      backup = file + ".bak-" + stamp();
+      fs.copyFileSync(file, backup);
+    } else {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+    }
+    const tmp = file + ".tmp-" + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
+    fs.renameSync(tmp, file);
+  }
+
+  return { file, server, ...self, backup, changed };
+}
+
 function addCommand(ctx, args) {
   if (has(args.options, "prompt")) {
     process.stderr.write("[mo] 已输出可粘贴的契约文本\n");
@@ -112,52 +155,19 @@ function addCommand(ctx, args) {
     });
   }
 
-  const target = path.resolve(ctx.cwd, String(file));
-  const serverName = String(one(args.options, "name", "mo"));
-  const entry = selfEntry();
-
-  let config = {};
-  let backup = null;
-  if (fs.existsSync(target)) {
-    try {
-      config = JSON.parse(fs.readFileSync(target, "utf8"));
-    } catch {
-      throw new MoError("E_USAGE", "现有配置不是合法 JSON：" + target, { hint: "先修好它，或换个 --mcp 目标" });
-    }
-    if (!config || typeof config !== "object" || Array.isArray(config)) {
-      throw new MoError("E_USAGE", "现有配置不是 JSON 对象：" + target);
-    }
-  }
-
-  const before = JSON.stringify(config);
-  config.mcpServers = config.mcpServers && typeof config.mcpServers === "object" ? config.mcpServers : {};
-  config.mcpServers[serverName] = entry;
-  const after = JSON.stringify(config);
-  const changed = before !== after;
-
-  if (changed) {
-    if (fs.existsSync(target)) {
-      backup = target + ".bak-" + stamp();
-      fs.copyFileSync(target, backup);
-    } else {
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-    }
-    const tmp = target + ".tmp-" + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
-    fs.renameSync(tmp, target);
-  }
+  const result = mergeMcpConfig({ target: path.resolve(ctx.cwd, String(file)), serverName: String(one(args.options, "name", "mo")) });
 
   emit(
     args.options,
-    { ok: true, file: target, server: serverName, ...entry, backup, changed },
+    { ok: true, ...result },
     () =>
       [
-        changed ? "✓ 已写入 MCP 配置" : "= 配置已是最新，没有改动",
+        result.changed ? "✓ 已写入 MCP 配置" : "= 配置已是最新，没有改动",
         "",
-        "  文件   " + target,
-        "  服务   " + serverName,
-        "  命令   " + entry.command + " " + entry.args.join(" "),
-        ...(backup ? ["  备份   " + backup] : []),
+        "  文件   " + result.file,
+        "  服务   " + result.server,
+        "  命令   " + result.command + " " + result.args.join(" "),
+        ...(result.backup ? ["  备份   " + result.backup] : []),
         "",
         "下一步：确认该客户端已启用这段配置，然后新开会话。",
       ].join("\n"),
