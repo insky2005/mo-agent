@@ -17,7 +17,7 @@ import {
 } from "../lib/config.mjs";
 import { SKILL_NAME } from "../lib/skill-content.mjs";
 import { initMemory } from "./memory.mjs";
-import { defaultMemoryDir } from "../lib/knowledge.mjs";
+import { defaultMemoryDir, memoryDir } from "../lib/knowledge.mjs";
 import { allTargets, chooseTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
 import { mergeMcpConfig } from "./agent-add.mjs";
 import { defaultWorkerName, listWorkers, setDefaultWorker } from "../lib/workers-config.mjs";
@@ -309,8 +309,23 @@ async function stepConfig(ctx) {
     : created(action + " → " + file, { file, keys, patch }, details);
 }
 
-function stepMemory(ctx) {
-  const memory = initMemory({ home: ctx.home, dryRun: ctx.dryRun });
+/** dry-run 里 config 还没写盘，记忆目录要用"计划写入"的 memoryPath */
+function plannedMemoryDir(ctx) {
+  const edits = ctx.choices.configEdits;
+  if (!edits || !Object.prototype.hasOwnProperty.call(edits, "memoryPath")) return "";
+  return edits.memoryPath ? path.resolve(edits.memoryPath) : defaultMemoryDir(ctx.home);
+}
+
+async function stepMemory(ctx) {
+  const override = plannedMemoryDir(ctx);
+  if (ctx.interactive && !ctx.choices.memoryConfirmed) {
+    promptGap(ctx);
+    const dir = override || memoryDir(ctx.home).dir;
+    await ctx.prompter.ask("记忆根目录（" + dir + "）：");
+    ctx.asked = true;
+    ctx.choices.memoryConfirmed = true;
+  }
+  const memory = initMemory({ home: ctx.home, dryRun: ctx.dryRun, dir: override || undefined });
   if (!memory.created.length) return skipped("记忆骨架已存在：" + memory.dir);
   const files = memory.created.map((item) => item.split(path.sep).join("/"));
   const absolute = memory.created.map((item) => path.join(memory.dir, item));

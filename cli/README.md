@@ -506,7 +506,7 @@ mo config unset port           # 回到默认
 - **技能**：已装时会告诉你装在哪个目标、哪个文件，并问要不要重装覆盖（非交互只报告路径）。
 - **MCP**：找到已知配置（`~/.claude.json` / `~/.mcp.json` / `~/.agents/mcp.json`）就合并；没找到时交互可输入写哪，非交互写 `~/.mo-agent/mcp.json`，再提示用 `mo agent add --mcp` 合并进具体 Agent。
 
-记忆骨架的目录由 `config.memoryPath` / `MO_AGENT_MEMORY` 决定，所以它排在全局配置之后；数据目录步骤只建 `ledger/ inbox/ approvals/`，不重复建 `memory/`。
+记忆骨架的目录由 `config.memoryPath` / `MO_AGENT_MEMORY` 决定，所以它排在全局配置之后；交互时会先显示「记忆根目录（…）」等你回车（dry-run 也按你刚改的 memoryPath 预览）。数据目录步骤只建 `ledger/ inbox/ approvals/`，不重复建 `memory/`。
 
 `--dry-run` 交互时更细：每步先展示计划；需要你选或填的步骤做完直接进下一步，纯展示的步骤（如记忆骨架）才停「按 Enter 继续...」。**它只是预演，任何选择都不会写文件**；确认后去掉 `--dry-run` 再跑一次 `mo setup`。
 

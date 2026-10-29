@@ -670,7 +670,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 |---|---|---|---|
 | 1 | 数据目录 | `~/.mo-agent/` 及各子目录 | 建 `ledger/ inbox/ approvals/`；交互时可改根目录。`memory/` 不在这里建，避免与 `memoryPath` 冲突 |
 | 2 | 全局配置 | `config.json` 存在 | 只补缺的默认键，已有值不动；坏 JSON / 非法字段给警告；交互时逐个键展示当前值/来源/默认/范围，可逐个确认或修改（回车保持、`default` 恢复、`q` 跳过剩余、`s` 跳过本步） |
-| 3 | 记忆骨架 | `memory/README.md` 等 | 只补 `README.md`、`preferences.md`、`pitfalls/_template.md`、`decisions/_template.md`；目录由 `config.memoryPath` / `MO_AGENT_MEMORY` 决定，因此排在第 2 步之后 |
+| 3 | 记忆骨架 | `memory/README.md` 等 | 只补 `README.md`、`preferences.md`、`pitfalls/_template.md`、`decisions/_template.md`；目录由 `config.memoryPath` / `MO_AGENT_MEMORY` 决定，因此排在第 2 步之后；交互时先显示「记忆根目录（…）」等回车，dry-run 按计划中的 memoryPath 预览 |
 | 4 | 默认执行者 | `defaultWorkerName()` 非空 | 列已安装的内置 worker，`--yes` 取第一个，交互时让选 |
 | 5 | 默认终端 | `currentTerminal()` 非空 | 探测 iTerm → Terminal.app；都没有就设 `print` 并 `⚠` |
 | 6 | 技能 | 目标目录里已有 `mo/SKILL.md` | 已装时交互问是否重装（非交互只报告目标与文件路径）；否则调 `mo skill install` 的写入函数；非 TTY 且没给 `--yes` 时跳过并说明 |

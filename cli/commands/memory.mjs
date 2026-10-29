@@ -210,8 +210,8 @@ const TEMPLATE = [
  * dryRun 只算"会建哪些"，不落盘。
  * @returns {{dir: string, created: string[], written: boolean}}
  */
-export function initMemory({ home, dryRun = false } = {}) {
-  const { dir } = memoryDir(home);
+export function initMemory({ home, dryRun = false, dir } = {}) {
+  const target = dir || memoryDir(home).dir;
   const wanted = [
     ["README.md", README],
     ["preferences.md", "# 偏好\n\n"],
@@ -220,19 +220,19 @@ export function initMemory({ home, dryRun = false } = {}) {
   ];
 
   if (!dryRun) {
-    ensureDir(path.join(dir, "pitfalls"));
-    ensureDir(path.join(dir, "decisions"));
-    ensureDir(path.join(dir, "candidates"));
+    ensureDir(path.join(target, "pitfalls"));
+    ensureDir(path.join(target, "decisions"));
+    ensureDir(path.join(target, "candidates"));
   }
 
   const created = [];
   for (const [relative, content] of wanted) {
-    const file = path.join(dir, relative);
+    const file = path.join(target, relative);
     if (fs.existsSync(file)) continue;
     if (!dryRun) fs.writeFileSync(file, content, "utf8");
     created.push(relative);
   }
-  return { dir, created, written: !dryRun };
+  return { dir: target, created, written: !dryRun };
 }
 
 function initCommand(args, home) {
