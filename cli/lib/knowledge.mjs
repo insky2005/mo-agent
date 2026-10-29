@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
+import { effectiveConfig } from "./config.mjs";
+import { moHome } from "./paths.mjs";
 import { parseKnowledgeFile } from "../../core/knowledge/entry.mjs";
 import { recall } from "../../core/knowledge/recall.mjs";
 
@@ -25,6 +27,11 @@ export function memoryDir(home, env = process.env) {
   }
   if (env.MO_AGENT_KNOWLEDGE) {
     return { dir: path.resolve(env.MO_AGENT_KNOWLEDGE), explicit: true, source: "legacy-env" };
+  }
+
+  const configured = effectiveConfig({ home, env }).memoryPath.value;
+  if (configured) {
+    return { dir: path.resolve(configured), explicit: true, source: "config" };
   }
 
   const next = path.join(home, "memory");
@@ -141,9 +148,15 @@ export function cardQuery(card) {
   return [card.meta.title, card.body].filter(Boolean).join("\n");
 }
 
-export function recallLimit(env = process.env) {
-  const parsed = Number(env.MO_RECALL_LIMIT);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 20) : 5;
+/**
+ * 召回条数：MO_RECALL_LIMIT > config.recallLimit > 5。
+ * 配置读不到时沿用默认，不因为一个坏文件挡住派单。
+ */
+export function recallLimit(env = process.env, home = moHome(env)) {
+  const { value } = effectiveConfig({ home, env }).recallLimit;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 5;
+  return Math.min(Math.max(Math.floor(parsed), 0), 20);
 }
 
 /**
@@ -151,7 +164,7 @@ export function recallLimit(env = process.env) {
  */
 export function recallKnowledge({ home, env = process.env, query, limit, scopes, includeAll = false }) {
   const loaded = loadKnowledge({ home, env });
-  const effectiveLimit = includeAll ? loaded.entries.length : limit || recallLimit(env);
+  const effectiveLimit = includeAll ? loaded.entries.length : limit || recallLimit(env, home);
   const result = recall(loaded.entries, { query, limit: effectiveLimit, scopes });
   return { ...result, dir: loaded.dir, warnings: loaded.warnings, total: loaded.entries.length };
 }
