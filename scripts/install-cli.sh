@@ -271,10 +271,16 @@ fi
 
 echo
 echo "下一步："
+echo "  mo setup                 首次装配（幂等）：配置、记忆、默认执行者/终端、技能、MCP"
+echo "                           先看会做什么：mo setup --dry-run"
 if [ "$NEED_SKILL" = "1" ]; then
-  echo "  mo skill install        给 Claude / Codex / Qoder 等安装 mo 技能（交互选择）"
+  echo "                           只想装技能：mo skill install"
+else
+  echo "                           技能已装，setup 会自动跳过那一步"
 fi
-echo "  mo project init         在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
+echo "  mo doctor                自检（Node / 目录 / 记忆库 / 项目）"
+echo "  mo project init          在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
+echo "  mo agent                 把 mo 接给主 Agent（提示词 / MCP / 技能三条路）"
 echo
 echo "基本用法（在项目里）："
 echo "  mo worker list                看可用的执行者（裸名=会话，-headless=无头）"
