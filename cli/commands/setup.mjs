@@ -501,16 +501,20 @@ async function stepMcp(ctx) {
     ctx.asked = true;
     promptGap(ctx);
     if (creating) {
-      const answer = (
-        await ctx.prompter.ask("没有找到已知的 MCP 配置。写到哪里？（回车=新建 " + fallback + "，可输入其它路径，q 跳过）：")
-      ).toLowerCase();
-      if (answer.toLowerCase() === "q") {
+      process.stdout.write(
+        "没有找到已知的 MCP 配置（~/.claude.json / ~/.mcp.json / ~/.agents/mcp.json）。\n" +
+          "默认新建：" + fallback + "\n" +
+          "这是 mo 自己的配置，之后可用 mo agent add --mcp <Agent 配置> 合并进具体客户端。\n",
+      );
+      const answer = (await ctx.prompter.ask("路径（回车=用默认，输入其它路径，q=跳过）：")).toLowerCase();
+      if (answer === "q") {
         ctx.choices.mcpSkipped = true;
         return skipped("已跳过 MCP 配置");
       }
       target = path.resolve(expandPath(answer || fallback));
     } else {
-      const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
+      process.stdout.write("找到 MCP 配置：" + target + "\n将合并 mcpServers.mo-agent（写前备份）。\n");
+      const answer = (await ctx.prompter.ask("写入吗？(y/N) ")).toLowerCase();
       if (answer !== "y" && answer !== "yes") {
         ctx.choices.mcpSkipped = true;
         return skipped("已跳过 MCP 配置");
