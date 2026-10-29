@@ -1,6 +1,6 @@
 # CLI 跨平台（Windows / Linux）
 
-状态：**未实现（先落审计与方案）**　日期：2026-10-23　关联：[桌面端跨平台方案](desktop-cross-platform.md)
+状态：**进行中**（执行者协议、可执行文件查找、shell 选择、Windows 安装器已落地；Windows CI/真机验收待补）　日期：2026-10-23，更新 2026-11　关联：[桌面端跨平台方案](desktop-cross-platform.md)
 
 ## 0. 结论先行
 
@@ -51,7 +51,7 @@ runner 增加 `resolveShell(platform)`：POSIX 用 `/bin/sh`，Windows 用 `powe
 | 平台 | 安装器 | 产物 |
 |---|---|---|
 | macOS / Linux | `scripts/install-remote.sh` | `mo-darwin-arm64` / `mo-linux-x64` |
-| Windows | `scripts/install-remote.ps1` | `mo-windows-x64.exe` |
+| Windows | `scripts/install-cli.ps1` | `mo-windows-x64.exe` |
 
 构建沿用桌面端结论：**不在 macOS 上交叉编译 Windows 产品**，用 GitHub Actions 的 `windows-latest` 原生构建，产物直接上传 Release。
 
@@ -76,3 +76,21 @@ Windows 10/11 x64 上：
 - **WSL 不算原生支持**：可以在 WSL 里用，但那是 Linux 路径，工程上按 Linux 验收；
 - 不在 macOS 上交叉编译 Windows 二进制再"声称支持"；
 - 不为 Windows 单独维护一套任务/账本语义——数据格式必须完全一致。
+
+## 5. 实现记录（2026-11）
+
+已落地：
+
+- `cli/lib/platform.mjs`：PATH 平台分隔符、Windows `PATHEXT`、`findExecutable`、`resolveShell`；
+- `cli/lib/executors.mjs`：按平台选命令；claude / codex / qodercli / qoderclicn 有无头 stdin 模板；pi / qwen 标 `posixOnly`，Windows 明确报 `E_UNSUPPORTED_PLATFORM`；
+- `cli/lib/runner.mjs`：POSIX 用 `/bin/sh`，Windows 用 `%ComSpec%`，`MO_SHELL` 可覆盖；
+- `scripts/install-cli.ps1`：装到 `%USERPROFILE%\.local\bin`，写 `install.json`，不改系统 PATH/注册表；
+- `npm run check` 加入新文件，`cli/platform.test.mjs` 覆盖 PATHEXT / shell / Windows 模板选择。
+
+仍未做（验收前不能声称 Windows 支持）：
+
+- GitHub Actions 的 `windows-latest` / `ubuntu-latest` 矩阵与假执行者全流程；
+- Windows 会话型 worker 的脚本与终端（`session-launch` 仍是 bash 脚本 + iTerm/Terminal.app）；
+- `host/agent-hooks.mjs` 的 node 解析与 hook 命令生成（PowerShell 引号）；
+- `install-remote.ps1`、`mo-windows-x64.exe` 的发布产物；
+- 真机验证 `mo doctor` / `mo setup` / 建卡派单。

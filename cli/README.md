@@ -8,8 +8,9 @@
 
 ## 安装
 
-> **平台**：当前只支持 macOS 与 Linux（POSIX shell）。Windows 的差距与改造计划见
-> [docs/plans/cli-cross-platform.md](../docs/plans/cli-cross-platform.md)，**暂不实现**。
+> **平台**：macOS 正式支持；Linux（POSIX）预期可用；Windows 正在补齐——执行者协议、可执行文件查找、
+> shell 选择、PowerShell 安装器已落地，Windows CI/真机验收待补，详见
+> [docs/plans/cli-cross-platform.md](../docs/plans/cli-cross-platform.md)。
 
 只需要 Node 18+，没有任何第三方依赖。
 
@@ -32,6 +33,13 @@ bash scripts/install-cli.sh --no-completion  # 只装命令，并清掉旧补全
 bash scripts/install-cli.sh --completion bash  # 补全写到 ~/.bashrc
 bash scripts/install-cli.sh --uninstall    # 卸载（含补全块）
 MO_BIN_DIR=/opt/bin bash scripts/install-cli.sh   # 指定安装目录
+```
+
+Windows（PowerShell，先在 Windows 上构建 `cli\dist\mo.exe`）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-cli.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-cli.ps1 -Uninstall
 ```
 
 脚本做两件事：

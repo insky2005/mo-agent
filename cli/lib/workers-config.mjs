@@ -6,7 +6,7 @@
  */
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { EXECUTORS, workerStatus } from "./executors.mjs";
+import { EXECUTORS, commandFor, workerStatus } from "./executors.mjs";
 import { readJsonSafe, writeJsonAtomic, exists } from "./fsx.mjs";
 import { projectDir } from "./paths.mjs";
 
@@ -55,7 +55,8 @@ export function listWorkers({ home, projectRoot } = {}) {
   const merged = new Map();
 
   for (const [name, preset] of Object.entries(EXECUTORS)) {
-    merged.set(name, { name, ...preset, source: "builtin" });
+    const command = commandFor(preset);
+    merged.set(name, { name, ...preset, command, supported: command !== null, source: "builtin" });
   }
   for (const [name, entry] of Object.entries(user.workers)) {
     merged.set(name, { name, ...entry, source: "user" });
@@ -76,7 +77,8 @@ export function resolveDefaultWorker({ home, projectRoot } = {}) {
   const name = defaultWorkerName({ home, projectRoot });
   if (!name) return null;
   const found = listWorkers({ home, projectRoot }).find((worker) => worker.name === name);
-  return found || null;
+  if (!found || found.supported === false) return null;
+  return found;
 }
 
 export function setDefaultWorker({ home, projectRoot, project = false, name, clear = false }) {
@@ -93,6 +95,11 @@ export function setDefaultWorker({ home, projectRoot, project = false, name, cle
   if (!found) {
     throw new MoError("E_NOT_FOUND", "没有这个 worker：" + key, { hint: "mo worker list 查看可用 worker" });
   }
+  if (found.supported === false) {
+    throw new MoError("E_UNSUPPORTED_PLATFORM", "worker " + key + " 不支持当前平台", {
+      hint: "mo worker list 查看当前平台可用的 worker",
+    });
+  }
 
   const file = project ? projectWorkersFile(projectRoot) : userWorkersFile(home);
   const config = readConfig(file);
@@ -107,6 +114,11 @@ export function resolveWorker(name, ctx = {}) {
   if (!found) {
     throw new MoError("E_USAGE", "未知执行者：" + name, {
       hint: "可用：mo worker list",
+    });
+  }
+  if (found.supported === false) {
+    throw new MoError("E_UNSUPPORTED_PLATFORM", "执行者 " + name + " 不支持当前平台", {
+      hint: "mo worker list 查看当前平台可用的执行者，或改用 --exec",
     });
   }
   return found;
