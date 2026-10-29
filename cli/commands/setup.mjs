@@ -119,36 +119,51 @@ async function chooseRoot(ctx, fallback) {
   return fallback;
 }
 
-function configValueLines(ctx) {
-  const effective = effectiveConfig({ home: ctx.home });
-  return CONFIG_KEYS.map((spec) => {
-    const item = effective[spec.key];
-    const shown = item.value === "" ? "（空=默认目录）" : String(item.value);
-    return "  " + spec.key.padEnd(14) + "= " + shown + "  · " + (SOURCE_LABEL[item.source] || item.source);
-  });
+function shownConfigValue(value) {
+  return value === "" ? "（空=默认目录）" : String(value);
 }
 
-function parseConfigEdits(answer) {
+/** 逐个键确认/修改；返回要写进 config.json 的 edits，null 表示跳过整步 */
+async function askConfigEdits(ctx, read) {
+  const effective = effectiveConfig({ home: ctx.home });
   const edits = {};
-  for (const token of String(answer).split(/[,，\s]+/).filter(Boolean)) {
-    const eq = token.indexOf("=");
-    if (eq <= 0) {
-      process.stderr.write("[W_CONFIG] 忽略输入：" + token + "（需要 key=value）\n");
-      continue;
+
+  process.stdout.write(
+    "全局配置（逐个确认；回车=保持，输入值=修改，default=恢复默认，q=跳过剩余键，s=跳过本步）\n",
+  );
+
+  for (let index = 0; index < CONFIG_KEYS.length; index += 1) {
+    const spec = CONFIG_KEYS[index];
+    const item = effective[spec.key];
+    const hasFileValue =
+      read.present.includes(spec.key) && Object.prototype.hasOwnProperty.call(read.values, spec.key);
+    const fileValue = hasFileValue ? read.values[spec.key] : spec.default;
+
+    process.stdout.write(
+      "\n[" + (index + 1) + "/" + CONFIG_KEYS.length + "] " + spec.key +
+        "\n  当前生效 " + shownConfigValue(item.value) + "  · " + (SOURCE_LABEL[item.source] || item.source) +
+        "\n  默认 " + shownConfigValue(spec.default) + "  · 范围 " + spec.range + "\n",
+    );
+    if (item.source === "env") {
+      process.stdout.write("  注意：环境变量会覆盖文件；这里改的是 config.json\n");
     }
-    const key = token.slice(0, eq).trim();
-    const raw = token.slice(eq + 1).trim();
-    const spec = configKey(key);
-    if (!spec) {
-      process.stderr.write("[W_CONFIG] 未知键：" + key + "（mo config list 查看）\n");
-      continue;
+
+    for (;;) {
+      const answer = (await ctx.prompter.ask("  新值：")).trim();
+      ctx.asked = true;
+      if (answer === "s") return null;
+      if (answer === "q") return edits;
+      if (answer === "") break;
+
+      const raw = answer === "default" ? spec.default : answer;
+      const parsed = spec.parse(raw);
+      if (!parsed.ok) {
+        process.stderr.write("[W_CONFIG] 非法值：" + spec.key + "=" + answer + "（" + parsed.message + "）\n");
+        continue;
+      }
+      if (!hasFileValue || parsed.value !== fileValue) edits[spec.key] = parsed.value;
+      break;
     }
-    const parsed = spec.parse(raw);
-    if (!parsed.ok) {
-      process.stderr.write("[W_CONFIG] 非法值：" + key + "=" + raw + "（" + parsed.message + "）\n");
-      continue;
-    }
-    edits[key] = parsed.value;
   }
   return edits;
 }
@@ -204,15 +219,12 @@ async function stepConfig(ctx) {
   let edits = ctx.choices.configEdits || {};
   if (!ctx.choices.configAsked && ctx.interactive) {
     ctx.choices.configAsked = true;
-    const lines = ["全局配置（当前生效值；回车=只补缺省，输入 key=value 修改，q 跳过）：", ...configValueLines(ctx), ""];
-    process.stdout.write(lines.join("\n") + "\n");
-    const answer = await ctx.prompter.ask("改哪些（如 port=7799 authRequired=false）：");
-    ctx.asked = true;
-    if (answer.toLowerCase() === "q") {
+    const asked = await askConfigEdits(ctx, read);
+    if (!asked) {
       ctx.choices.configSkipped = true;
       return skipped("已跳过全局配置");
     }
-    edits = parseConfigEdits(answer);
+    edits = asked;
     ctx.choices.configEdits = edits;
   }
 
