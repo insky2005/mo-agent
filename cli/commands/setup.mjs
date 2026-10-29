@@ -225,11 +225,33 @@ async function stepDirs(ctx) {
 
   // memory/ 交给"记忆骨架"那一步：它可能被 config.memoryPath / MO_AGENT_MEMORY 指到别处
   const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
-  const missing = dirs.filter((dir) => !fs.existsSync(dir));
-  if (!missing.length) return skipped("数据目录已就绪：" + ctx.home);
-  if (ctx.dryRun) return planned("将创建 " + missing.length + " 个目录", { dirs: missing }, missing);
+  const entries = dirs.map((dir) => ({ dir, existing: fs.existsSync(dir) }));
+  const missing = entries.filter((entry) => !entry.existing).map((entry) => entry.dir);
+  const existing = entries.filter((entry) => entry.existing).map((entry) => entry.dir);
+  const existingNote = existing.length ? "（" + existing.length + " 个已存在）" : "";
+  const detail = { dirs: missing, existing };
+
+  if (!missing.length) {
+    return result(
+      "skipped",
+      "数据目录已就绪（" + entries.length + " 个目录都在）",
+      detail,
+      entries.map((entry) => entry.dir + "  （已存在）"),
+    );
+  }
+  if (ctx.dryRun) {
+    return planned(
+      "将创建 " + missing.length + " 个目录" + existingNote,
+      detail,
+      entries.map((entry) => entry.dir + (entry.existing ? "  （已存在）" : "  （将创建）")),
+    );
+  }
   for (const dir of missing) ensureDir(dir);
-  return created("已创建 " + missing.length + " 个目录", { dirs: missing }, missing);
+  return created(
+    "已创建 " + missing.length + " 个目录" + existingNote,
+    detail,
+    entries.map((entry) => entry.dir + (entry.existing ? "  （已存在）" : "  （已创建）")),
+  );
 }
 
 async function stepConfig(ctx) {

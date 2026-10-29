@@ -101,6 +101,17 @@ test("连跑两次：第二次每步都是 skipped，且不重复写", () => {
   assert.ok(skill.lines.some((line) => line.endsWith(path.join("skills", "mo", "SKILL.md"))), "要列出技能文件路径");
 });
 
+test("数据目录：已存在的目录也列出来", () => {
+  const ws = workspace();
+  fs.mkdirSync(path.join(ws.home, "ledger"), { recursive: true });
+  const result = runJson(ws, ["setup", "--dry-run", "--only", "dirs"]);
+  const step = result.parsed.steps[0];
+  assert.equal(step.status, "planned");
+  assert.ok(step.lines.some((line) => line.includes("ledger") && line.includes("已存在")), "已存在的目录要显示");
+  assert.ok(step.lines.some((line) => line.includes("inbox") && line.includes("将创建")), "待创建的目录要显示");
+  assert.match(step.message, /个已存在/);
+});
+
 test("--dry-run 不写任何文件", () => {
   const ws = workspace();
   const result = runJson(ws, ["setup", "--dry-run"]);
