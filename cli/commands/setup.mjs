@@ -3,16 +3,23 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
 import { all, has } from "../lib/args.mjs";
-import { emit } from "../lib/output.mjs";
+import { emit, isJson } from "../lib/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import { CONFIG_KEYS, configFile, readGlobalConfig, writeGlobalConfig } from "../lib/config.mjs";
 import { SKILL_NAME } from "../lib/skill-content.mjs";
 import { initMemory } from "./memory.mjs";
-import { allTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
+import { allTargets, chooseTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
 import { mergeMcpConfig } from "./agent-add.mjs";
 import { defaultWorkerName, listWorkers, setDefaultWorker } from "../lib/workers-config.mjs";
-import { currentTerminal, detectTerminal, setDefaultTerminal, terminalsFile } from "../lib/terminals.mjs";
+import {
+  currentTerminal,
+  detectTerminal,
+  listTerminals,
+  setDefaultTerminal,
+  terminalByName,
+  terminalsFile,
+} from "../lib/terminals.mjs";
 import { doctorReport } from "./doctor.mjs";
 
 /**
@@ -20,6 +27,9 @@ import { doctorReport } from "./doctor.mjs";
  *
  * 只串已有命令/函数，不重写逻辑；绝不碰仓库（不建 project.json、不写
  * <repo>/.mo-agent/、不改 AGENTS.md），也不启动 daemon。
+ *
+ * 交互（TTY + 没给 --yes）时可以选默认执行者、终端、技能目标，并确认 MCP；
+ * --dry-run 交互时先走一遍这些选择，最后问"按这个计划真实执行吗"。
  */
 
 const STATUS_ICON = { created: "✓", skipped: "⏭", planned: "·", warn: "⚠", failed: "✗" };
@@ -77,6 +87,23 @@ async function chooseWorker(installed, prompter) {
   return Number.isInteger(pick) && pick >= 1 && pick <= installed.length ? installed[pick - 1] : installed[0];
 }
 
+async function chooseTerminal(ctx, fallback) {
+  const names = listTerminals({ home: ctx.home })
+    .filter((terminal) => terminal.kind !== "none")
+    .map((terminal) => terminal.name);
+  const answer = (
+    await ctx.prompter.ask("默认终端（回车=" + fallback + "；可选 " + names.join(" / ") + "；q 跳过）：")
+  ).toLowerCase();
+  if (answer === "q") return null;
+  if (!answer) return fallback;
+  const found = terminalByName({ home: ctx.home, name: answer });
+  if (!found || found.kind === "none") {
+    process.stderr.write("[W_TERMINAL] 没有这个终端：" + answer + "，改用 " + fallback + "\n");
+    return fallback;
+  }
+  return answer;
+}
+
 async function stepDirs(ctx) {
   const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "memory"), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
   const missing = dirs.filter((dir) => !fs.existsSync(dir));
@@ -130,6 +157,7 @@ function stepMemory(ctx) {
 async function stepWorker(ctx) {
   const current = defaultWorkerName({ home: ctx.home });
   if (current) return skipped("默认执行者 = " + current);
+  if (ctx.choices.workerSkipped) return skipped("已跳过默认执行者");
 
   const installed = listWorkers({ home: ctx.home }).filter((worker) => worker.source === "builtin" && worker.installed);
   if (!installed.length) {
@@ -138,11 +166,19 @@ async function stepWorker(ctx) {
     });
   }
 
-  let picked = installed[0];
-  if (ctx.interactive) {
+  let picked;
+  if (ctx.choices.worker) {
+    picked = installed.find((worker) => worker.name === ctx.choices.worker) || installed[0];
+  } else if (ctx.interactive) {
     const chosen = await chooseWorker(installed, ctx.prompter);
-    if (!chosen) return skipped("已跳过默认执行者");
+    if (!chosen) {
+      ctx.choices.workerSkipped = true;
+      return skipped("已跳过默认执行者");
+    }
     picked = chosen;
+    ctx.choices.worker = picked.name;
+  } else {
+    picked = installed[0];
   }
 
   const operation = "mo worker use " + picked.name + "  →  " + path.join(ctx.home, "workers.json");
@@ -151,35 +187,59 @@ async function stepWorker(ctx) {
   return created("默认执行者 = " + saved.name + (saved.session ? "（会话型）" : "（无头）"), { name: saved.name }, [operation]);
 }
 
-function stepTerminal(ctx) {
+async function stepTerminal(ctx) {
   const current = currentTerminal({ home: ctx.home });
   if (current) return skipped("默认终端 = " + current);
+  if (ctx.choices.terminalSkipped) return skipped("已跳过默认终端");
 
   const file = terminalsFile(ctx.home);
   const detected = detectTerminal();
-  if (detected === "none") {
-    const operation = "mo terminal use print  →  " + file;
-    if (ctx.dryRun) return planned("没有探测到图形终端，将设 print", { name: "print" }, [operation]);
-    setDefaultTerminal({ home: ctx.home, name: "print" });
-    return warning("没有探测到图形终端，已设 print（只生成脚本，不开窗口）", { name: "print" }, [operation]);
-  }
+  const fallback = detected === "none" ? "print" : detected;
 
-  const operation = "mo terminal use " + detected + "  →  " + file;
-  if (ctx.dryRun) return planned("将设默认终端 = " + detected, { name: detected }, [operation]);
-  setDefaultTerminal({ home: ctx.home, name: detected });
-  return created("默认终端 = " + detected + (detected === "iterm" ? "（iTerm2）" : "（Terminal.app）"), { name: detected }, [operation]);
+  let name = ctx.choices.terminal;
+  if (!name && ctx.interactive) {
+    name = await chooseTerminal(ctx, fallback);
+    if (!name) {
+      ctx.choices.terminalSkipped = true;
+      return skipped("已跳过默认终端");
+    }
+    ctx.choices.terminal = name;
+  }
+  name = name || fallback;
+
+  const isPrintFallback = detected === "none" && name === "print";
+  const operation = "mo terminal use " + name + "  →  " + file;
+  if (ctx.dryRun) {
+    return planned(isPrintFallback ? "没有探测到图形终端，将设 print" : "将设默认终端 = " + name, { name }, [operation]);
+  }
+  setDefaultTerminal({ home: ctx.home, name });
+  return isPrintFallback
+    ? warning("没有探测到图形终端，已设 print（只生成脚本，不开窗口）", { name }, [operation])
+    : created("默认终端 = " + name + (name === "iterm" ? "（iTerm2）" : name === "terminal" ? "（Terminal.app）" : ""), { name }, [operation]);
 }
 
-function stepSkill(ctx) {
+async function stepSkill(ctx) {
   const installed = allTargets().filter((target) => target.installed);
   if (installed.length) return skipped("技能已装：" + installed.map((target) => target.name).join(" / "));
+  if (ctx.choices.skillSkipped) return skipped("已跳过技能");
 
-  const chosen = resolveTargets([]);
-  const destinations = chosen.map((target) => path.join(target.dir, SKILL_NAME, "SKILL.md"));
-  if (ctx.dryRun) {
-    return planned("将安装到 " + chosen.length + " 个目标", { targets: chosen.map((target) => target.name) }, destinations);
+  let chosen;
+  if (ctx.choices.skillTargets) {
+    chosen = ctx.choices.skillTargets;
+  } else if (ctx.interactive) {
+    chosen = await chooseTargets(ctx.prompter);
+    if (!chosen.length) {
+      ctx.choices.skillSkipped = true;
+      return skipped("已跳过技能");
+    }
+    ctx.choices.skillTargets = chosen;
+  } else {
+    chosen = resolveTargets([]);
   }
-  if (!ctx.explicitYes && !ctx.interactive) {
+
+  const destinations = chosen.map((target) => path.join(target.dir, SKILL_NAME, "SKILL.md"));
+  if (ctx.dryRun) return planned("将安装到 " + chosen.length + " 个目标", { targets: chosen.map((target) => target.name) }, destinations);
+  if (!ctx.explicitYes && !ctx.interactive && !ctx.choices.skillTargets) {
     return skipped("非交互且未加 --yes；手动：mo skill install");
   }
   const written = installSkillTargets(chosen);
@@ -196,6 +256,7 @@ function mcpCandidates(home) {
 async function stepMcp(ctx) {
   const candidates = mcpCandidates(ctx.home);
   if (!candidates.length) return skipped("没有找到 MCP 配置文件；手动：mo agent add --mcp <文件>");
+  if (ctx.choices.mcpSkipped) return skipped("已跳过 MCP 配置");
 
   let target = null;
   let existing = null;
@@ -217,13 +278,18 @@ async function stepMcp(ctx) {
 
   if (existing) return skipped("MCP 配置已有 mo 条目：" + existing);
   if (!target) return skipped("找到的 MCP 配置不是合法 JSON；手动：mo agent add --mcp <文件>");
+
+  if (!ctx.choices.mcpConfirmed && ctx.interactive) {
+    const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      ctx.choices.mcpSkipped = true;
+      return skipped("已跳过 MCP 配置");
+    }
+    ctx.choices.mcpConfirmed = target;
+  }
+
   const details = ["服务名：mo-agent", "写前备份：" + target + ".bak-<时间>"];
   if (ctx.dryRun) return planned("将合并 mcpServers → " + target, { file: target }, details);
-
-  if (ctx.interactive) {
-    const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
-    if (answer !== "y" && answer !== "yes") return skipped("已跳过 MCP 配置");
-  }
 
   const merged = mergeMcpConfig({ target, serverName: "mo-agent" });
   return created((merged.changed ? "已写入 MCP 配置 → " : "MCP 配置已是最新 → ") + merged.file, {
@@ -265,6 +331,62 @@ function remainingActions(report) {
     .map((check) => ({ check: check.name, value: check.value, action: REMEDY[check.name] || "mo doctor 查看" }));
 }
 
+function entryLines(entry) {
+  const lines = [(STATUS_ICON[entry.status] || "·") + " " + entry.title + "  " + entry.message];
+  for (const item of entry.lines || []) lines.push("    - " + item);
+  return lines;
+}
+
+function summaryLines(report, remaining) {
+  const notes = report.checks.filter((check) => !check.ok);
+  const lines = ["汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过")];
+  for (const check of notes) lines.push("  ⚠ " + check.name.padEnd(12) + " " + check.value);
+  if (remaining.length) {
+    lines.push("", "剩余动作：");
+    for (const item of remaining) lines.push("  - " + item.action);
+  }
+  return lines;
+}
+
+async function runSteps(runCtx, selected) {
+  const results = [];
+  for (const step of STEPS) {
+    if (!selected.includes(step)) continue;
+    const entry = { id: step.id, title: step.title };
+    try {
+      Object.assign(entry, await step.run(runCtx));
+    } catch (error) {
+      const message = error instanceof MoError ? "[" + error.code + "] " + error.message : String((error && error.message) || error);
+      Object.assign(entry, failed(message));
+    }
+    results.push(entry);
+  }
+  return results;
+}
+
+/** 交互 dry-run：一步步展示，每步之间等 Enter，选择放在该步执行时问 */
+async function runPaged(runCtx, selected, prompter) {
+  const steps = STEPS.filter((step) => selected.includes(step));
+  const results = [];
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    const entry = { id: step.id, title: step.title };
+    try {
+      Object.assign(entry, await step.run(runCtx));
+    } catch (error) {
+      const message = error instanceof MoError ? "[" + error.code + "] " + error.message : String((error && error.message) || error);
+      Object.assign(entry, failed(message));
+    }
+    results.push(entry);
+    process.stdout.write(entryLines(entry).join("\n") + "\n");
+    if (index < steps.length - 1) {
+      process.stdout.write("\n按 Enter 继续...");
+      await prompter.ask("");
+    }
+  }
+  return results;
+}
+
 export async function setupCommand(ctx, args) {
   const home = moHome();
   const options = args.options;
@@ -274,7 +396,10 @@ export async function setupCommand(ctx, args) {
 
   const dryRun = has(options, "dry-run");
   const explicitYes = has(options, "yes");
-  const interactive = Boolean(process.stdin.isTTY) && !explicitYes && !dryRun;
+  // --json 是自动化出口：不弹问题，免得提示混进 JSON
+  const interactive = Boolean(process.stdin.isTTY) && !explicitYes && !isJson(options);
+  // 交互 dry-run：逐步展示 + 最后确认是否执行
+  const paged = interactive && dryRun;
 
   const runCtx = {
     home,
@@ -282,51 +407,68 @@ export async function setupCommand(ctx, args) {
     dryRun,
     explicitYes,
     interactive,
+    choices: {},
     prompter: interactive ? makePrompter() : null,
   };
 
   const selected = STEPS.filter((step) => (only.length ? only.includes(step.id) : true) && !skip.includes(step.id));
-  const results = [];
+
+  let results = [];
+  let applied = false;
   try {
-    for (const step of STEPS) {
-      if (!selected.includes(step)) continue;
-      const entry = { id: step.id, title: step.title };
-      try {
-        Object.assign(entry, await step.run(runCtx));
-      } catch (error) {
-        const message = error instanceof MoError ? "[" + error.code + "] " + error.message : String((error && error.message) || error);
-        Object.assign(entry, failed(message));
+    if (paged) {
+      process.stdout.write(
+        "mo setup（--dry-run）\n\n下面每步都是真实会执行的操作，只是不落地（不写任何文件）：\n按 Enter 继续...",
+      );
+      await runCtx.prompter.ask("");
+      results = await runPaged(runCtx, selected, runCtx.prompter);
+      if (results.some((entry) => entry.status === "planned")) {
+        const answer = (await runCtx.prompter.ask("\n按这个计划真实执行吗？(y/N) ")).toLowerCase();
+        if (answer === "y" || answer === "yes") {
+          results = await runSteps({ ...runCtx, dryRun: false, interactive: false }, selected);
+          applied = true;
+        }
       }
-      results.push(entry);
+    } else {
+      results = await runSteps(runCtx, selected);
     }
   } finally {
     if (runCtx.prompter) runCtx.prompter.close();
   }
 
+  const effectiveDryRun = dryRun && !applied;
   const report = doctorReport(ctx.cwd);
   const remaining = remainingActions(report);
   const ok = !results.some((entry) => entry.status === "warn" || entry.status === "failed");
+  const payload = {
+    ok,
+    home,
+    dryRun: effectiveDryRun,
+    applied,
+    steps: results,
+    doctor: { ok: report.ok, checks: report.checks },
+    remaining,
+  };
 
-  emit(
-    args.options,
-    { ok, home, dryRun, steps: results, doctor: { ok: report.ok, checks: report.checks }, remaining },
-    () => {
-      const lines = ["mo setup" + (dryRun ? "（--dry-run）" : ""), ""];
-      if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
-      for (const entry of results) {
-        lines.push((STATUS_ICON[entry.status] || "·") + " " + entry.title + "  " + entry.message);
-        for (const item of entry.lines || []) lines.push("    - " + item);
-      }
-      const notes = report.checks.filter((check) => !check.ok);
-      lines.push("", "汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过"));
-      for (const check of notes) lines.push("  ⚠ " + check.name.padEnd(12) + " " + check.value);
-      if (remaining.length) {
-        lines.push("", "剩余动作：");
-        for (const item of remaining) lines.push("  - " + item.action);
-      }
-      return lines.join("\n");
-    },
-  );
+  if (paged) {
+    if (applied) {
+      const lines = ["\n已按计划执行："];
+      for (const entry of results) lines.push(...entryLines(entry));
+      process.stdout.write(lines.join("\n") + "\n");
+    } else {
+      process.stdout.write("\n（没有执行任何操作）\n");
+    }
+    process.stdout.write("\n" + summaryLines(report, remaining).join("\n") + "\n");
+    return ok ? 0 : 1;
+  }
+
+  emit(args.options, payload, () => {
+    const lines = ["mo setup" + (dryRun ? "（--dry-run）" : ""), ""];
+    if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
+    for (const entry of results) lines.push(...entryLines(entry));
+    lines.push("", ...summaryLines(report, remaining));
+    return lines.join("\n");
+  });
 
   return ok ? 0 : 1;
 }

@@ -92,9 +92,11 @@ export function allTargets() {
 
 /**
  * 交互式选择要装到哪些目标。
- * 空输入 = 默认（可用的那些）；a = 全部可用；q = 取消。
+ * 空输入 = 默认（可用的那些）；输入编号（如 1,3）；q 取消。
+ * prompter 可复用调用方（mo setup）已经开好的 readline，避免两套 stdin。
+ * @returns {Promise<Array<{name: string, dir: string}>>}
  */
-async function chooseTargets() {
+export async function chooseTargets(prompter) {
   const targets = allTargets();
   const available = targets.filter((target) => target.available);
 
@@ -106,20 +108,26 @@ async function chooseTargets() {
   });
   lines.push("", "[✓] 已装（重装会覆盖） [x] 可装 [ ] 不可用（对应 Agent 目录不存在）");
   lines.push("回车：处理全部可用的 " + available.length + " 项 | 输入编号（如 1,3）：只处理这些 | q 取消");
-  process.stdout.write(lines.join("\n") + "\n> ");
+  process.stdout.write(lines.join("\n") + "\n");
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = (await rl.question("")).trim().toLowerCase();
-    if (answer === "q") return [];
-    if (answer === "") return available;
-    const picked = new Set(
-      answer.split(/[,\s]+/).map((part) => Number(part)).filter((n) => Number.isInteger(n) && n >= 1 && n <= targets.length),
-    );
-    return targets.filter((target, index) => picked.has(index + 1) && target.available);
-  } finally {
-    rl.close();
+  let answer;
+  if (prompter) {
+    answer = (await prompter.ask("> ")).trim().toLowerCase();
+  } else {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      answer = (await rl.question("> ")).trim().toLowerCase();
+    } finally {
+      rl.close();
+    }
   }
+
+  if (answer === "q") return [];
+  if (answer === "") return available;
+  const picked = new Set(
+    answer.split(/[,\s]+/).map((part) => Number(part)).filter((n) => Number.isInteger(n) && n >= 1 && n <= targets.length),
+  );
+  return targets.filter((target, index) => picked.has(index + 1) && target.available);
 }
 
 /**
