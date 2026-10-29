@@ -668,8 +668,8 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 
 | # | 步骤 | 检测 | 动作 |
 |---|---|---|---|
-| 1 | 数据目录 | `~/.mo-agent/` 及各子目录 | 建 `ledger/ memory/ inbox/ approvals/` |
-| 2 | 全局配置 | `config.json` 存在 | 只补缺的默认键，已有值不动；坏 JSON / 非法字段给警告 |
+| 1 | 数据目录 | `~/.mo-agent/` 及各子目录 | 建 `ledger/ memory/ inbox/ approvals/`；交互时可改根目录 |
+| 2 | 全局配置 | `config.json` 存在 | 只补缺的默认键，已有值不动；坏 JSON / 非法字段给警告；交互时列出 7 个键的当前值与来源，可按 `key=value` 修改 |
 | 3 | 记忆骨架 | `memory/README.md` 等 | 只补 `README.md`、`preferences.md`、`pitfalls/_template.md`、`decisions/_template.md` |
 | 4 | 默认执行者 | `defaultWorkerName()` 非空 | 列已安装的内置 worker，`--yes` 取第一个，交互时让选 |
 | 5 | 默认终端 | `currentTerminal()` 非空 | 探测 iTerm → Terminal.app；都没有就设 `print` 并 `⚠` |
@@ -679,7 +679,7 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 
 选项：`--yes`（不问）、`--dry-run`（不写任何文件）、`--only dirs,memory`、`--skip skill`、`--json`（每步 `status`）。退出码：有 `⚠` / `✗` 为 1，否则 0。
 
-交互（TTY 且没给 `--yes`）：可以选默认执行者、终端、技能目标，并确认是否写 MCP。`--dry-run` 交互时按步骤分页展示——每步之后「按 Enter 继续...」，最后问「按这个计划真实执行吗 (y/N)」，答 y 才用同一批选择真实落地；`--json` 不弹任何问题。
+交互（TTY 且没给 `--yes`）：可以改数据目录根目录（默认 `~/.mo-agent`，支持输入其它路径）、逐键改全局配置、选默认执行者/终端/技能目标，并确认是否写 MCP；改到非默认根目录时结尾提示其它命令需 `MO_AGENT_HOME`。`--dry-run` 交互时按步骤分页展示——每步之后「按 Enter 继续...」，最后问「按这个计划真实执行吗 (y/N)」，答 y 才用同一批选择真实落地；`--json` 不弹任何问题。
 
 每步在人类可读输出里都会列出真实操作与具体路径（目录、文件、`mo worker use` / `mo terminal use` 的目标、MCP 服务名与备份文件）；`--dry-run` 只是把这些操作"不落地"，输出格式与真实执行一致。
 

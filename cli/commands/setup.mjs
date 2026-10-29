@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
@@ -6,7 +7,14 @@ import { all, has } from "../lib/args.mjs";
 import { emit, isJson } from "../lib/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
-import { CONFIG_KEYS, configFile, readGlobalConfig, writeGlobalConfig } from "../lib/config.mjs";
+import {
+  CONFIG_KEYS,
+  configFile,
+  configKey,
+  effectiveConfig,
+  readGlobalConfig,
+  writeGlobalConfig,
+} from "../lib/config.mjs";
 import { SKILL_NAME } from "../lib/skill-content.mjs";
 import { initMemory } from "./memory.mjs";
 import { allTargets, chooseTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
@@ -28,11 +36,14 @@ import { doctorReport } from "./doctor.mjs";
  * 只串已有命令/函数，不重写逻辑；绝不碰仓库（不建 project.json、不写
  * <repo>/.mo-agent/、不改 AGENTS.md），也不启动 daemon。
  *
- * 交互（TTY + 没给 --yes）时可以选默认执行者、终端、技能目标，并确认 MCP；
- * --dry-run 交互时先走一遍这些选择，最后问"按这个计划真实执行吗"。
+ * 交互（TTY + 没给 --yes）时可以改数据目录根目录、逐键改全局配置、选默认
+ * 执行者/终端/技能目标，并确认 MCP；--dry-run 交互时先走一遍这些选择，
+ * 最后问"按这个计划真实执行吗"。
  */
 
 const STATUS_ICON = { created: "✓", skipped: "⏭", planned: "·", warn: "⚠", failed: "✗" };
+
+const SOURCE_LABEL = { default: "默认", file: "config.json", env: "环境变量（会覆盖文件）" };
 
 const REMEDY = {
   home: "mo setup",
@@ -87,6 +98,61 @@ async function chooseWorker(installed, prompter) {
   return Number.isInteger(pick) && pick >= 1 && pick <= installed.length ? installed[pick - 1] : installed[0];
 }
 
+function expandPath(input) {
+  const text = String(input || "").trim();
+  if (text === "~") return os.homedir();
+  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
+  return text;
+}
+
+async function chooseRoot(ctx, fallback) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const answer = await ctx.prompter.ask("数据目录根目录（回车=" + fallback + "，可输入其它路径，q 跳过）：");
+    if (answer.toLowerCase() === "q") return null;
+    const dir = path.resolve(expandPath(answer || fallback));
+    if (fs.existsSync(dir) && !fs.statSync(dir).isDirectory()) {
+      process.stderr.write("[W_HOME] 不是目录：" + dir + "\n");
+      continue;
+    }
+    return dir;
+  }
+  return fallback;
+}
+
+function configValueLines(ctx) {
+  const effective = effectiveConfig({ home: ctx.home });
+  return CONFIG_KEYS.map((spec) => {
+    const item = effective[spec.key];
+    const shown = item.value === "" ? "（空=默认目录）" : String(item.value);
+    return "  " + spec.key.padEnd(14) + "= " + shown + "  · " + (SOURCE_LABEL[item.source] || item.source);
+  });
+}
+
+function parseConfigEdits(answer) {
+  const edits = {};
+  for (const token of String(answer).split(/[,，\s]+/).filter(Boolean)) {
+    const eq = token.indexOf("=");
+    if (eq <= 0) {
+      process.stderr.write("[W_CONFIG] 忽略输入：" + token + "（需要 key=value）\n");
+      continue;
+    }
+    const key = token.slice(0, eq).trim();
+    const raw = token.slice(eq + 1).trim();
+    const spec = configKey(key);
+    if (!spec) {
+      process.stderr.write("[W_CONFIG] 未知键：" + key + "（mo config list 查看）\n");
+      continue;
+    }
+    const parsed = spec.parse(raw);
+    if (!parsed.ok) {
+      process.stderr.write("[W_CONFIG] 非法值：" + key + "=" + raw + "（" + parsed.message + "）\n");
+      continue;
+    }
+    edits[key] = parsed.value;
+  }
+  return edits;
+}
+
 async function chooseTerminal(ctx, fallback) {
   const names = listTerminals({ home: ctx.home })
     .filter((terminal) => terminal.kind !== "none")
@@ -105,6 +171,18 @@ async function chooseTerminal(ctx, fallback) {
 }
 
 async function stepDirs(ctx) {
+  const defaultHome = ctx.home;
+  if (ctx.choices.homeSkipped) return skipped("已跳过数据目录");
+  if (ctx.interactive && !ctx.choices.home) {
+    const chosen = await chooseRoot(ctx, defaultHome);
+    if (!chosen) {
+      ctx.choices.homeSkipped = true;
+      return skipped("已跳过数据目录");
+    }
+    ctx.choices.home = chosen;
+  }
+  if (ctx.choices.home) ctx.home = ctx.choices.home;
+
   const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "memory"), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
   const missing = dirs.filter((dir) => !fs.existsSync(dir));
   if (!missing.length) return skipped("数据目录已就绪：" + ctx.home);
@@ -113,36 +191,56 @@ async function stepDirs(ctx) {
   return created("已创建 " + missing.length + " 个目录", { dirs: missing }, missing);
 }
 
-function stepConfig(ctx) {
+async function stepConfig(ctx) {
   const file = configFile({ home: ctx.home });
+  if (ctx.choices.configSkipped) return skipped("已跳过全局配置");
   const read = readGlobalConfig({ home: ctx.home });
   const defaults = Object.fromEntries(CONFIG_KEYS.map((spec) => [spec.key, spec.default]));
 
-  if (!read.exists) {
-    const keys = Object.keys(defaults);
-    if (ctx.dryRun) return planned("将写入 " + keys.length + " 个默认键 → " + file, { file, keys }, [keys.join(" / ")]);
-    writeGlobalConfig({ home: ctx.home, patch: defaults });
-    return created("已写入默认配置 → " + file, { file, keys }, [keys.join(" / ")]);
-  }
-
   // 只补"文件里没有"的键：非法值已经有警告，不替用户改写
   const missing = CONFIG_KEYS.filter((spec) => !read.present.includes(spec.key)).map((spec) => spec.key);
-  if (!missing.length) {
+
+  let edits = ctx.choices.configEdits || {};
+  if (!ctx.choices.configAsked && ctx.interactive) {
+    ctx.choices.configAsked = true;
+    const lines = ["全局配置（当前生效值；回车=只补缺省，输入 key=value 修改，q 跳过）：", ...configValueLines(ctx), ""];
+    process.stdout.write(lines.join("\n") + "\n");
+    const answer = await ctx.prompter.ask("改哪些（如 port=7799 authRequired=false）：");
+    if (answer.toLowerCase() === "q") {
+      ctx.choices.configSkipped = true;
+      return skipped("已跳过全局配置");
+    }
+    edits = parseConfigEdits(answer);
+    ctx.choices.configEdits = edits;
+  }
+
+  const patch = { ...Object.fromEntries(missing.map((key) => [key, defaults[key]])), ...edits };
+  const keys = Object.keys(patch);
+  if (!keys.length) {
     return read.warnings.length
-      ? warning("配置已存在：" + file, { file, warnings: read.warnings }, read.warnings)
+      ? warning("配置已存在：" + file + "；" + read.warnings.length + " 个键被忽略", { file, warnings: read.warnings }, read.warnings)
       : skipped("配置已存在：" + file);
   }
 
-  const details = [missing.join(" / "), ...read.warnings];
-  if (ctx.dryRun) return planned("将补齐 " + missing.length + " 个默认键 → " + file, { file, keys: missing }, details);
-  writeGlobalConfig({ home: ctx.home, patch: Object.fromEntries(missing.map((key) => [key, defaults[key]])) });
+  const details = [...keys.map((key) => key + " = " + String(patch[key] === "" ? "（默认目录）" : patch[key])), ...read.warnings];
+  const writtenFromDefaults = keys.every((key) => !Object.prototype.hasOwnProperty.call(edits, key));
+  const action = read.exists
+    ? writtenFromDefaults
+      ? "补了 " + keys.length + " 个默认键"
+      : "已写入 " + keys.length + " 个键"
+    : "已写入 " + keys.length + " 个默认键";
+
+  if (ctx.dryRun) {
+    return planned(
+      (read.exists ? "将写入 " : "将写入 ") + keys.length + " 个键 → " + file,
+      { file, keys, patch },
+      details,
+    );
+  }
+  writeGlobalConfig({ home: ctx.home, patch });
   return read.warnings.length
-    ? warning(
-        "补了 " + missing.length + " 个键 → " + file + "；" + read.warnings.length + " 个键被忽略",
-        { file, keys: missing, warnings: read.warnings },
-        details,
-      )
-    : created("补了 " + missing.length + " 个默认键 → " + file, { file, keys: missing }, details);
+    ? warning(action + " → " + file + "；" + read.warnings.length + " 个键被忽略", { file, keys, warnings: read.warnings }, details)
+    : created(action + " → " + file, { file, keys, patch }, details);
 }
 
 function stepMemory(ctx) {
@@ -388,7 +486,7 @@ async function runPaged(runCtx, selected, prompter) {
 }
 
 export async function setupCommand(ctx, args) {
-  const home = moHome();
+  const defaultHome = moHome();
   const options = args.options;
   const validIds = STEPS.map((step) => step.id);
   const only = parseIdList(options, "only", validIds);
@@ -402,7 +500,7 @@ export async function setupCommand(ctx, args) {
   const paged = interactive && dryRun;
 
   const runCtx = {
-    home,
+    home: defaultHome,
     cwd: ctx.cwd,
     dryRun,
     explicitYes,
@@ -437,18 +535,25 @@ export async function setupCommand(ctx, args) {
   }
 
   const effectiveDryRun = dryRun && !applied;
-  const report = doctorReport(ctx.cwd);
+  const report = doctorReport(ctx.cwd, { home: runCtx.home });
   const remaining = remainingActions(report);
   const ok = !results.some((entry) => entry.status === "warn" || entry.status === "failed");
+  const homeIsDefault = runCtx.home === defaultHome;
   const payload = {
     ok,
-    home,
+    home: runCtx.home,
+    homeIsDefault,
     dryRun: effectiveDryRun,
     applied,
     steps: results,
     doctor: { ok: report.ok, checks: report.checks },
     remaining,
   };
+
+  const homeNote = () =>
+    homeIsDefault
+      ? []
+      : ["", "数据目录不在默认位置：" + runCtx.home, "  其它 mo 命令要加 MO_AGENT_HOME=" + runCtx.home + " 才会用它"];
 
   if (paged) {
     if (applied) {
@@ -458,7 +563,7 @@ export async function setupCommand(ctx, args) {
     } else {
       process.stdout.write("\n（没有执行任何操作）\n");
     }
-    process.stdout.write("\n" + summaryLines(report, remaining).join("\n") + "\n");
+    process.stdout.write("\n" + [...summaryLines(report, remaining), ...homeNote()].join("\n") + "\n");
     return ok ? 0 : 1;
   }
 
@@ -466,7 +571,7 @@ export async function setupCommand(ctx, args) {
     const lines = ["mo setup" + (dryRun ? "（--dry-run）" : ""), ""];
     if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
     for (const entry of results) lines.push(...entryLines(entry));
-    lines.push("", ...summaryLines(report, remaining));
+    lines.push("", ...summaryLines(report, remaining), ...homeNote());
     return lines.join("\n");
   });
 

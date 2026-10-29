@@ -12,8 +12,8 @@ import { memoryDir } from "../lib/knowledge.mjs";
  * ledger / memory / cwd-project 属于"还没用到"，用 ⚠ 提示，不阻塞。
  */
 /** 只读检查项：mo doctor 与 mo setup 的汇总共用 */
-export function doctorReport(cwd) {
-  const home = moHome();
+export function doctorReport(cwd, options = {}) {
+  const home = options.home || moHome();
   const memory = memoryDir(home);
   const projects = listProjects(home);
   const events = readEvents(home);
