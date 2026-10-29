@@ -21,6 +21,13 @@ const SCOPES = {
   "decisions": "decisions",
 };
 
+/** 没有 env / config.memoryPath 时用的目录（老安装会沿用 knowledge/） */
+export function defaultMemoryDir(home) {
+  const next = path.join(home, "memory");
+  const legacy = path.join(home, "knowledge");
+  return !fs.existsSync(next) && fs.existsSync(legacy) ? legacy : next;
+}
+
 export function memoryDir(home, env = process.env) {
   if (env.MO_AGENT_MEMORY) {
     return { dir: path.resolve(env.MO_AGENT_MEMORY), explicit: true, source: "env" };
@@ -37,7 +44,7 @@ export function memoryDir(home, env = process.env) {
   const next = path.join(home, "memory");
   const legacy = path.join(home, "knowledge");
   // 老安装：只有 knowledge/ 时才继续用它，避免用户"换个命令就找不到记忆"
-  if (!fs.existsSync(next) && fs.existsSync(legacy)) {
+  if (defaultMemoryDir(home) === legacy) {
     return { dir: legacy, explicit: false, source: "legacy", target: next };
   }
   return { dir: next, explicit: false, source: "default" };

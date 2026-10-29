@@ -17,6 +17,7 @@ import {
 } from "../lib/config.mjs";
 import { SKILL_NAME } from "../lib/skill-content.mjs";
 import { initMemory } from "./memory.mjs";
+import { defaultMemoryDir } from "../lib/knowledge.mjs";
 import { allTargets, chooseTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
 import { mergeMcpConfig } from "./agent-add.mjs";
 import { defaultWorkerName, listWorkers, setDefaultWorker } from "../lib/workers-config.mjs";
@@ -129,6 +130,14 @@ function shownConfigValue(value) {
   return value === "" ? "（空=默认目录）" : String(value);
 }
 
+/** memoryPath 为空时，把"默认目录"具体是什么显示出来 */
+function configDisplayValue(spec, value, home) {
+  if (spec.key === "memoryPath") {
+    return value === "" ? "空 → " + defaultMemoryDir(home) : String(value);
+  }
+  return shownConfigValue(value);
+}
+
 /** 逐个键确认/修改；返回要写进 config.json 的 edits，null 表示跳过整步 */
 async function askConfigEdits(ctx, read) {
   const effective = effectiveConfig({ home: ctx.home });
@@ -148,8 +157,8 @@ async function askConfigEdits(ctx, read) {
 
     process.stdout.write(
       "\n[" + (index + 1) + "/" + CONFIG_KEYS.length + "] " + spec.key +
-        "\n  当前生效 " + shownConfigValue(item.value) + "  · " + (SOURCE_LABEL[item.source] || item.source) +
-        "\n  默认 " + shownConfigValue(spec.default) + "  · 范围 " + spec.range + "\n",
+        "\n  当前生效 " + configDisplayValue(spec, item.value, ctx.home) + "  · " + (SOURCE_LABEL[item.source] || item.source) +
+        "\n  默认 " + configDisplayValue(spec, spec.default, ctx.home) + "  · 范围 " + spec.range + "\n",
     );
     if (item.source === "env") {
       process.stdout.write("  注意：环境变量会覆盖文件；这里改的是 config.json\n");
@@ -252,7 +261,12 @@ async function stepConfig(ctx) {
       : skipped("配置已存在：" + file);
   }
 
-  const details = [...keys.map((key) => key + " = " + String(patch[key] === "" ? "（默认目录）" : patch[key])), ...read.warnings];
+  const details = [
+    ...keys.map((key) =>
+      key + " = " + (key === "memoryPath" && patch[key] === "" ? "空 → " + defaultMemoryDir(ctx.home) : String(patch[key])),
+    ),
+    ...read.warnings,
+  ];
   const writtenFromDefaults = keys.every((key) => !Object.prototype.hasOwnProperty.call(edits, key));
   const action = read.exists
     ? writtenFromDefaults

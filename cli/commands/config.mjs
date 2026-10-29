@@ -1,6 +1,7 @@
 import { MoError } from "../../core/errors.mjs";
 import { emit, table } from "../lib/output.mjs";
 import { moHome } from "../lib/paths.mjs";
+import { defaultMemoryDir } from "../lib/knowledge.mjs";
 import { CONFIG_KEYS, configKey, effectiveConfig, readGlobalConfig, writeGlobalConfig } from "../lib/config.mjs";
 
 /**
@@ -16,9 +17,10 @@ function sourceLabel(source) {
   return SOURCE_LABEL[source] || source;
 }
 
-function display(value) {
-  if (value === "") return "（默认目录）";
-  return String(value);
+function display(value, key, home) {
+  if (value !== "") return String(value);
+  if (key === "memoryPath") return "空 → " + defaultMemoryDir(home);
+  return "（默认目录）";
 }
 
 export function configCommand(ctx, args) {
@@ -42,7 +44,7 @@ function listCommand(args, home) {
 
   emit(args.options, { config }, () =>
     table(
-      config.map((item) => [item.key, display(item.value), sourceLabel(item.source), display(item.default)]),
+      config.map((item) => [item.key, display(item.value, item.key, home), sourceLabel(item.source), display(item.default, item.key, home)]),
       ["键", "值", "来源", "默认"],
     )
       .replace(/[ \t]+$/gm, "")
@@ -64,7 +66,7 @@ function getCommand(args, home) {
   const key = requireKey(args, 1);
   const { value, source } = effectiveConfig({ home })[key];
   emit(args.options, { key, value, source, default: configKey(key).default }, () =>
-    display(value) + "\n  （来源：" + sourceLabel(source) + "）");
+    display(value, key, home) + "\n  （来源：" + sourceLabel(source) + "）");
   return 0;
 }
 
@@ -92,7 +94,7 @@ function setCommand(args, home) {
     args.options,
     { ok: true, key, value: effective.value, source: effective.source, file: result.file },
     () =>
-      "✓ " + key + " = " + display(effective.value) + "\n" +
+      "✓ " + key + " = " + display(effective.value, key, home) + "\n" +
       "  文件   " + result.file +
       (effective.source === "env" ? "\n  注意：环境变量 " + configKey(key).env + " 仍然覆盖它" : ""),
   );
@@ -109,7 +111,7 @@ function unsetCommand(args, home) {
     args.options,
     { ok: true, key, value: effective.value, source: effective.source, file: result.file },
     () =>
-      "✓ 已移除 " + key + "（回到默认：" + display(spec.default) + "）\n" +
+      "✓ 已移除 " + key + "（回到默认：" + display(spec.default, key, home) + "）\n" +
       "  文件   " + result.file +
       (effective.source === "env" ? "\n  注意：环境变量 " + spec.env + " 仍在生效" : ""),
   );
