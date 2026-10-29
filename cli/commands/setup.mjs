@@ -583,8 +583,10 @@ function coveredChecks(results) {
   return covered;
 }
 
-function entryLines(entry) {
-  const lines = [(STATUS_ICON[entry.status] || "·") + " " + entry.title + "  " + entry.message];
+function entryLines(entry, dryRun = false) {
+  // 预演里没有"已跳过"这个动作，统一用 · 表示"不会发生"
+  const icon = dryRun && entry.status === "skipped" ? "·" : STATUS_ICON[entry.status] || "·";
+  const lines = [icon + " " + entry.title + "  " + entry.message];
   for (const item of entry.lines || []) lines.push("    - " + item);
   return lines;
 }
@@ -635,7 +637,7 @@ async function runPaged(runCtx, selected, prompter) {
     }
     entry.asked = Boolean(runCtx.asked);
     results.push(entry);
-    process.stdout.write(entryLines(entry).join("\n") + "\n");
+    process.stdout.write(entryLines(entry, true).join("\n") + "\n");
     // 已经让你选过的步骤不再多要一次回车
     if (index < steps.length - 1 && !entry.asked) {
       process.stdout.write("\n按 Enter 继续...");
@@ -719,7 +721,7 @@ export async function setupCommand(ctx, args) {
     if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
     results.forEach((entry, index) => {
       if (index > 0) lines.push("");
-      lines.push(...entryLines(entry));
+      lines.push(...entryLines(entry, dryRun));
     });
     lines.push("", ...summaryLines(report, remaining, covered), ...homeNote());
     return lines.join("\n");
