@@ -460,6 +460,42 @@ mo ledger query --project <TAB>   demo  other-project
 实现上是一个隐藏回调 `mo __complete`，shell 脚本把当前行交给它；脚本本身很短，可先 `mo completion zsh` 看一眼再 eval。
 
 没有候选时回退到 shell 默认（bash 的文件名补全、zsh 的 `_files`），所以 `--file` 这类路径参数照常可用。
+## 全局配置
+
+`~/.mo-agent/config.json` 只放**全局、机器级**的键；默认执行者 / 终端仍分别存在 `workers.json` / `terminals.json`，不复制一份。
+
+```bash
+# 首次装配（幂等）：目录 + 配置 + 记忆骨架 + 默认执行者/终端 + 技能 + MCP
+mo setup
+mo setup --yes                 # 不问，取默认
+mo setup --dry-run             # 只报告，不写任何文件
+mo setup --only memory,mcp     # 只跑这些步骤
+mo setup --skip skill          # 跳过这些步骤
+
+# 全局配置
+mo config list                 # 所有键：值 + 来源（默认 / config.json / 环境变量）
+mo config get port
+mo config set port 7799
+mo config set authRequired false
+mo config unset port           # 回到默认
+```
+
+优先级：**默认值 < `config.json` < 环境变量 < 命令行参数**（命令行只对 daemon 有意义）。
+
+| 键 | 默认 | 谁用 |
+|---|---|---|
+| `host` | `0.0.0.0` | daemon |
+| `port` | `7788` | daemon |
+| `authRequired` | `true` | daemon |
+| `pollMs` | `1500` | daemon |
+| `logLevel` | `info` | daemon |
+| `recallLimit` | `5` | CLI 派单注入 |
+| `memoryPath` | 空（默认目录） | CLI |
+
+`MO_AGENT_CONFIG` 可换配置文件位置。`set` 会校验类型与范围，非法值报 `E_USAGE`；只写文件，不碰环境变量和 shell rc。
+
+`mo setup` 不碰仓库：**不会**建 `project.json`、不写 `<repo>/.mo-agent/`、不改 `AGENTS.md`；也不启动 daemon。每步先检测，已存在就 `⏭`，连跑两次第二次全是 `⏭`。有 `⚠` / `✗` 时退出码 1。
+
 ## 命令
 
 ```bash
@@ -507,6 +543,9 @@ mo inbox pull                      # 拉取任务结束/阻塞的通知，拉完
 mo inbox pull --peek               # 只看不归档
 
 # 其它
+mo setup [--yes] [--dry-run]       # 首次装配（幂等），不碰仓库
+mo config list                     # 全局配置：值 + 来源
+mo config set <键> <值>            # 写 ~/.mo-agent/config.json
 mo receipt submit <id> --file -    # 手工写入回执（不改状态）
 mo receipt apply <id>              # 应用已有回执：跑验收并更新状态
 mo ledger query [--project 项目] [--task id] [--type task.] [--days 30] [--limit 50]
@@ -668,6 +707,7 @@ mo watchdog run --dry-run    # 只报告，不改状态
 | 回执 | `<repo>/.mo-agent/receipts/<taskId>.json`（默认 ignore） |
 | 执行日志 | `<repo>/.mo-agent/logs/<taskId>.log`（默认 ignore） |
 | 项目登记表 | `~/.mo-agent/projects.json` |
+| 全局配置 | `~/.mo-agent/config.json`（`MO_AGENT_CONFIG` 可覆盖） |
 | 账本 | `~/.mo-agent/ledger/YYYY-MM.jsonl` |
 | 知识库 | `~/.mo-agent/memory/`（`MO_AGENT_MEMORY` 可覆盖） |
 | 确认请求 | `~/.mo-agent/approvals/<a_…>.json` |

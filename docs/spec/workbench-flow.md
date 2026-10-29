@@ -574,13 +574,40 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 | 承诺 | 现状 |
 |---|---|
-| `mo setup` / `mo setup cli [--uninstall]` | 不存在；装 CLI 用 `scripts/install-cli.sh` |
 | `mo daemon start` | 不存在；daemon 只能由桌面端拉起（纯 CLI 形态还跑不起来） |
 | `mo manager check` | 不存在；用 `mo doctor` + 手工建一张卡验证 |
 | `mo agent remove` | 不存在；手工改各家 MCP 配置 |
 | `mo doctor --preflight` | 不存在；`mo doctor` 本身已是只读 |
 
 **服务层**：任务面板（只有审批页与监控页）、daemon 启动补推 pending 审批、审批推送（现在 5s 轮询）、Streamable HTTP `/mcp`、账本轮转与保留期、Windows/Linux 适配、知识库不可写的界面告警。
+
+### 12.8 全局配置与首次装配实现记录（2026-11）
+
+**配置文件**：`~/.mo-agent/config.json`（`MO_AGENT_CONFIG` 覆盖路径）。
+
+优先级：`DEFAULTS < config.json < 环境变量 < 命令行参数`；argv 只对 daemon 有意义，CLI 侧 `mo config list` 只显示 `default | file | env`。
+
+| 键 | 类型 | 默认 | 谁用 | 环境变量 |
+|---|---|---|---|---|
+| `host` | string | `0.0.0.0` | daemon | `MO_AGENT_HOST` |
+| `port` | 1–65535 | `7788` | daemon | `MO_AGENT_PORT` |
+| `authRequired` | boolean | `true` | daemon | `MO_AGENT_AUTH_REQUIRED`（兼容 `MO_AGENT_NO_AUTH=1`） |
+| `pollMs` | ≥ 100 | `1500` | daemon | `MO_AGENT_POLL` |
+| `logLevel` | debug/info/warn/error | `info` | daemon | `MO_AGENT_LOG_LEVEL` |
+| `recallLimit` | 0–20 | `5` | CLI 派单注入 | `MO_RECALL_LIMIT` |
+| `memoryPath` | string | 空（默认目录） | CLI | `MO_AGENT_MEMORY` |
+
+**行为**：
+
+- 文件不存在 → 静默用默认；坏 JSON / 字段非法 → stderr 一行 `[W_CONFIG]` 警告并继续（`host/config.mjs`），CLI 侧把警告收进 `readGlobalConfig().warnings`。
+- `mo config list|get|set|unset`：`set` 校验类型与范围（非法值 `E_USAGE` + 范围提示），只写 `config.json`，不碰环境变量与 shell rc；`unset` 删键回默认；`list --json` 输出 `{ config: [{ key, value, source, default }] }`。
+- CLI 接入：召回条数 `MO_RECALL_LIMIT > config.recallLimit > 5`；记忆库 `MO_AGENT_MEMORY > config.memoryPath > ~/.mo-agent/memory`（旧 `MO_AGENT_KNOWLEDGE` / `knowledge/` 兼容不变）。
+- `mo setup`：见 §13.4；连跑第二次每步都是 `skipped`，`--dry-run` 不写任何文件。
+- 默认执行者 / 终端仍然只存在 `workers.json` / `terminals.json`，不在 `config.json` 里存第二份；`pin` 等密钥不进配置文件。
+
+**测试**：`host/config.test.mjs`（优先级链 + 坏文件容错）、`cli/config.test.mjs`、`cli/setup.test.mjs`（空 home、幂等、`--dry-run`、`--only`/`--skip`、不碰项目）。
+
+**仍未实现**：`mo setup cli`、`mo daemon start`、`mo manager check`、`mo doctor --preflight`、`mo agent remove`（见 §12.7）。
 
 ## 13. 安装与首次使用
 
@@ -599,14 +626,14 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 | 条件 | 必需性 | 缺失时 |
 |---|---|---|
 | macOS 12+（Linux/Windows 适配中） | 必需 | 无法安装 |
-| Node ≥ 18 | `mo` CLI 与 hooks 需要 | `mo setup` 提示安装或用桌面端自带运行时 |
+| Node ≥ 18 | `mo` CLI 与 hooks 需要 | `mo setup` 只检查不代装，按提示自己装或换桌面端自带运行时 |
 | 一个主 Agent（DSH / Claude Code / …） | 建议 | 仍可用 CLI 手工建卡派单 |
 | 一个 git 仓库 | 可选 | 非 git 目录需显式 `mo project init` |
 
 ### 13.3 首次使用的七步
 
-> 本节是**目标形态**，其中 `mo setup` / `mo doctor --preflight` / `mo manager check` 尚未实现（见 §12.7）。
-> 当前可用：`scripts/install-cli.sh` 装 CLI、`mo doctor` 自检、桌面端拉起 daemon。
+> 本节是**目标形态**：`mo setup` 已实现（§12.8 / §13.4），`mo setup cli` / `mo doctor --preflight` / `mo manager check` 仍未实现（见 §12.7）。
+> 当前可用：`scripts/install-cli.sh` 装 CLI、`mo setup` 装配、`mo doctor` 自检、桌面端拉起 daemon。
 
 ```bash
 # 1. 安装桌面端：下载 .app → 拖进 Applications → 首次打开
@@ -635,26 +662,30 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 
 第 1、2 步是唯一需要"手动"的两步；从第 3 步起全部可重复执行，不会破坏已有配置。
 
-### 13.4 `mo setup` 具体做什么（幂等）
+### 13.4 `mo setup` 实际做什么（幂等，2026-11 落地）
 
-| 步骤 | 检查 | 动作 | 已存在时 |
+实现：`cli/commands/setup.mjs`，只串已有命令/函数，不重写逻辑。**不碰仓库、不启动 daemon、不装 Node、不动 PATH**；单步失败不中断其它步。
+
+| # | 步骤 | 检测 | 动作 |
 |---|---|---|---|
-| 1 | `~/.mo-agent/` 是否存在 | 创建目录 | 跳过，保留 |
-| 2 | `config.json` | 写默认值（端口、memory 路径、recall=auto） | 合并缺省键，不覆盖用户值 |
-| 3 | `memory/` | 建骨架：README、`preferences.md`、`pitfalls/_template.md` | 只补缺，不覆盖 |
-| 4 | `ledger/` | 创建目录 | 跳过 |
-| 5 | 单实例锁 | 检查是否有 daemon 在跑 | 复用，不重启 |
-| 6 | 端口 | 默认端口被占用则顺延并写回 config | — |
-| 7 | CLI | 检测 `mo` 是否在 PATH | 提示或自动安装 |
-| 8 | 主 Agent | 检测 MCP 配置里是否已有 mo-agent 条目 | 有则更新版本号 |
+| 1 | 数据目录 | `~/.mo-agent/` 及各子目录 | 建 `ledger/ memory/ inbox/ approvals/` |
+| 2 | 全局配置 | `config.json` 存在 | 只补缺的默认键，已有值不动；坏 JSON / 非法字段给警告 |
+| 3 | 记忆骨架 | `memory/README.md` 等 | 只补 `README.md`、`preferences.md`、`pitfalls/_template.md`、`decisions/_template.md` |
+| 4 | 默认执行者 | `defaultWorkerName()` 非空 | 列已安装的内置 worker，`--yes` 取第一个，交互时让选 |
+| 5 | 默认终端 | `currentTerminal()` 非空 | 探测 iTerm → Terminal.app；都没有就设 `print` 并 `⚠` |
+| 6 | 技能 | 目标目录里已有 `mo/SKILL.md` | 调 `mo skill install` 的写入函数；非 TTY 且没给 `--yes` 时跳过并说明 |
+| 7 | MCP | 已知配置文件里已有 `mo` / `mo-agent` 条目 | 合并 `mcpServers`（写前备份）；找不到配置就跳过，不猜路径 |
+| 8 | 汇总 | — | 跑 `doctor` 检查项，打印剩余动作 |
 
-每一步都**先备份、再写、失败回滚**，与现有 hooks 配置器同一套逻辑。
+选项：`--yes`（不问）、`--dry-run`（不写任何文件）、`--only dirs,memory`、`--skip skill`、`--json`（每步 `status`）。退出码：有 `⚠` / `✗` 为 1，否则 0。
+
+**刻意没做**（与旧版设想的差距）：`mo setup cli`（装 CLI 仍用 `scripts/install-cli.sh`）、端口占用时顺延、单实例锁检查、自动把 `mo` 装进 PATH、主 Agent 配置的版本号更新，以及"失败回滚"——每步只做最小幂等写入，冲突时跳过而不是回滚。
 
 ### 13.5 首次使用生成的东西
 
 ```
 ~/.mo-agent/
-├── config.json                # 端口、知识库路径、召回后端
+├── config.json                # 全局键：host/port/authRequired/pollMs/logLevel/recallLimit/memoryPath
 ├── memory/                    # 空骨架 + 模板
 ├── ledger/                    # 空目录
 ├── projects.json              # {}

@@ -153,7 +153,23 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo mcp` | stdio MCP 服务（给主 Agent 接） |
 | `mo agent describe \| add` | 输出契约 / 合并 MCP 配置 |
 | `mo doctor` | 自检 |
+| `mo config list \| get \| set \| unset` | 全局配置（`~/.mo-agent/config.json`），值带来源 |
+| `mo setup [--yes] [--dry-run] [--only 步骤]` | 首次装配，幂等；不碰仓库 |
 | `mo help [组]` | 帮助；给组名看该组子命令（如 `mo help task`） |
+
+全局配置与首次装配：
+
+```bash
+mo setup                      # 目录 + 配置 + 记忆 + 默认执行者/终端 + 技能 + MCP
+mo setup --dry-run            # 只报告，不写文件
+mo setup --only memory,mcp    # 只跑这些步骤；--skip skill 反向排除
+
+mo config list                # 值 + 来源（默认 / config.json / 环境变量）
+mo config set port 7799
+mo config unset port          # 回到默认
+```
+
+优先级是 **默认值 < `~/.mo-agent/config.json` < 环境变量 < 命令行参数**（命令行只对 daemon 生效）。键只有 `host` `port` `authRequired` `pollMs` `logLevel` `recallLimit` `memoryPath`；默认执行者 / 终端仍存在 `workers.json` / `terminals.json`。`mo setup` 是幂等的（第二次全是 `⏭`），且**绝不碰仓库**：不建 `project.json`、不写 `<repo>/.mo-agent/`、不改 `AGENTS.md`。
 
 ## 5. 任务生命周期
 

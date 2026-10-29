@@ -9,12 +9,15 @@ import { listAgents } from "./executors.mjs";
 import { listCandidates } from "./candidates.mjs";
 import { groupNames } from "./help.mjs";
 import { allTargets } from "../commands/skill.mjs";
+import { CONFIG_KEYS } from "./config.mjs";
 
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 
 const PROJECT = ["--project"];
 const taskIds = { positional: "task" };
 const candidateIds = { positional: "candidate" };
+const configKeys = { positional: "configKey" };
+const SETUP_STEPS = ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"];
 
 const SPEC = {
   task: {
@@ -105,6 +108,15 @@ const SPEC = {
       uninstall: { flags: ["--target"] },
     },
   },
+  config: {
+    subs: {
+      list: { flags: [] },
+      get: { flags: [], ...configKeys },
+      set: { flags: [], ...configKeys },
+      unset: { flags: [], ...configKeys },
+    },
+  },
+  setup: { subs: {} },
   completion: { subs: { bash: { flags: [] }, zsh: { flags: [] } } },
   mcp: { subs: {} },
   doctor: { subs: {} },
@@ -112,7 +124,7 @@ const SPEC = {
 
 /** 取值型 flag：补全时给候选而不是空 */
 const VALUE_FLAGS = new Set([
-  "--project", "--task", "--worker", "--scope", "--mode", "--target", "--file", "--mcp", "--type", "--id",
+  "--project", "--task", "--worker", "--scope", "--mode", "--target", "--file", "--mcp", "--type", "--id", "--only", "--skip",
 ]);
 
 const ENUMS = {
@@ -120,7 +132,13 @@ const ENUMS = {
   "--mode": ["auto", "skill", "ref", "inline"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "watchdog", "completion", "version", "help"];
+/** 没有子命令的组：自己的 flag */
+const NO_SUB_FLAGS = {
+  doctor: ["--json"],
+  setup: ["--yes", "--dry-run", "--only", "--skip", "--json"],
+};
+
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "config", "setup", "watchdog", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };
@@ -159,6 +177,7 @@ function valuesFor(flag, cwd) {
   if (flag === "--scope") return ENUMS["--scope"].map((value) => item(value, ""));
   if (flag === "--mode") return ENUMS["--mode"].map((value) => item(value, ""));
   if (flag === "--id") return candidateItems();
+  if (flag === "--only" || flag === "--skip") return SETUP_STEPS.map((name) => item(name, ""));
   if (flag === "--target") {
     return allTargets()
       .filter((target) => target.available)
@@ -171,6 +190,7 @@ function valuesFor(flag, cwd) {
 function positionalFor(kind, cwd) {
   if (kind === "task") return taskItems(cwd);
   if (kind === "candidate") return candidateItems();
+  if (kind === "configKey") return CONFIG_KEYS.map((spec) => item(spec.key, spec.range));
   return [];
 }
 
@@ -209,10 +229,10 @@ export function complete(ctx = {}) {
   const sub = tokens[1];
 
   if (!sub) {
-    if (current.startsWith("-")) return flagItems(GLOBAL_FLAGS, current);
+    if (current.startsWith("-")) return flagItems([...GLOBAL_FLAGS, ...(NO_SUB_FLAGS[group] || [])], current);
     const subs = Object.keys(spec.subs);
     // mcp / doctor 没有子命令：直接给 flag
-    if (!subs.length) return flagItems([...GLOBAL_FLAGS, ...(group === "doctor" ? ["--json"] : [])], current);
+    if (!subs.length) return flagItems([...GLOBAL_FLAGS, ...(NO_SUB_FLAGS[group] || [])], current);
     return [...subs.map((name) => item(name, "")), item("help", "看这组命令"), ...flagItems(GLOBAL_FLAGS, current)].filter(
       startsWith(current),
     );

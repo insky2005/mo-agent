@@ -109,6 +109,28 @@ export const GROUPS = [
     ],
   },
   {
+    name: "config",
+    title: "全局配置",
+    blurb: "~/.mo-agent/config.json：只放全局、机器级的键（端口、日志、召回条数…）",
+    subs: [
+      ["list", "所有键：值 + 来源", "来源为 默认 / config.json / 环境变量"],
+      ["get <键>", "打印一个键的生效值", ""],
+      ["set <键> <值>", "写进 config.json", "校验类型与范围"],
+      ["unset <键>", "删掉该键，回到默认", ""],
+    ],
+  },
+  {
+    name: "setup",
+    title: "首次装配",
+    blurb: "幂等：已存在的步骤跳过；不碰仓库、不启动 daemon",
+    subs: [
+      ["", "交互式装配；非 TTY 时等同 --yes", ""],
+      ["--dry-run", "只报告，不写任何文件", ""],
+      ["--only 步骤 / --skip 步骤", "只做 / 不做某些步骤", "dirs config memory worker terminal skill mcp"],
+      ["--json", "每步的 status 与汇总", ""],
+    ],
+  },
+  {
     name: "watchdog",
     title: "看门狗",
     blurb: "把超时没回执的卡转成 blocked(timeout)，并落收件箱",
@@ -192,6 +214,16 @@ const OPTIONS = {
     ["--target <名|路径>", "指定要装到哪，默认探测已安装的 Agent"],
     ["--yes", "install：跳过交互，装到全部可用目标"],
   ],
+  config: [
+    ["--json", "list / get：机器可读输出"],
+  ],
+  setup: [
+    ["--yes", "不问，取默认（非 TTY 也是这个行为）"],
+    ["--dry-run", "只检查、只报告，不写文件"],
+    ["--only memory,mcp", "只跑这些步骤"],
+    ["--skip skill", "跳过这些步骤"],
+    ["--json", "机器可读：每步 status / doctor / remaining"],
+  ],
 };
 
 const EXTRA = [
@@ -223,9 +255,11 @@ export function renderHelp() {
     "mo —— 个人工作台：想法 → 任务卡 → 人批准 → 派单 → 按账本汇报",
     "",
     "第一次用",
+    row("  mo setup", "首次装配（幂等；不碰仓库）"),
     row("  mo doctor", "自检（Node / 目录 / 记忆库 / 项目）"),
     row("  mo project init [路径]", "认领当前目录，写 AGENTS.md"),
     row("  mo agent", "接一个 Agent 时看这个"),
+    row("  mo config list", "全局配置：值 + 来源（set / unset 改）"),
     row("  mo help <组>", "某组的子命令与选项（--mode、--wait 这些）"),
     "",
     "一次派活",

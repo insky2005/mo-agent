@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "watchdog", "completion", "version", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "config", "setup", "watchdog", "completion", "version", "help",
   ]);
 });
 
@@ -138,6 +138,14 @@ test("无子命令的组不瞎给 taskId", () => {
     const got = values(complete({ cwd: ws.project, words: [group, ""] }));
     assert.ok(!got.includes("t_01A"), group + " 不该补 taskId");
     assert.ok(got.includes("--json") || got.includes("--help"), group + " 应该给 flag");
+  }
+});
+
+test("setup 的 flag 有补全，包含 --only / --skip", () => {
+  const ws = workspace();
+  const got = values(complete({ cwd: ws.project, words: ["setup", "--"] }));
+  for (const flag of ["--yes", "--dry-run", "--only", "--skip", "--json"]) {
+    assert.ok(got.includes(flag), "缺少 " + flag);
   }
 });
 
