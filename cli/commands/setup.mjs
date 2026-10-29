@@ -73,7 +73,9 @@ function makePrompter() {
   const open = () => (rl ||= readline.createInterface({ input: process.stdin, output: process.stdout }));
   return {
     async ask(question) {
-      return String(await open().question(question)).trim();
+      const text = String(question ?? "");
+      // 统一：提示单独一行，输入在下一行
+      return String(await open().question(text ? text + "\n" : "\n")).trim();
     },
     close() {
       if (rl) {
@@ -82,6 +84,10 @@ function makePrompter() {
       }
     },
   };
+}
+
+function promptGap(ctx) {
+  if (!ctx.paged) process.stdout.write("\n");
 }
 
 async function chooseWorker(installed, prompter) {
@@ -128,6 +134,7 @@ async function askConfigEdits(ctx, read) {
   const effective = effectiveConfig({ home: ctx.home });
   const edits = {};
 
+  promptGap(ctx);
   process.stdout.write(
     "全局配置（逐个确认；回车=保持，输入值=修改，default=恢复默认，q=跳过剩余键，s=跳过本步）\n",
   );
@@ -278,6 +285,8 @@ async function stepWorker(ctx) {
     });
   }
 
+  if (ctx.interactive) promptGap(ctx);
+
   let picked;
   if (ctx.choices.worker) {
     picked = installed.find((worker) => worker.name === ctx.choices.worker) || installed[0];
@@ -311,6 +320,7 @@ async function stepTerminal(ctx) {
 
   let name = ctx.choices.terminal;
   if (!name && ctx.interactive) {
+    promptGap(ctx);
     name = await chooseTerminal(ctx, fallback);
     ctx.asked = true;
     if (!name) {
@@ -365,6 +375,7 @@ async function stepSkill(ctx) {
   if (ctx.choices.skillTargets) {
     chosen = ctx.choices.skillTargets;
   } else if (ctx.interactive) {
+    promptGap(ctx);
     chosen = await chooseTargets(ctx.prompter);
     ctx.asked = true;
     if (!chosen.length) {
@@ -428,6 +439,7 @@ async function stepMcp(ctx) {
     target = ctx.choices.mcpTarget;
   } else if (ctx.interactive) {
     ctx.asked = true;
+    promptGap(ctx);
     if (creating) {
       const answer = (
         await ctx.prompter.ask("没有找到已知的 MCP 配置。写到哪里？（回车=新建 " + fallback + "，可输入其它路径，q 跳过）：")
@@ -537,6 +549,7 @@ async function runPaged(runCtx, selected, prompter) {
   const steps = STEPS.filter((step) => selected.includes(step));
   const results = [];
   for (let index = 0; index < steps.length; index += 1) {
+    process.stdout.write("\n");
     const step = steps[index];
     const entry = { id: step.id, title: step.title };
     runCtx.asked = false;
@@ -576,6 +589,7 @@ export async function setupCommand(ctx, args) {
     home: defaultHome,
     cwd: ctx.cwd,
     dryRun,
+    paged,
     explicitYes,
     interactive,
     choices: {},
@@ -628,7 +642,10 @@ export async function setupCommand(ctx, args) {
   emit(args.options, payload, () => {
     const lines = ["mo setup" + (dryRun ? "（--dry-run）" : ""), ""];
     if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
-    for (const entry of results) lines.push(...entryLines(entry));
+    results.forEach((entry, index) => {
+      if (index > 0) lines.push("");
+      lines.push(...entryLines(entry));
+    });
     lines.push("", ...summaryLines(report, remaining), ...homeNote());
     return lines.join("\n");
   });
