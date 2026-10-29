@@ -47,7 +47,16 @@ bash scripts/verify-linux-docker.sh
 2. 容器内 `npm ci && npm test && npm run check`；
 3. 用临时 `MO_AGENT_HOME` 跑 `doctor`、`config set/get`、`memory init`。
 
-可换镜像：`MO_VERIFY_IMAGE=node:22.12-bookworm bash scripts/verify-linux-docker.sh`。
+可换镜像（公司内网示例）：
+
+```bash
+MO_VERIFY_IMAGE=harbor2.example.com/library/node:24-bookworm bash scripts/verify-linux-docker.sh
+MO_VERIFY_IMAGE=harbor2.example.com/library/node:22-slim bash scripts/verify-linux-docker.sh
+```
+
+`slim` 镜像没有 git / 编译工具，部分测试可能需要 `node:24-bookworm` 这类完整镜像。
+
+另外 `package-lock.json` 里有内网 Nexus 地址（`app.example.com`），容器里没有凭据会 403。脚本会先把这些地址改写到 `MO_VERIFY_NPM_REGISTRY`（默认 `https://registry.npmmirror.com`），容器内源码副本有效，不改仓库文件。
 
 ### 2.2 手工等价命令
 
@@ -179,4 +188,4 @@ mo setup --yes --json
 
 | 日期 | 平台 | 镜像/版本 | commit | 结果 | 失败项 / 备注 |
 |---|---|---|---|---|---|
-|  |  |  |  |  |  |
+| 2026-11 | Linux (Docker) | `harbor2.example.com/library/node:24-bookworm`（Node 24.18.0） | `4fc4d56` + 验证修复 | ✅ `npm test` / `npm run check` / `doctor` / `config set-get` / `memory init` 全通过 | root 容器下跳过 1 个 chmod 权限用例；终端开窗、语音、手机推送不在范围 |
