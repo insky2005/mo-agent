@@ -176,14 +176,22 @@ async function askConfigEdits(ctx, read) {
 }
 
 async function chooseTerminal(ctx, fallback) {
-  const names = listTerminals({ home: ctx.home })
-    .filter((terminal) => terminal.kind !== "none")
-    .map((terminal) => terminal.name);
-  const answer = (
-    await ctx.prompter.ask("默认终端（回车=" + fallback + "；可选 " + names.join(" / ") + "；q 跳过）：")
-  ).toLowerCase();
+  const terminals = listTerminals({ home: ctx.home }).filter((terminal) => terminal.kind !== "none");
+  const lines = ["选一个默认终端（会话型 worker 派单时用）：", ""];
+  terminals.forEach((terminal, index) => {
+    const mark = terminal.name === fallback ? "  （探测到）" : "";
+    lines.push("  " + (index + 1) + ") " + terminal.name.padEnd(12) + (terminal.description || "") + mark);
+  });
+  lines.push("", "回车=用 " + fallback + " | 编号=选它 | 也可输入名字 | q=跳过");
+  process.stdout.write(lines.join("\n") + "\n");
+
+  const answer = (await ctx.prompter.ask("> ")).toLowerCase();
   if (answer === "q") return null;
   if (!answer) return fallback;
+
+  const pick = Number(answer);
+  if (Number.isInteger(pick) && pick >= 1 && pick <= terminals.length) return terminals[pick - 1].name;
+
   const found = terminalByName({ home: ctx.home, name: answer });
   if (!found || found.kind === "none") {
     process.stderr.write("[W_TERMINAL] 没有这个终端：" + answer + "，改用 " + fallback + "\n");
@@ -206,7 +214,8 @@ async function stepDirs(ctx) {
   }
   if (ctx.choices.home) ctx.home = ctx.choices.home;
 
-  const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "memory"), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
+  // memory/ 交给"记忆骨架"那一步：它可能被 config.memoryPath / MO_AGENT_MEMORY 指到别处
+  const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
   const missing = dirs.filter((dir) => !fs.existsSync(dir));
   if (!missing.length) return skipped("数据目录已就绪：" + ctx.home);
   if (ctx.dryRun) return planned("将创建 " + missing.length + " 个目录", { dirs: missing }, missing);

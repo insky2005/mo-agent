@@ -71,6 +71,8 @@ test("干净 home：一次装配建好目录、配置、记忆、默认执行者
   for (const dir of ["ledger", "memory", "inbox", "approvals"]) {
     assert.equal(fs.existsSync(path.join(ws.home, dir)), true, dir + " 没建");
   }
+  const dirs = result.parsed.steps.find((step) => step.id === "dirs");
+  assert.ok(!dirs.detail.dirs.includes(path.join(ws.home, "memory")), "数据目录步骤不该建 memory/");
   const config = JSON.parse(fs.readFileSync(path.join(ws.home, "config.json"), "utf8"));
   assert.equal(config.port, 7788);
   assert.equal(config.authRequired, true);
@@ -115,6 +117,7 @@ test("--dry-run 不写任何文件", () => {
   // 不落地的同时，要把真实路径列出来
   const dirs = result.parsed.steps.find((step) => step.id === "dirs");
   assert.ok(dirs.lines.length > 0, "数据目录应该列出具体路径");
+  assert.ok(!dirs.lines.some((line) => line.endsWith(path.sep + "memory")), "memory/ 应该由记忆骨架步骤负责");
   for (const line of dirs.lines) {
     assert.equal(path.isAbsolute(line), true, line + " 不是绝对路径");
     assert.equal(line.startsWith(ws.home), true, line + " 不在 home 下");
