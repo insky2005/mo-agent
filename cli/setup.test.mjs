@@ -106,6 +106,20 @@ test("--dry-run 不写任何文件", () => {
   assert.equal(fs.existsSync(path.join(ws.home, "memory")), false);
   assert.equal(fs.existsSync(path.join(ws.home, ".agents")), false);
   assert.deepEqual(fs.readdirSync(ws.home).sort(), ["Applications"]);
+
+  // 不落地的同时，要把真实路径列出来
+  const dirs = result.parsed.steps.find((step) => step.id === "dirs");
+  assert.ok(dirs.lines.length > 0, "数据目录应该列出具体路径");
+  for (const line of dirs.lines) {
+    assert.equal(path.isAbsolute(line), true, line + " 不是绝对路径");
+    assert.equal(line.startsWith(ws.home), true, line + " 不在 home 下");
+  }
+  const memory = result.parsed.steps.find((step) => step.id === "memory");
+  assert.ok(memory.lines.some((line) => line.endsWith(path.join("memory", "README.md"))), "记忆骨架应该列出文件路径");
+
+  const human = run(ws, ["setup", "--dry-run"]);
+  assert.match(human.stdout, /下面每步都是真实会执行的操作/);
+  assert.ok(human.stdout.includes(ws.home), "人类可读输出里也要有具体路径");
 });
 
 test("--only 只跑指定步骤", () => {

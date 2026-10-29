@@ -679,6 +679,8 @@ mo manager check        # 冒烟：建卡 → 派单 → 读回执
 
 选项：`--yes`（不问）、`--dry-run`（不写任何文件）、`--only dirs,memory`、`--skip skill`、`--json`（每步 `status`）。退出码：有 `⚠` / `✗` 为 1，否则 0。
 
+每步在人类可读输出里都会列出真实操作与具体路径（目录、文件、`mo worker use` / `mo terminal use` 的目标、MCP 服务名与备份文件）；`--dry-run` 只是把这些操作"不落地"，输出格式与真实执行一致。
+
 **刻意没做**（与旧版设想的差距）：`mo setup cli`（装 CLI 仍用 `scripts/install-cli.sh`）、端口占用时顺延、单实例锁检查、自动把 `mo` 装进 PATH、主 Agent 配置的版本号更新，以及"失败回滚"——每步只做最小幂等写入，冲突时跳过而不是回滚。
 
 ### 13.5 首次使用生成的东西

@@ -496,6 +496,8 @@ mo config unset port           # 回到默认
 
 `mo setup` 不碰仓库：**不会**建 `project.json`、不写 `<repo>/.mo-agent/`、不改 `AGENTS.md`；也不启动 daemon。每步先检测，已存在就 `⏭`，连跑两次第二次全是 `⏭`。有 `⚠` / `✗` 时退出码 1。
 
+输出会列出每步的真实操作与具体路径（目录、文件、`mo worker use` 目标、MCP 备份文件）；`--dry-run` 用同样的格式展示，只是不写任何文件。
+
 ## 命令
 
 ```bash

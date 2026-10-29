@@ -7,11 +7,12 @@ import { emit } from "../lib/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import { CONFIG_KEYS, configFile, readGlobalConfig, writeGlobalConfig } from "../lib/config.mjs";
+import { SKILL_NAME } from "../lib/skill-content.mjs";
 import { initMemory } from "./memory.mjs";
 import { allTargets, installSkillTargets, resolveTargets } from "./skill.mjs";
 import { mergeMcpConfig } from "./agent-add.mjs";
 import { defaultWorkerName, listWorkers, setDefaultWorker } from "../lib/workers-config.mjs";
-import { currentTerminal, detectTerminal, setDefaultTerminal } from "../lib/terminals.mjs";
+import { currentTerminal, detectTerminal, setDefaultTerminal, terminalsFile } from "../lib/terminals.mjs";
 import { doctorReport } from "./doctor.mjs";
 
 /**
@@ -31,15 +32,20 @@ const REMEDY = {
   "cwd-project": "mo project init .",
 };
 
-function result(status, message, detail) {
-  return { status, message, ...(detail === undefined ? {} : { detail }) };
+function result(status, message, detail, lines) {
+  return {
+    status,
+    message,
+    ...(detail === undefined ? {} : { detail }),
+    ...(lines && lines.length ? { lines } : {}),
+  };
 }
 
-const created = (message, detail) => result("created", message, detail);
+const created = (message, detail, lines) => result("created", message, detail, lines);
 const skipped = (message, detail) => result("skipped", message, detail);
-const planned = (message, detail) => result("planned", message, detail);
-const warning = (message, detail) => result("warn", message, detail);
-const failed = (message, detail) => result("failed", message, detail);
+const planned = (message, detail, lines) => result("planned", message, detail, lines);
+const warning = (message, detail, lines) => result("warn", message, detail, lines);
+const failed = (message, detail, lines) => result("failed", message, detail, lines);
 
 function makePrompter() {
   let rl = null;
@@ -75,9 +81,9 @@ async function stepDirs(ctx) {
   const dirs = [ctx.home, ledgerDir(ctx.home), path.join(ctx.home, "memory"), path.join(ctx.home, "inbox"), path.join(ctx.home, "approvals")];
   const missing = dirs.filter((dir) => !fs.existsSync(dir));
   if (!missing.length) return skipped("数据目录已就绪：" + ctx.home);
-  if (ctx.dryRun) return planned("将创建 " + missing.length + " 个目录", { dirs: missing });
+  if (ctx.dryRun) return planned("将创建 " + missing.length + " 个目录", { dirs: missing }, missing);
   for (const dir of missing) ensureDir(dir);
-  return created("已创建 " + missing.length + " 个目录：" + missing.map((dir) => path.basename(dir)).join(" / "), { dirs: missing });
+  return created("已创建 " + missing.length + " 个目录", { dirs: missing }, missing);
 }
 
 function stepConfig(ctx) {
@@ -86,30 +92,39 @@ function stepConfig(ctx) {
   const defaults = Object.fromEntries(CONFIG_KEYS.map((spec) => [spec.key, spec.default]));
 
   if (!read.exists) {
-    if (ctx.dryRun) return planned("将写入 " + CONFIG_KEYS.length + " 个默认键 → " + file, { file });
+    const keys = Object.keys(defaults);
+    if (ctx.dryRun) return planned("将写入 " + keys.length + " 个默认键 → " + file, { file, keys }, [keys.join(" / ")]);
     writeGlobalConfig({ home: ctx.home, patch: defaults });
-    return created("已写入默认配置 → " + file, { file, keys: Object.keys(defaults) });
+    return created("已写入默认配置 → " + file, { file, keys }, [keys.join(" / ")]);
   }
 
   // 只补"文件里没有"的键：非法值已经有警告，不替用户改写
   const missing = CONFIG_KEYS.filter((spec) => !read.present.includes(spec.key)).map((spec) => spec.key);
-  const extraWarning = read.warnings.length ? "；另有 " + read.warnings.length + " 个键被忽略" : "";
   if (!missing.length) {
-    return read.warnings.length ? warning("配置已存在：" + file + extraWarning, { file, warnings: read.warnings }) : skipped("配置已存在：" + file);
+    return read.warnings.length
+      ? warning("配置已存在：" + file, { file, warnings: read.warnings }, read.warnings)
+      : skipped("配置已存在：" + file);
   }
-  if (ctx.dryRun) return planned("将补齐 " + missing.length + " 个默认键：" + missing.join(" / "), { file, keys: missing });
+
+  const details = [missing.join(" / "), ...read.warnings];
+  if (ctx.dryRun) return planned("将补齐 " + missing.length + " 个默认键 → " + file, { file, keys: missing }, details);
   writeGlobalConfig({ home: ctx.home, patch: Object.fromEntries(missing.map((key) => [key, defaults[key]])) });
   return read.warnings.length
-    ? warning("补了 " + missing.length + " 个键" + extraWarning, { file, keys: missing, warnings: read.warnings })
-    : created("补了 " + missing.length + " 个默认键：" + missing.join(" / "), { file, keys: missing });
+    ? warning(
+        "补了 " + missing.length + " 个键 → " + file + "；" + read.warnings.length + " 个键被忽略",
+        { file, keys: missing, warnings: read.warnings },
+        details,
+      )
+    : created("补了 " + missing.length + " 个默认键 → " + file, { file, keys: missing }, details);
 }
 
 function stepMemory(ctx) {
   const memory = initMemory({ home: ctx.home, dryRun: ctx.dryRun });
   if (!memory.created.length) return skipped("记忆骨架已存在：" + memory.dir);
   const files = memory.created.map((item) => item.split(path.sep).join("/"));
-  if (ctx.dryRun) return planned("将补 " + files.length + " 个文件：" + files.join(" / "), { dir: memory.dir, files });
-  return created("已补 " + files.length + " 个文件：" + files.join(" / "), { dir: memory.dir, files });
+  const absolute = memory.created.map((item) => path.join(memory.dir, item));
+  if (ctx.dryRun) return planned("将补 " + files.length + " 个文件 → " + memory.dir, { dir: memory.dir, files }, absolute);
+  return created("已补 " + files.length + " 个文件 → " + memory.dir, { dir: memory.dir, files }, absolute);
 }
 
 async function stepWorker(ctx) {
@@ -130,25 +145,29 @@ async function stepWorker(ctx) {
     picked = chosen;
   }
 
-  if (ctx.dryRun) return planned("将设默认执行者 = " + picked.name, { name: picked.name });
+  const operation = "mo worker use " + picked.name + "  →  " + path.join(ctx.home, "workers.json");
+  if (ctx.dryRun) return planned("将设默认执行者 = " + picked.name, { name: picked.name }, [operation]);
   const saved = setDefaultWorker({ home: ctx.home, name: picked.name });
-  return created("默认执行者 = " + saved.name + (saved.session ? "（会话型）" : "（无头）"), { name: saved.name });
+  return created("默认执行者 = " + saved.name + (saved.session ? "（会话型）" : "（无头）"), { name: saved.name }, [operation]);
 }
 
 function stepTerminal(ctx) {
   const current = currentTerminal({ home: ctx.home });
   if (current) return skipped("默认终端 = " + current);
 
+  const file = terminalsFile(ctx.home);
   const detected = detectTerminal();
   if (detected === "none") {
-    if (ctx.dryRun) return planned("没有探测到图形终端，将设 print", { name: "print" });
+    const operation = "mo terminal use print  →  " + file;
+    if (ctx.dryRun) return planned("没有探测到图形终端，将设 print", { name: "print" }, [operation]);
     setDefaultTerminal({ home: ctx.home, name: "print" });
-    return warning("没有探测到图形终端，已设 print（只生成脚本，不开窗口）", { name: "print" });
+    return warning("没有探测到图形终端，已设 print（只生成脚本，不开窗口）", { name: "print" }, [operation]);
   }
 
-  if (ctx.dryRun) return planned("将设默认终端 = " + detected, { name: detected });
+  const operation = "mo terminal use " + detected + "  →  " + file;
+  if (ctx.dryRun) return planned("将设默认终端 = " + detected, { name: detected }, [operation]);
   setDefaultTerminal({ home: ctx.home, name: detected });
-  return created("默认终端 = " + detected + (detected === "iterm" ? "（iTerm2）" : "（Terminal.app）"), { name: detected });
+  return created("默认终端 = " + detected + (detected === "iterm" ? "（iTerm2）" : "（Terminal.app）"), { name: detected }, [operation]);
 }
 
 function stepSkill(ctx) {
@@ -156,12 +175,15 @@ function stepSkill(ctx) {
   if (installed.length) return skipped("技能已装：" + installed.map((target) => target.name).join(" / "));
 
   const chosen = resolveTargets([]);
-  if (ctx.dryRun) return planned("将安装到：" + chosen.map((target) => target.name).join(" / "), { targets: chosen.map((target) => target.name) });
+  const destinations = chosen.map((target) => path.join(target.dir, SKILL_NAME, "SKILL.md"));
+  if (ctx.dryRun) {
+    return planned("将安装到 " + chosen.length + " 个目标", { targets: chosen.map((target) => target.name) }, destinations);
+  }
   if (!ctx.explicitYes && !ctx.interactive) {
     return skipped("非交互且未加 --yes；手动：mo skill install");
   }
   const written = installSkillTargets(chosen);
-  return created("已装技能 " + written.length + " 处", { written: written.map((item) => item.path) });
+  return created("已装技能 " + written.length + " 处", { written: written.map((item) => item.path) }, written.map((item) => item.path));
 }
 
 /** 只认已知路径；找不到就跳过，不猜别人的配置往哪写 */
@@ -195,7 +217,8 @@ async function stepMcp(ctx) {
 
   if (existing) return skipped("MCP 配置已有 mo 条目：" + existing);
   if (!target) return skipped("找到的 MCP 配置不是合法 JSON；手动：mo agent add --mcp <文件>");
-  if (ctx.dryRun) return planned("将合并 mcpServers → " + target, { file: target });
+  const details = ["服务名：mo-agent", "写前备份：" + target + ".bak-<时间>"];
+  if (ctx.dryRun) return planned("将合并 mcpServers → " + target, { file: target }, details);
 
   if (ctx.interactive) {
     const answer = (await ctx.prompter.ask("写入 MCP 配置 " + target + "？(y/N) ")).toLowerCase();
@@ -207,7 +230,10 @@ async function stepMcp(ctx) {
     file: merged.file,
     server: merged.server,
     backup: merged.backup,
-  });
+  }, [
+    "服务名：" + merged.server,
+    ...(merged.backup ? ["备份：" + merged.backup] : []),
+  ]);
 }
 
 const STEPS = [
@@ -286,8 +312,10 @@ export async function setupCommand(ctx, args) {
     { ok, home, dryRun, steps: results, doctor: { ok: report.ok, checks: report.checks }, remaining },
     () => {
       const lines = ["mo setup" + (dryRun ? "（--dry-run）" : ""), ""];
+      if (dryRun) lines.push("下面每步都是真实会执行的操作，只是不落地（不写任何文件）：", "");
       for (const entry of results) {
         lines.push((STATUS_ICON[entry.status] || "·") + " " + entry.title + "  " + entry.message);
+        for (const item of entry.lines || []) lines.push("    - " + item);
       }
       const notes = report.checks.filter((check) => !check.ok);
       lines.push("", "汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过"));
