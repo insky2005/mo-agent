@@ -509,14 +509,28 @@ function remainingActions(report) {
     .map((check) => ({ check: check.name, value: check.value, action: REMEDY[check.name] || "mo doctor 查看" }));
 }
 
+/** 本次已经做掉/计划要做的步骤覆盖了哪些自检项（dry-run 时别把它们算成"剩余动作"） */
+function coveredChecks(results) {
+  const covered = new Set();
+  for (const entry of results) {
+    if (entry.status !== "planned" && entry.status !== "created") continue;
+    if (entry.id === "dirs") {
+      covered.add("home");
+      covered.add("ledger");
+    }
+    if (entry.id === "memory") covered.add("memory");
+  }
+  return covered;
+}
+
 function entryLines(entry) {
   const lines = [(STATUS_ICON[entry.status] || "·") + " " + entry.title + "  " + entry.message];
   for (const item of entry.lines || []) lines.push("    - " + item);
   return lines;
 }
 
-function summaryLines(report, remaining) {
-  const notes = report.checks.filter((check) => !check.ok);
+function summaryLines(report, remaining, covered = new Set()) {
+  const notes = report.checks.filter((check) => !check.ok && !covered.has(check.name));
   const lines = ["汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过")];
   for (const check of notes) lines.push("  ⚠ " + check.name.padEnd(12) + " " + check.value);
   if (remaining.length) {
@@ -614,7 +628,8 @@ export async function setupCommand(ctx, args) {
   }
 
   const report = doctorReport(ctx.cwd, { home: runCtx.home });
-  const remaining = remainingActions(report);
+  const covered = coveredChecks(results);
+  const remaining = remainingActions(report).filter((item) => !covered.has(item.check));
   const ok = !results.some((entry) => entry.status === "warn" || entry.status === "failed");
   const homeIsDefault = runCtx.home === defaultHome;
   const payload = {
@@ -635,7 +650,7 @@ export async function setupCommand(ctx, args) {
   if (paged) {
     process.stdout.write("\n（--dry-run：没有写任何文件）\n");
     process.stdout.write("要真正执行：去掉 --dry-run 再跑一次 mo setup\n");
-    process.stdout.write("\n" + [...summaryLines(report, remaining), ...homeNote()].join("\n") + "\n");
+    process.stdout.write("\n" + [...summaryLines(report, remaining, covered), ...homeNote()].join("\n") + "\n");
     return ok ? 0 : 1;
   }
 
@@ -646,7 +661,7 @@ export async function setupCommand(ctx, args) {
       if (index > 0) lines.push("");
       lines.push(...entryLines(entry));
     });
-    lines.push("", ...summaryLines(report, remaining), ...homeNote());
+    lines.push("", ...summaryLines(report, remaining, covered), ...homeNote());
     return lines.join("\n");
   });
 

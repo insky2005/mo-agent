@@ -125,6 +125,11 @@ test("--dry-run 不写任何文件", () => {
   const human = run(ws, ["setup", "--dry-run"]);
   assert.match(human.stdout, /下面每步都是真实会执行的操作/);
   assert.ok(human.stdout.includes(ws.home), "人类可读输出里也要有具体路径");
+
+  // 预演里已经计划要做的，不该再算成"剩余动作"
+  const checks = result.parsed.remaining.map((item) => item.check);
+  assert.ok(!checks.includes("memory"), "memory 已在计划里，不该再提示 mo memory init");
+  assert.ok(!checks.includes("ledger"));
 });
 
 test("--only 只跑指定步骤", () => {
