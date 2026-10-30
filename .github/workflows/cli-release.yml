@@ -2,11 +2,11 @@ name: cli-release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["cli-v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "要发布的 tag（例如 v0.2.0），必须与 package.json 版本一致"
+        description: "要发布的 tag（例如 cli-v0.2.0），版本必须与 package.json 一致"
         required: true
       dry_run:
         description: "只构建、不发布（第一次验证矩阵时用）"
@@ -51,9 +51,16 @@ jobs:
           set -euo pipefail
           node scripts/check-version.mjs
           VERSION="$(node -p "require('./package.json').version")"
-          TAG="${{ inputs.tag || github.ref_name }}"
-          if [ "$TAG" != "v$VERSION" ]; then
-            echo "::error::tag $TAG 与 package.json $VERSION 不一致"
+          RAW="${{ inputs.tag || github.ref_name }}"
+          # 统一用 cli-v* 前缀，其余组件各用各的（apk-v* / desktop-v*）
+          TAG="$RAW"
+          case "$RAW" in
+            cli-v*) ;;
+            v*) TAG="cli-$RAW" ;;   # 兼容裸 tag
+            *) echo "::error::tag 必须以 cli-v 开头：$RAW"; exit 1 ;;
+          esac
+          if [ "$TAG" != "cli-v$VERSION" ]; then
+            echo "::error::tag $TAG 与 package.json $VERSION 不一致（应为 cli-v$VERSION）"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"

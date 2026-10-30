@@ -62,7 +62,7 @@
 | workflow | 触发 | 做什么 |
 |---|---|---|
 | `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
-| `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
+| `cli-release.yml` | push tag `cli-v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
 | `apk-release.yml` | push tag `apk-v*` / 手动 | 版本取自 tag → 签名（secrets）→ 构建 APK → 扫描 → 发 Release |
 
 ### 只验证构建（dry run）
@@ -72,16 +72,32 @@
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
   https://api.github.com/repos/insky2005/mo-agent/actions/workflows/cli-release.yml/dispatches \
-  -d '{"ref":"feat/cli-cross-platform","inputs":{"tag":"v0.2.0","dry_run":"true"}}'
+  -d '{"ref":"feat/cli-cross-platform","inputs":{"tag":"cli-v0.2.0","dry_run":"true"}}'
 ```
 
 或在 Actions 页面点「Run workflow」。dry run 会跑完 verify + 5 个平台的构建与冒烟，
 产物作为 artifact 可下载，但**不会建 tag、不会发 Release**。
 
+### 标签约定
+
+| 组件 | tag | 触发 | 产物 |
+|---|---|---|---|
+| CLI | `cli-v0.2.0` | `cli-release.yml` | `mo-{darwin,linux}-{arm64,x64}`、`mo-windows-x64.exe` |
+| APK | `apk-v0.2.0` | `apk-release.yml` | `mo-agent-android-0.2.0.apk` |
+| Desktop | `desktop-v0.2.0` | `desktop-release.yml`（待补） | `mo-agent.app`（仅 macOS） |
+
+三个组件各自独立发版，**顺序无所谓**：安装脚本不再用 `releases/latest`，
+而是从新到旧找第一个真的带目标资产的 release。
+
+```bash
+git tag cli-v0.2.0 && git push origin cli-v0.2.0   # 只发 CLI
+git tag apk-v0.2.0 && git push origin apk-v0.2.0   # 只发 APK
+```
+
 ### 发版步骤
 
 1. 同时改 `package.json` 和 `cli/lib/version.mjs` 的版本（`npm run cli:version:check` 校验两者一致）；
-2. 提交后打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`；
+2. 提交后打 tag 并推送：`git tag cli-v0.2.0 && git push origin cli-v0.2.0`；
 3. Release 里会有 `mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及各自的 `.sha256` 和合并的 `SHA256SUMS`；
 4. 用户侧用 `install-remote.sh`（macOS/Linux）或 `install-remote.ps1`（Windows）拿 latest。
 

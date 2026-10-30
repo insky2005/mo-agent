@@ -2,7 +2,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.ps1 | iex"
 #   ... 加 -Args '-WithSkill' 顺带装技能（iex 方式不好传参，建议下载后执行）
-#   $env:MO_VERSION = "v0.2.0"; ...
+#   $env:MO_VERSION = "cli-v0.2.0"; ...
 #   $env:MO_CLI_BASE_URL = "file://..."; ...   # 本地验证
 #
 # 只装到用户目录（默认 %USERPROFILE%\.local\bin），不改系统 PATH、不写注册表。
@@ -16,13 +16,33 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Asset = "mo-windows-x64.exe"
-$Base = $env:MO_CLI_BASE_URL
-if ($Base) {
-  $Url = "$Base/$Asset"
-} elseif ($Version) {
-  $Url = "https://github.com/$Repo/releases/download/$Version/$Asset"
-} else {
-  $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
+
+# 解析下载地址：CLI 用 cli-v* 前缀，不能依赖 releases/latest（会被 APK/desktop 的 release 抢走）
+function Resolve-AssetUrl {
+  $base = $env:MO_CLI_BASE_URL
+  if ($base) { return "$base/$Asset" }
+
+  if ($Version) {
+    if ($Version -match '^cli-v') { $tag = $Version } else { $tag = "cli-$Version" }
+    return "https://github.com/$Repo/releases/download/$tag/$Asset"
+  }
+
+  $headers = @{ "User-Agent" = "mo-agent"; "Accept" = "application/vnd.github+json" }
+  try {
+    $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=30" -Headers $headers
+  } catch { return $null }
+
+  foreach ($release in $releases) {
+    foreach ($a in $release.assets) {
+      if ($a.name -eq $Asset) { return $a.browser_download_url }
+    }
+  }
+  return $null
+}
+
+$Url = Resolve-AssetUrl
+if (-not $Url) {
+  throw "找不到 $Asset 的 release：检查仓库是否公开、是否发过 cli-v* 版本，或指定 -Version cli-v0.2.0"
 }
 
 $Tmp = Join-Path ([IO.Path]::GetTempPath()) ("mo-" + [Guid]::NewGuid().ToString("N"))

@@ -3,7 +3,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 #   ... | bash -s -- --with-skill    # 顺带安装 Agent 技能
 #   ... | bash -s -- --with-apk      # 顺带下载手机安装包到 ~/.mo-agent/app.apk
-#   MO_VERSION=v0.2.0 bash scripts/install-remote.sh      # 指定版本
+#   MO_VERSION=cli-v0.2.0 bash scripts/install-remote.sh  # 指定版本
 #   MO_CLI_BASE_URL=file:///path/to/dist bash scripts/install-remote.sh   # 本地验证
 set -euo pipefail
 
@@ -26,14 +26,36 @@ esac
 
 ASSET="mo-${OS}-${ARCH}"
 
-if [ -n "$BASE" ]; then
-  URL="$BASE/$ASSET"
-else
-  if [ -n "${MO_VERSION:-}" ]; then
-    URL="https://github.com/$REPO/releases/download/$MO_VERSION/$ASSET"
-  else
-    URL="https://github.com/$REPO/releases/latest/download/$ASSET"
+# 解析下载地址。
+# CLI 用 cli-v* 前缀，所以不能靠 releases/latest（那会被 APK/desktop 的 release 抢走）。
+# 默认从新到旧找第一个「真的带这个资产」的 release。
+resolve_url() {
+  if [ -n "$BASE" ]; then
+    echo "$BASE/$ASSET"
+    return 0
   fi
+
+  if [ -n "${MO_VERSION:-}" ]; then
+    case "$MO_VERSION" in
+      cli-v*) TAG="$MO_VERSION" ;;
+      v*) TAG="cli-$MO_VERSION" ;;        # 兼容裸 tag
+      *) TAG="cli-$MO_VERSION" ;;
+    esac
+    echo "https://github.com/$REPO/releases/download/$TAG/$ASSET"
+    return 0
+  fi
+
+  curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null \
+    | grep -o "\"browser_download_url\": *\"[^\"]*/$ASSET\"" \
+    | head -1 \
+    | sed 's/.*"\(https[^"]*\)"/\1/'
+}
+
+URL="$(resolve_url)"
+if [ -z "$URL" ]; then
+  echo "找不到 $ASSET 的 release。检查：仓库是否公开、是否已发过 cli-v* 版本。" >&2
+  echo "也可以指定版本：MO_VERSION=cli-v0.2.0 bash install-remote.sh" >&2
+  exit 1
 fi
 
 TMP="$(mktemp -d)"

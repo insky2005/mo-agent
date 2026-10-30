@@ -261,7 +261,7 @@ curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/ins
 指定版本或在本地验证：
 
 ```bash
-MO_VERSION=v0.2.0 bash scripts/install-remote.sh
+MO_VERSION=cli-v0.2.0 bash scripts/install-remote.sh
 MO_CLI_BASE_URL=file://$PWD/cli/dist bash scripts/install-remote.sh
 ```
 

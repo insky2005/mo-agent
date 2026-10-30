@@ -10,7 +10,7 @@ REPO="${MO_AGENT_REPO:-insky2005/mo-agent}"
 DEST="${1:-${MO_APK_DEST:-$HOME/.mo-agent/app.apk}}"
 
 pick_asset() {
-  grep -o '"browser_download_url": *"[^"]*\.apk"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/'
+  grep -o '"browser_download_url": *"[^"]*mo-agent-android-[^"]*\.apk"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/'
 }
 
 if [ -n "${MO_APK_URL:-}" ]; then
