@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findHost } from "./commands/daemon.mjs";
+import { findHost, readSessionPort } from "./commands/daemon.mjs";
 import { apkDest } from "./lib/apk.mjs";
 
 function tmp() {
@@ -48,4 +48,19 @@ test("找不到 host 时返回 null", () => {
 
 test("APK 落在 ~/.mo-agent/app.apk", () => {
   assert.equal(apkDest("/tmp/x"), "/tmp/x/.mo-agent/app.apk");
+});
+
+test("从 session.json 里认出 host 端口（url 或 port 两种写法）", () => {
+  const home = tmp();
+  fs.mkdirSync(path.join(home, ".mo-agent"), { recursive: true });
+  const file = path.join(home, ".mo-agent", "session.json");
+
+  fs.writeFileSync(file, JSON.stringify({ url: "http://127.0.0.1:7817", token: "x" }));
+  assert.equal(readSessionPort(home), 7817);
+
+  fs.writeFileSync(file, JSON.stringify({ port: 9001, token: "x" }));
+  assert.equal(readSessionPort(home), 9001);
+
+  fs.writeFileSync(file, "not json");
+  assert.equal(readSessionPort(home), null);
 });

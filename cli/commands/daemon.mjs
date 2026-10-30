@@ -65,6 +65,21 @@ function readConfigPort(env, home) {
   return Number(env.MO_AGENT_PORT) || 7788;
 }
 
+// host 每次启动都会写 session.json（端口 + 本机令牌），用来找"不是我们拉起的"那个
+export function readSessionPort(home) {
+  try {
+    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    if (Number.isInteger(info.port) && info.port > 0) return info.port;
+    if (typeof info.url === "string") {
+      const port = Number(new URL(info.url).port);
+      if (Number.isInteger(port) && port > 0) return port;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function readPid(home) {
   try {
     return JSON.parse(fs.readFileSync(PID_FILE(home), "utf8"));
@@ -120,6 +135,22 @@ async function start(ctx, args) {
     });
   }
 
+  // 端口上已经有 host 在应答（常见于桌面 App 已经跑着）：
+  // 再起一个会撞端口，而且健康检查会"成功"在别人的进程上，误报自己启动成功。
+  const probePorts = [...new Set([port, readSessionPort(home)].filter(Boolean))];
+  let occupiedPort = null;
+  for (const p of probePorts) {
+    if (await health(p)) {
+      occupiedPort = p;
+      break;
+    }
+  }
+  if (occupiedPort) {
+    throw new MoError("E_PORT_IN_USE", "端口 " + occupiedPort + " 上已经有一个 host 在跑（可能是桌面 App）", {
+      hint: "先停掉它：退出桌面 App，或 mo daemon stop。同一台机器不要同时跑两个 host",
+    });
+  }
+
   const host = findHost({ env, home, cwd: ctx.cwd });
   if (!host) {
     throw new MoError("E_NO_HOST", "找不到可运行的 host", {
@@ -140,12 +171,17 @@ async function start(ctx, args) {
   const [cmd, ...cmdRest] = host.command;
   const spawnArgs = [...cmdRest, "--port", String(port)];
 
+  const logFile = path.join(home, ".mo-agent", "daemon.log");
+  if (!foreground) fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  const errFd = foreground ? null : fs.openSync(logFile, "a");
+
   const child = spawn(cmd, spawnArgs, {
     cwd: host.root,
     detached: !foreground,
-    stdio: foreground ? "inherit" : "ignore",
+    stdio: foreground ? "inherit" : ["ignore", errFd, errFd],
     env: { ...env, MO_AGENT_ROOT: host.root, MO_AGENT_NO_PARENT_WATCH: "1" },
   });
+  if (errFd !== null) fs.closeSync(errFd);
 
   if (!foreground) {
     child.unref();
@@ -160,10 +196,18 @@ async function start(ctx, args) {
   }
 
   const body = await waitHealthy(port);
-  if (!body) {
-    throw new MoError("E_DAEMON_START_FAILED", "daemon 启动了但没响应（pid " + child.pid + "，端口 " + port + "）", {
-      hint: "看 ~/Library/Logs/mo-agent/host.log",
-    });
+  if (!body || !alive(child.pid)) {
+    // 子进程已经退出（端口被抢、依赖缺失等），别报"启动成功"
+    try {
+      fs.rmSync(PID_FILE(home), { force: true });
+    } catch {
+      // 清理失败不影响报错
+    }
+    throw new MoError(
+      "E_DAEMON_START_FAILED",
+      "daemon 没能起来（pid " + child.pid + "，端口 " + port + "）",
+      { hint: "看日志：" + logFile },
+    );
   }
 
   process.stdout.write("✓ daemon 已启动\n");
@@ -199,6 +243,15 @@ async function status() {
   const home = os.homedir();
   const info = readPid(home);
   if (!info || !alive(info.pid)) {
+    // 没有 pid 文件不代表没在跑：桌面 App 拉起的 host 同样在这个端口上
+    const port = readSessionPort(home) || readConfigPort(process.env, home);
+    const body = await health(port);
+    if (body) {
+      process.stdout.write("daemon  运行中（端口 " + port + "，不是 mo daemon 拉起的，可能是桌面 App）\n");
+      process.stdout.write("  健康检查  ✓\n");
+      process.stdout.write("  APK       " + (fs.existsSync(apkDest(home)) ? "✓ " + apkDest(home) : "未下载") + "\n");
+      return 0;
+    }
     process.stdout.write("daemon  未运行\n");
     return 1;
   }
