@@ -41,7 +41,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: android-actions/setup-android@v3
+      # 不用 android-actions/setup-android：它内部执行 `sdkmanager tools`，
+      # 而这个包在新版 SDK 仓库里已经不存在，实测 v3 直接报 Failed to find package 'tools'。
+      # ubuntu-latest 镜像自带 Android SDK，缺哪个平台就现装哪个。
+      - name: 确保 Android SDK 平台
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK"
+          if [ ! -d "$SDK/platforms/android-36" ]; then
+            SDKMGR="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager | head -1)"
+            yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+            "$SDKMGR" --install "platforms;android-36" "build-tools;36.0.0"
+          fi
+          ls "$SDK/platforms" | tail -3
 
       - name: 安装依赖
         run: npm ci --no-audit --no-fund
