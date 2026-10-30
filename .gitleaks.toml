@@ -1,0 +1,29 @@
+# 兜底规则：真正的密钥扫描交给 gitleaks 默认规则集。
+title = "mo-agent"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mo-internal-host"
+description = "内网域名 / 私服地址不应进仓库"
+regex = '''(?i)(example\.com|harbor2\.|nexus/repository)'''
+tags = ["internal"]
+
+[[rules]]
+id = "mo-dev-home"
+description = "开发机绝对路径"
+regex = '''/Users/[A-Za-z0-9._-]+/'''
+tags = ["pii"]
+
+[allowlist]
+description = "测试里的假令牌与生成物"
+paths = [
+  '''.*\.test\.mjs''',
+  '''cli/dist/.*''',
+]
+regexes = [
+  '''test-token''',
+  '''local-test''',
+  '''manual-sec''',
+]
