@@ -2,18 +2,21 @@
 // 防止内网地址、开发机路径再次进入仓库。
 //   node scripts/check-noprivate.mjs
 //
-// 注意：规则里的敏感词拆成两段字符串拼，避免本文件自己命中自己。
+// 注意：敏感词不写字面量，免得本文件自己命中自己、也被历史清洗脚本改写。
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
+// 原开发机用户名，用字符码拼出来
+const LEGACY_USER = String.fromCharCode(108, 111, 105, 101);
+
 const RULES = [
   { name: "内网私服域名", re: new RegExp("supwis" + "dom\\.com", "i") },
   { name: "内网 Harbor", re: new RegExp("harb" + "or2\\.", "i") },
-  { name: "开发机路径", re: new RegExp("/Users/" + "dev\\b") },
-  { name: "开发机路径", re: new RegExp("Users-" + "dev-") },
+  { name: "开发机路径", re: new RegExp("/Users/" + LEGACY_USER + "\\b") },
+  { name: "开发机路径", re: new RegExp("Users-" + LEGACY_USER + "-") },
   { name: "内网网段", re: /\b172\.18\.\d{1,3}\.\d{1,3}\b/ },
 ];
 
