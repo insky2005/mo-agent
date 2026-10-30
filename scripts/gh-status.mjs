@@ -41,8 +41,36 @@ token 读取顺序：
 
 const REPO = flag("--repo") || process.env.GITHUB_REPO || "insky2005/mo-agent";
 
+function readFileToken(file) {
+  try {
+    const stat = fs.statSync(file);
+    // 同组/其他用户可读就算权限过宽
+    if ((stat.mode & 0o077) !== 0) {
+      console.error("⚠ " + file + " 权限过宽（建议 chmod 600）");
+    }
+    const token = fs.readFileSync(file, "utf8").trim();
+    if (token) return { token, from: file };
+  } catch {
+    // 没有这个文件就跳过
+  }
+  return null;
+}
+
+function tokenCandidates() {
+  const home = os.homedir();
+  return [
+    process.env.MO_GITHUB_TOKEN_FILE,
+    // 仓库专用 token 目录（oh-my-dsh 的约定：<owner>-<repo>）
+    path.join(home, ".dsh", "oh-my-dsh", "tokens", REPO.replace("/", "-")),
+    path.join(home, ".config", "mo-agent", "github.token"),
+  ].filter(Boolean);
+}
+
 function readToken() {
   if (process.env.GITHUB_TOKEN) return { token: process.env.GITHUB_TOKEN, from: "环境变量 GITHUB_TOKEN" };
+
+  const explicit = flag("--token-file");
+  if (explicit) return readFileToken(explicit);
 
   if (process.platform === "darwin") {
     try {
@@ -56,12 +84,9 @@ function readToken() {
     }
   }
 
-  const file = path.join(os.homedir(), ".config", "mo-agent", "github.token");
-  try {
-    const token = fs.readFileSync(file, "utf8").trim();
-    if (token) return { token, from: file };
-  } catch {
-    // 没有这个文件
+  for (const file of tokenCandidates()) {
+    const hit = readFileToken(file);
+    if (hit) return hit;
   }
 
   return null;
