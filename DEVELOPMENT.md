@@ -55,6 +55,29 @@
 
 同类规则也适用于 `docs/reference/capabilities.md`（`npm run docs:capabilities`）。
 
+## CI 与发版
+
+### 流水线
+
+| workflow | 触发 | 做什么 |
+|---|---|---|
+| `ci.yml` | push main / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
+| `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
+
+### 发版步骤
+
+1. 同时改 `package.json` 和 `cli/lib/version.mjs` 的版本（`npm run cli:version:check` 校验两者一致）；
+2. 提交后打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`；
+3. Release 里会有 `mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及各自的 `.sha256` 和合并的 `SHA256SUMS`；
+4. 用户侧用 `install-remote.sh`（macOS/Linux）或 `install-remote.ps1`（Windows）拿 latest。
+
+### 注意
+
+- 每个平台都在**原生 runner** 上构建，产物会当场跑 `--version` 冒烟，不依赖交叉编译；
+- Windows 目前只有基线测试（不阻断），`session-launch` / `agent-hooks` 仍是 POSIX 实现，见 `docs/plans/cli-cross-platform-verify.md`；
+- 发布前会跑 `node scripts/check-artifacts.mjs --enforce dist`，任何产物带 HMS / 第三方密钥都会直接失败（SEC-001）；
+- macOS 产物是 ad-hoc 签名，首次运行可能需要在「隐私与安全性」里放行；想彻底免打扰需要 Developer ID 公证。
+
 ## 扫码配对
 
 两条路：

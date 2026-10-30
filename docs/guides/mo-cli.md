@@ -9,16 +9,33 @@
 
 ### 1.1 一条命令（推荐）
 
+macOS / Linux：
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 ```
 
-它会从 GitHub Releases 下载对应平台的单文件二进制，装到 `~/.local/bin/mo`（可用 `MO_BIN_DIR` 改）。
+Windows（PowerShell）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.ps1 | iex"
+```
+
+它会从 GitHub Releases 下载对应平台的单文件二进制，装到 `~/.local/bin/mo`
+Windows 装到 `%USERPROFILE%\.local\bin\mo.exe`（两边都可用 `MO_BIN_DIR` 改）。
 需要同时给 Agent 装技能时：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash -s -- --with-skill
 ```
+
+```powershell
+# 下载后执行更方便传参
+powershell -ExecutionPolicy Bypass -File install-remote.ps1 -WithSkill
+```
+
+> 平台产物：`mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，
+> 每个都有同名 `.sha256`，安装脚本会校验。
 
 ### 1.2 从源码
 

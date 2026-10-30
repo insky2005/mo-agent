@@ -13,6 +13,7 @@ BASE="${MO_CLI_BASE_URL:-}"
 case "$(uname -s)" in
   Darwin) OS="darwin" ;;
   Linux) OS="linux" ;;
+  MINGW*|MSYS*|CYGWIN*) echo "Windows 请用：scripts/install-remote.ps1" >&2; exit 1 ;;
   *) echo "暂不支持的系统：$(uname -s)" >&2; exit 1 ;;
 esac
 
