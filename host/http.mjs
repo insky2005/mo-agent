@@ -223,7 +223,7 @@ export function createMoAgentServer(options) {
 
       if (pathname === "/app.apk" && req.method === "GET") {
         if (!apkPath || !fs.existsSync(apkPath)) {
-          return json(res, 404, { ok: false, error: "APK 尚未构建，请先运行 scripts/build-android.sh" });
+          return json(res, 404, { ok: false, error: "本机还没有 APK：运行 bash scripts/fetch-apk.sh 下载，或先本地构建 scripts/build-android.sh" });
         }
         const stat = fs.statSync(apkPath);
         res.writeHead(200, {

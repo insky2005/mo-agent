@@ -63,6 +63,7 @@
 |---|---|---|
 | `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
 | `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
+| `apk-release.yml` | push tag `apk-v*` / 手动 | 版本取自 tag → 签名（secrets）→ 构建 APK → 扫描 → 发 Release |
 
 ### 只验证构建（dry run）
 
@@ -83,6 +84,30 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.githu
 2. 提交后打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`；
 3. Release 里会有 `mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及各自的 `.sha256` 和合并的 `SHA256SUMS`；
 4. 用户侧用 `install-remote.sh`（macOS/Linux）或 `install-remote.ps1`（Windows）拿 latest。
+
+### APK 单独发
+
+```bash
+git tag apk-v0.2.0 && git push origin apk-v0.2.0
+```
+
+- 在 ubuntu runner 上构建，**不带 `agconnect-services.json`**（workflow 里有断言，出现就失败），
+  所以 APK 没有 HMS 推送能力，也不含 AGC 凭据；
+- 签名材料走 GitHub Secrets，仓库里不放 keystore：
+  `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`。
+  本地构建放 `app/android/app/keystore.properties`（已 gitignore），没有就退回仓库里的 debug key；
+- 产物名 `mo-agent-android-<version>.apk`，versionCode 由 tag 推导（`0.2.0` → 200）；
+- 装到手机：`bash scripts/fetch-apk.sh` 把最新 APK 下到 `~/.mo-agent/app.apk`，
+  host 的 `/app.apk` 会优先用打包进运行时的那份，没有就用这份，手机扫码即可安装；
+  `curl ... | bash -s -- --with-apk` 装 CLI 时也能顺带下载。
+
+生成一把新 keystore（换签名会让已装 App 必须卸载重装）：
+
+```bash
+keytool -genkeypair -keystore ~/.config/mo-agent/release.jks -alias moagent \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -i ~/.config/mo-agent/release.jks | pbcopy   # 粘进 GitHub Secret
+```
 
 ### 注意
 

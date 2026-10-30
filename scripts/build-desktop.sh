@@ -85,7 +85,12 @@ case "$HMS_DECISION" in
 esac
 
 # 可选：把 APK 一起带上，供 /setup 页下载
+# 优先用本地构建的；没有就用 scripts/fetch-apk.sh 下到 ~/.mo-agent 的那份
 APK="app/android/app/build/outputs/apk/debug/app-debug.apk"
+if [ ! -f "$APK" ] && [ -f "$HOME/.mo-agent/app.apk" ]; then
+  APK="$HOME/.mo-agent/app.apk"
+  echo "[build] 用已下载的 APK: $APK"
+fi
 if [ -f "$APK" ]; then
   mkdir -p "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug"
   cp "$APK" "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug/app-debug.apk"

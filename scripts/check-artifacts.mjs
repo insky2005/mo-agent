@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const PATTERNS = [
   { id: "hms-app-secret", re: /"appSecret"\s*:\s*"[0-9a-fA-F]{32,}"/ },
@@ -21,7 +21,8 @@ const PATTERNS = [
 ];
 
 const MAX_DEPTH = 3;
-const ARCHIVE = /\.(tar\.gz|tgz|tar\.zst)$/;
+const TAR_ARCHIVE = /\.(tar\.gz|tgz|tar\.zst)$/;
+const ZIP_ARCHIVE = /\.(apk|zip|jar)$/i;
 const HITS = [];
 
 function record(label, id, sample) {
@@ -39,13 +40,29 @@ function scanBuffer(chunk, label, tail) {
   return text.slice(-4096);
 }
 
-function scanFile(file, label) {
+function scanStream(stream, label) {
   return new Promise((resolve) => {
-    const stream = fs.createReadStream(file);
     let tail = "";
     stream.on("data", (chunk) => (tail = scanBuffer(chunk, label, tail)));
     stream.on("end", resolve);
+    stream.on("close", resolve);
     stream.on("error", resolve);
+  });
+}
+
+function scanFile(file, label) {
+  return scanStream(fs.createReadStream(file), label);
+}
+
+// APK 是 zip：unzip -p 把所有条目按顺序解到 stdout，明文配置（assets/agconnect-services.json）会被扫到
+function scanZip(file, label) {
+  return new Promise((resolve) => {
+    const child = spawn("unzip", ["-p", file], { stdio: ["ignore", "pipe", "ignore"] });
+    child.on("error", () => {
+      console.error("  ! 跳过 " + label + "（没有 unzip，无法检查 zip 内容）");
+      resolve();
+    });
+    scanStream(child.stdout, label).then(resolve);
   });
 }
 
@@ -87,7 +104,8 @@ async function scanTarget(target, ctx) {
   if (stat.isDirectory()) return walk(target, { depth, origin, base: base || target });
 
   const label = labelOf(target, origin, base);
-  if (!ARCHIVE.test(target)) return scanFile(target, label);
+  if (ZIP_ARCHIVE.test(target)) return scanZip(target, label);
+  if (!TAR_ARCHIVE.test(target)) return scanFile(target, label);
 
   if (depth >= MAX_DEPTH) {
     console.error("  ! 嵌套超过 " + MAX_DEPTH + " 层，停止展开：" + label);

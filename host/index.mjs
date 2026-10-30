@@ -38,7 +38,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // 开发态则回退到源码目录。
 const root = process.env.MO_AGENT_ROOT ? path.resolve(process.env.MO_AGENT_ROOT) : path.resolve(here, "..");
 const webDir = path.join(root, "app", "web");
-const apkPath = path.join(root, "app", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+// APK 有两个来源：打包进运行时的（桌面分发版），或用户用 scripts/fetch-apk.sh 下到本机的。
+// 前者优先；都没有时 /app.apk 会 404 并提示去下载。
+const bundledApkPath = path.join(root, "app", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+const fetchedApkPath = path.join(os.homedir(), ".mo-agent", "app.apk");
+const apkPath = fs.existsSync(bundledApkPath) ? bundledApkPath : fetchedApkPath;
 // host 自己写这份日志并在 5MB 处轮转（.1 -> .3），桌面壳不再重定向 stdout/stderr。
 // 桌面端的启动/退出信息单独写 desktop.log，避免两个进程抢同一个文件。
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
