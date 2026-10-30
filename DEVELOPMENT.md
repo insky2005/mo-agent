@@ -37,6 +37,24 @@
 
 启动后终端会打印：手机访问地址、6 位配对码，以及一个终端二维码。
 
+## 生成物与提交规则
+
+仓库里有两个文件**由代码生成、必须和源一起提交**：
+
+| 生成物 | 源 | 生成命令 |
+|---|---|---|
+| `skills/mo/SKILL.md` | `core/manager/contract.mjs` | `npm run gen:skill` |
+| `cli/lib/skill-content.mjs` | 同上（内联副本，给单文件二进制用） | 同上 |
+
+规则：
+
+- 改了 `core/manager/contract.mjs`（工具表、流程、铁律、失败文案）→ 跑 `npm run gen:skill`，把两个产物一起提交；
+- **不要手改** `skills/mo/SKILL.md`，下次生成会覆盖；
+- `npm test` 和 `npm run check` 都会校验是否过期，过期直接失败（CI 也会拦）；
+- `scripts/build-cli.sh` 只校验不生成——构建不该悄悄改工作区。
+
+同类规则也适用于 `docs/reference/capabilities.md`（`npm run docs:capabilities`）。
+
 ## 扫码配对
 
 两条路：

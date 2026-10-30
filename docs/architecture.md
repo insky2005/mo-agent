@@ -111,16 +111,19 @@ bash scripts/build-desktop.sh # 打桌面端
 | 界面 | `app/web/` | 只能走 HTTP |
 | 打包/安装 | `scripts/`、`desktop/` | — |
 
-### 计划中的 workbench（尚未实现）
+### workbench（P0 已实现，P1+ 规划中）
 
-设计见 [spec/workbench-flow.md](spec/workbench-flow.md)。落点：
+设计见 [spec/workbench-flow.md](spec/workbench-flow.md)，使用见 [cli/README.md](../cli/README.md)。
 
-| 模块 | 位置 |
-|---|---|
-| 任务状态机、项目解析、执行者匹配 | `core/tasks/`、`core/projects.mjs` |
-| 账本、召回 | `core/ledger.mjs`、`core/memory.mjs` |
-| 卡/回执读写、MCP、派单执行器 | `host/tasks/`、`host/mcp-http.mjs`、`host/runner/` |
-| CLI | `bin/mo` |
-| 模板与 schema | `templates/`、`schemas/` |
+| 模块 | 位置 | 状态 |
+|---|---|---|
+| 状态机、卡、回执、账本事件 | `core/tasks/` | ✅ P0 |
+| 项目认领、注册表 | `cli/lib/project.mjs` | ✅ P0（P1 迁到 `core/projects.mjs` + host） |
+| 派单执行、回执裁决 | `cli/lib/{dispatch,runner,ingest}.mjs` | ✅ P0 |
+| CLI | `cli/mo.mjs` | ✅ P0 |
+| 账本落盘、检索 | `cli/lib/store.mjs`、`core/memory.mjs` | 落盘 ✅ / 检索 P3 |
+| MCP 端点、守护进程派单 | `host/mcp-http.mjs`、`host/runner/` | P1 |
+| 模板与 schema 文件 | `templates/`、`schemas/` | 暂缓（CLI 内联生成） |
 
-**必须遵守同一条边界**：`core/tasks/*` 不 import `host/*`。
+**必须遵守同一条边界**：`core/tasks/*` 不 import `host/*`，也不 import `cli/*`。
+P0 把 IO 全部放在 `cli/`，P1 起由 `host/` 复用同一套 `core/`。

@@ -113,6 +113,7 @@ Mo Agent 采用 **PolyForm Noncommercial 1.0.0**：个人与非商业用途免�
 - 跨平台路径与 Agent 差异：[docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)
 - 语音手册：[docs/guides/voice.md](docs/guides/voice.md)
 - 设计原则：[ADR-0001 观察优先](docs/adr/adr-0001-observational-first.md)
+- 个人工作台 CLI（P0）：[cli/README.md](cli/README.md)
 - 全部文档：[docs/README.md](docs/README.md)
 
 ---

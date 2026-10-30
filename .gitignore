@@ -49,3 +49,8 @@ docs/raw/
 
 # ---- 仅本地可见的内部分析（不提交）----
 docs/private/
+
+# ---- CLI 构建产物（单文件二进制 / npm 包）----
+cli/dist/
+dist/
+

@@ -68,7 +68,7 @@ fi
 if [ -e "$DEST" ]; then
   OLD="$DEST.old-$$"
   if mv "$DEST" "$OLD" 2>/dev/null; then
-    rm -rf "$OLD" 2>/dev/null || echo "[install] 旧的已挪到 $OLD，稍后可手动删除" >&2
+    rm -rf "$OLD" 2>/dev/null || echo "[install] 旧的已挪到 ${OLD}，稍后可手动删除" >&2
   elif rm -rf "$DEST" 2>/dev/null; then
     :
   else

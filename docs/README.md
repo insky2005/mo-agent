@@ -9,7 +9,7 @@ Mo Agent 的全部文档。先看「怎么读」，再按需跳转。
 | 想了解这是什么产品 | [README](../README.md) → [architecture.md](architecture.md) → [adr/](adr/) |
 | 要接入一个新 Agent | [architecture.md](architecture.md) §6 → [adapters/README.md](../adapters/README.md) → [reference/capabilities.md](reference/capabilities.md) |
 | 要改事件 / 状态 / 通知 | [spec/event-contract.md](spec/event-contract.md) → [adr/adr-0003](adr/adr-0003-event-contract.md) |
-| 要用或排障 | [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
+| 要用或排障 | [guides/mo-cli.md](guides/mo-cli.md) → [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
 | 在做 workbench（个人工作台） | [spec/workbench-flow.md](spec/workbench-flow.md) |
 
 ## 目录
@@ -42,12 +42,13 @@ docs/
 |---|---|---|
 | [event-contract.md](spec/event-contract.md) | ✅ 生效（M1–M4 已落地） | 事件词汇表、状态语义、映射责任、接入清单 |
 | [dingtalk-bot.md](spec/dingtalk-bot.md) | ✅ 生效 | 钉钉 Stream 通道、消息形态、配置 |
-| [workbench-flow.md](spec/workbench-flow.md) | 🧪 设计（未实现） | 个人工作台：任务流转、分支、安装 |
+| [workbench-flow.md](spec/workbench-flow.md) | 🟡 P0 已落地（CLI） | 个人工作台：任务流转、分支、安装 |
 
 ### guides/ — 操作手册
 
 | 文档 | 内容 |
 |---|---|
+| [mo-cli.md](guides/mo-cli.md) | **mo CLI 使用说明**：概念、上手、命令速查、验收、日志排障 |
 | [agent-hooks.md](guides/agent-hooks.md) | 一键配置各家 Agent 的 hooks：写什么、怎么回退、安全边界 |
 | [voice.md](guides/voice.md) | 语音批准与口述：用法、口令、排障 |
 
@@ -71,6 +72,8 @@ docs/
 | [cleanup-plan.md](plans/cleanup-plan.md) | 已完成（0.2.0 清理） |
 | [desktop-cross-platform.md](plans/desktop-cross-platform.md) | 进行中（Linux / Windows） |
 | [settings-center.md](plans/settings-center.md) | 已实现（设置中心） |
+| [cli-cross-platform.md](plans/cli-cross-platform.md) | ⏳ 未实现：Windows/Linux 差距与改造计划 |
+| [setup-config-prompt.md](plans/setup-config-prompt.md) | 已实现（`mo config` / `mo setup`，见 spec §12.8） |
 
 ### research/ — 预研
 
