@@ -8,6 +8,10 @@ on:
       tag:
         description: "要发布的 tag（例如 v0.2.0），必须与 package.json 版本一致"
         required: true
+      dry_run:
+        description: "只构建、不发布（第一次验证矩阵时用）"
+        type: boolean
+        default: true
 
 concurrency:
   group: cli-release-${{ github.ref }}
@@ -119,6 +123,8 @@ jobs:
   release:
     name: 发布
     needs: [verify, build]
+    # 手动触发默认 dry_run=true：只验证构建，不建 tag、不发 release
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -141,6 +147,8 @@ jobs:
         with:
           tag_name: ${{ needs.verify.outputs.tag }}
           name: ${{ needs.verify.outputs.tag }}
+          # 手动触发时 tag 可能还不存在，用当前提交而不是默认分支
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |

@@ -64,6 +64,19 @@
 | `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
 | `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
 
+### 只验证构建（dry run）
+
+不想发版、只想确认五个平台都能构建时，手动触发并保持 `dry_run` 勾选：
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/insky2005/mo-agent/actions/workflows/cli-release.yml/dispatches \
+  -d '{"ref":"feat/cli-cross-platform","inputs":{"tag":"v0.2.0","dry_run":"true"}}'
+```
+
+或在 Actions 页面点「Run workflow」。dry run 会跑完 verify + 5 个平台的构建与冒烟，
+产物作为 artifact 可下载，但**不会建 tag、不会发 Release**。
+
 ### 发版步骤
 
 1. 同时改 `package.json` 和 `cli/lib/version.mjs` 的版本（`npm run cli:version:check` 校验两者一致）；
