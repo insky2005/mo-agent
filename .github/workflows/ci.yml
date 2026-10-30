@@ -74,6 +74,8 @@ jobs:
         if: always()
         shell: bash
         run: |
+          # 这一步只负责报告，别让它自己把 job 弄挂（bash 默认带 -e）
+          set +e
           set -uo pipefail
           echo "### Windows 基线" >> "$GITHUB_STEP_SUMMARY"
 
@@ -83,7 +85,7 @@ jobs:
             exit 0
           fi
 
-          SUMMARY="$(grep -E '^# (tests|pass|fail|cancelled) ' windows-test.log | tr '\n' ' ')"
+          SUMMARY="$(grep -E '^# (tests|pass|fail|cancelled) ' windows-test.log | tr '\n' ' ' || true)"
           if grep -qE '^# fail 0$' windows-test.log; then
             echo "- ✅ 测试通过：${SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
           else
