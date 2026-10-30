@@ -51,7 +51,7 @@ resolve_url() {
     | sed 's/.*"\(https[^"]*\)"/\1/'
 }
 
-URL="$(resolve_url)"
+URL="$(resolve_url || true)"   # grep 无匹配时别让 set -e 直接退出
 if [ -z "$URL" ]; then
   echo "找不到 $ASSET 的 release。检查：仓库是否公开、是否已发过 cli-v* 版本。" >&2
   echo "也可以指定版本：MO_VERSION=cli-v0.2.0 bash installer/get-cli.sh" >&2
