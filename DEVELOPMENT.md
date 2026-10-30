@@ -61,7 +61,7 @@
 
 | workflow | 触发 | 做什么 |
 |---|---|---|
-| `ci.yml` | push main / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
+| `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
 | `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
 
 ### 发版步骤
