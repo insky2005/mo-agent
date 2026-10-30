@@ -104,10 +104,16 @@ git tag apk-v0.2.0 && git push origin apk-v0.2.0
 生成一把新 keystore（换签名会让已装 App 必须卸载重装）：
 
 ```bash
-keytool -genkeypair -keystore ~/.config/mo-agent/release.jks -alias moagent \
+mkdir -p ~/.mo-agent/keys && chmod 700 ~/.mo-agent/keys
+keytool -genkeypair -keystore ~/.mo-agent/keys/release.jks -alias moagent \
   -keyalg RSA -keysize 2048 -validity 10000
-base64 -i ~/.config/mo-agent/release.jks | pbcopy   # 粘进 GitHub Secret
+chmod 600 ~/.mo-agent/keys/release.jks
+base64 -i ~/.mo-agent/keys/release.jks | pbcopy   # 粘进 GitHub Secret
 ```
+
+> 放在 `~/.mo-agent/keys/` 只是为了和 App 数据目录一致；**位置本身不重要**，
+> 重要的是：在仓库外、权限 0600、**离线备份一份**——keystore 丢了就没法再给已安装的用户发更新。
+> 不要放 `~/.config` 或 iCloud/Dropbox 同步目录，签名私钥不该跟配置一起被云同步。
 
 ### 注意
 
