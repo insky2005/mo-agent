@@ -116,6 +116,13 @@ const SPEC = {
       unset: { flags: [], ...configKeys },
     },
   },
+  daemon: {
+    subs: {
+      start: { flags: ["--port", "--foreground"] },
+      stop: { flags: [] },
+      status: { flags: [] },
+    },
+  },
   setup: { subs: {} },
   completion: { subs: { bash: { flags: [] }, zsh: { flags: [] } } },
   mcp: { subs: {} },
@@ -138,7 +145,7 @@ const NO_SUB_FLAGS = {
   setup: ["--yes", "--dry-run", "--only", "--skip", "--json"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "config", "setup", "watchdog", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "watchdog", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };

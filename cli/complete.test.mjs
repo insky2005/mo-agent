@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "config", "setup", "watchdog", "completion", "version", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "watchdog", "completion", "version", "help",
   ]);
 });
 
@@ -139,6 +139,15 @@ test("无子命令的组不瞎给 taskId", () => {
     assert.ok(!got.includes("t_01A"), group + " 不该补 taskId");
     assert.ok(got.includes("--json") || got.includes("--help"), group + " 应该给 flag");
   }
+});
+
+test("daemon 的子命令和 flag 能补全", () => {
+  const subs = values(complete({ cwd: os.tmpdir(), words: ["daemon", ""] }));
+  for (const name of ["start", "stop", "status", "help"]) assert.ok(subs.includes(name), "缺 " + name);
+
+  const flags = values(complete({ cwd: os.tmpdir(), words: ["daemon", "start", "--"] }));
+  assert.ok(flags.includes("--port"));
+  assert.ok(flags.includes("--foreground"));
 });
 
 test("setup 的 flag 有补全，包含 --only / --skip", () => {
