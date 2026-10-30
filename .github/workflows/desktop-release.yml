@@ -35,10 +35,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Electrobun 只发布 macos-arm64 的运行时（releases/electrobun/*/macos-arm64），
+          # Intel 机器会报 "ReleasePlatformMissing"，所以桌面端只出 arm64。
           - os: macos-14
             arch: arm64
-          - os: macos-15-intel
-            arch: x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -134,9 +134,7 @@ jobs:
       - name: 检查产物
         run: |
           set -euo pipefail
-          # 两个架构都到了才发，避免半套产物
           ls dist/mo-agent-desktop-*-macos-arm64.zip
-          ls dist/mo-agent-desktop-*-macos-x64.zip
 
       - uses: softprops/action-gh-release@v2
         with:

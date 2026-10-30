@@ -147,7 +147,8 @@ base64 -i app/android/app/keystore/release.jks | pbcopy   # 粘进 GitHub Secret
 git tag desktop-v0.2.0 && git push origin desktop-v0.2.0
 ```
 
-- 矩阵：`macos-14`（arm64）+ `macos-13`（x64），各自原生构建；
+- 矩阵：只有 `macos-14`（arm64）。**Electrobun 没有 macOS x64 的运行时**，Intel 机器会报
+  `hutch: could not resolve Hutch: ReleasePlatformMissing`；CLI 的 `mo-darwin-x64` 不受影响。
 - 默认 `WITH_VOICE=0`（约 46MB），需要语音就在手动触发时勾上（会现下 252MB 模型）；
 - 构建前会尝试 `fetch-apk.sh`，拿到 APK 就一起打进分发版，setup 页可直接扫码安装；
 - 分发产物一律 `MO_AGENT_DESKTOP_HMS=0`，不带 HMS 凭据；
