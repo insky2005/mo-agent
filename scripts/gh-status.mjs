@@ -106,10 +106,37 @@ try {
     );
   }
 
+  const pulls = await api(found.token, "/repos/" + REPO + "/pulls?state=open&per_page=10");
+  console.log("\n开放 PR " + (pulls.length === 0 ? "（无）" : ""));
+  for (const pr of pulls) {
+    console.log(
+      "  #" + String(pr.number).padEnd(5) +
+      (pr.title || "").slice(0, 40).padEnd(42) +
+      (pr.head.ref + " → " + pr.base.ref).padEnd(44).slice(0, 44) +
+      ago(pr.created_at)
+    );
+  }
+
+  // /issues 会把 PR 也列出来，按 pull_request 字段过滤掉
+  const issues = (await api(found.token, "/repos/" + REPO + "/issues?state=open&per_page=20")).filter((i) => !i.pull_request);
+  console.log("\n开放 issue " + (issues.length === 0 ? "（无）" : ""));
+  for (const issue of issues.slice(0, 10)) {
+    const labels = (issue.labels || []).map((l) => (typeof l === "string" ? l : l.name)).join(",");
+    console.log(
+      "  #" + String(issue.number).padEnd(5) +
+      (issue.title || "").slice(0, 46).padEnd(48) +
+      (labels || "-").padEnd(20).slice(0, 20) +
+      ago(issue.created_at)
+    );
+  }
+
   console.log("\ntoken 来源：" + found.from);
 } catch (error) {
   console.error("查询失败：" + error.message);
-  if (/ 401 /.test(error.message)) console.error("token 可能失效或没权限（需要 Metadata: Read，看 CI 还要 Actions: Read）");
+  if (/ 401 /.test(error.message)) console.error("token 失效了，重新生成一个");
+  if (/ 403 /.test(error.message)) {
+    console.error("权限不足。需要：Contents: Read（分支）、Actions: Read（CI）、Pull requests: Read（PR）、Issues: Read（issue）");
+  }
   if (/ 404 /.test(error.message)) console.error("仓库不存在，或 token 没有该仓库的访问权");
   process.exit(1);
 }
