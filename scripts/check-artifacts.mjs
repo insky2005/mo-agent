@@ -6,9 +6,13 @@
 //
 // 本地带密钥的包是允许的（SEC-001 的取舍），所以默认只报警；
 // CI / 发布前必须加 --enforce，命中即失败。
+//
+// 归档会递归解开（.app -> .tar.zst -> runtime.tar.gz 这种嵌套也能扫到），
+// 所以扫描大包时会临时落盘，体积大概是产物本身的 1~2 倍。
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 const PATTERNS = [
   { id: "hms-app-secret", re: /"appSecret"\s*:\s*"[0-9a-fA-F]{32,}"/ },
@@ -16,59 +20,62 @@ const PATTERNS = [
   { id: "api-key", re: /"api_?key"\s*:\s*"[^"\s]{8,}"/ },
 ];
 
+const MAX_DEPTH = 3;
+const ARCHIVE = /\.(tar\.gz|tgz|tar\.zst)$/;
 const HITS = [];
 
 function record(label, id, sample) {
-  if (HITS.some((h) => h.label === label && h.id === id)) return;
-  HITS.push({ label, id, sample: sample.slice(0, 100) });
+  const key = label + "#" + id;
+  if (HITS.some((h) => h.key === key)) return;
+  HITS.push({ key, label, id, sample: sample.replace(/\s+/g, " ").slice(0, 100) });
 }
 
-function scanStream(stream, label) {
+function scanBuffer(chunk, label, tail) {
+  const text = tail + chunk.toString("latin1");
+  for (const p of PATTERNS) {
+    const m = text.match(p.re);
+    if (m) record(label, p.id, m[0]);
+  }
+  return text.slice(-4096);
+}
+
+function scanFile(file, label) {
   return new Promise((resolve) => {
+    const stream = fs.createReadStream(file);
     let tail = "";
-    stream.on("data", (chunk) => {
-      const text = tail + chunk.toString("latin1");
-      for (const p of PATTERNS) {
-        const m = text.match(p.re);
-        if (m) record(label, p.id, m[0]);
-      }
-      tail = text.slice(-4096);
-    });
+    stream.on("data", (chunk) => (tail = scanBuffer(chunk, label, tail)));
     stream.on("end", resolve);
-    stream.on("close", resolve);
     stream.on("error", resolve);
   });
 }
 
-function scanFile(file) {
-  return scanStream(fs.createReadStream(file), file);
+function extract(target, dir) {
+  const flags = /\.tar\.zst$/.test(target) ? ["--zstd", "-xf", target, "-C", dir] : ["-xf", target, "-C", dir];
+  const result = spawnSync("tar", flags, { encoding: "utf8" });
+  if (result.status !== 0) {
+    const reason = String(result.stderr || "").trim().split("\n").pop();
+    console.error("  ! 解包失败，跳过：" + target + (reason ? "（" + reason + "）" : ""));
+    return false;
+  }
+  return true;
 }
 
-function scanArchive(file, flag) {
-  return new Promise((resolve) => {
-    const child = spawn("tar", [flag, "-xOf", file], { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("error", () => {
-      console.error("  ! 跳过 " + file + "（tar 不可用或不支持该格式）");
-      resolve();
-    });
-    child.on("close", (code) => {
-      if (code !== 0) console.error("  ! 解包 " + file + " 失败：" + stderr.trim().split("\n").slice(-1)[0]);
-    });
-    scanStream(child.stdout, file).then(resolve);
-  });
+function labelOf(target, origin, base) {
+  if (!base || target === origin) return origin;
+  return origin + " → " + path.relative(base, target);
 }
 
-async function walk(dir) {
+async function walk(dir, ctx) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) await walk(full);
-    else if (entry.isFile()) await scanFile(full);
+    if (entry.isDirectory()) await walk(full, ctx);
+    else if (entry.isFile()) await scanTarget(full, ctx);
   }
 }
 
-async function scan(target) {
+async function scanTarget(target, ctx) {
+  const { depth = 0, origin = target, base = null } = ctx || {};
+
   let stat;
   try {
     stat = fs.statSync(target);
@@ -76,10 +83,27 @@ async function scan(target) {
     console.error("  ! 跳过 " + target + "（不存在）");
     return;
   }
-  if (stat.isDirectory()) return walk(target);
-  if (/\.tar\.gz$|\.tgz$/.test(target)) return scanArchive(target, "-z");
-  if (/\.tar\.zst$/.test(target)) return scanArchive(target, "--zstd");
-  return scanFile(target);
+
+  if (stat.isDirectory()) return walk(target, { depth, origin, base: base || target });
+
+  const label = labelOf(target, origin, base);
+  if (!ARCHIVE.test(target)) return scanFile(target, label);
+
+  if (depth >= MAX_DEPTH) {
+    console.error("  ! 嵌套超过 " + MAX_DEPTH + " 层，停止展开：" + label);
+    return;
+  }
+
+  // 先扫外层（未压缩的文本成员），再解开递归扫内层归档
+  await scanFile(target, label);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mo-scan-"));
+  try {
+    if (extract(target, tmp)) {
+      await walk(tmp, { depth: depth + 1, origin: label, base: tmp });
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 const args = process.argv.slice(2);
@@ -91,9 +115,7 @@ if (targets.length === 0) {
   process.exit(2);
 }
 
-for (const target of targets) {
-  await scan(target);
-}
+for (const target of targets) await scanTarget(target);
 
 if (HITS.length === 0) {
   console.log("✓ 产物里未发现密钥：" + targets.join(", "));

@@ -85,6 +85,19 @@ test("tar.gz 里的密钥也能扫出来", () => {
   assert.equal(result.status, 1);
 });
 
+test("嵌套归档（app.tar.zst → runtime.tar.gz）也能扫到", () => {
+  const dir = tmpdir();
+  const inner = tmpdir();
+  fs.writeFileSync(path.join(inner, "notify-defaults.json"), makeSecret("d".repeat(64)));
+  const innerArchive = path.join(dir, "runtime.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", innerArchive, "-C", inner, "notify-defaults.json"]).status, 0);
+  const outerArchive = path.join(dir, "app.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", outerArchive, "-C", dir, "runtime.tar.gz"]).status, 0);
+  const result = runScanner(["--enforce", outerArchive]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /runtime\.tar\.gz → notify-defaults\.json/);
+});
+
 test("不带 --enforce 只警告，不阻断本地构建", () => {
   const dir = tmpdir();
   fs.writeFileSync(path.join(dir, "notify-defaults.json"), makeSecret("c".repeat(64)));
