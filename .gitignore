@@ -54,3 +54,9 @@ docs/private/
 cli/dist/
 dist/
 
+
+# ---- Android 签名（CI 用 secrets 注入，本地用 keystore.properties）----
+keystore.properties
+*.jks
+app/android/app/keystore/release.*
+*.swp

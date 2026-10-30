@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
+import { findExecutable } from "./platform.mjs";
 
 const SESSION_NOTE = "（新终端窗口，过程可见）";
 
@@ -55,31 +56,44 @@ export const EXECUTORS = {
   // ---- 无头型（-headless 后缀）----
   "claude-headless": {
     command: 'claude -p "$(cat)" --permission-mode acceptEdits',
+    // Windows 没有 cat；Claude Code 的 -p 能从 stdin 读 prompt
+    platforms: { win32: "claude -p --permission-mode acceptEdits" },
+    stdin: true,
     description: "Claude Code，无头，允许在工作区改文件",
     requires: "claude",
   },
   "codex-headless": {
     command: "codex exec -s workspace-write -",
+    stdin: true,
     description: "Codex CLI，无头，工作区可写",
     requires: "codex",
   },
   "qodercli-headless": {
     command: 'qodercli -p "$(cat)" --permission-mode accept_edits',
+    platforms: { win32: "qodercli -p --permission-mode accept_edits" },
+    stdin: true,
     description: "Qoder CLI（国际版），无头，允许改文件",
     requires: "qodercli",
   },
   "qoderclicn-headless": {
     command: 'qoderclicn -p "$(cat)" --permission-mode accept_edits',
+    platforms: { win32: "qoderclicn -p --permission-mode accept_edits" },
+    stdin: true,
     description: "Qoder CLI（CN 版），无头，允许改文件",
     requires: "qoderclicn",
   },
   "pi-headless": {
     command: 'pi -p "$(cat)"',
+    stdin: true,
+    // 未在 Windows 上验证 stdin 形态，先明确不支持，避免悄悄跑错
+    posixOnly: true,
     description: "pi，无头，非交互模式",
     requires: "pi",
   },
   "qwen-headless": {
     command: 'qwen --approval-mode auto-edit "$(cat)"',
+    stdin: true,
+    posixOnly: true,
     description: "Qwen Code，无头，自动批准文件编辑",
     requires: "qwen",
   },
@@ -125,7 +139,16 @@ export function binaryOf(command) {
   return resolveTokens(tokenize(command));
 }
 
-export function resolveAgent(name) {
+/** 取某个执行者模板在该平台的命令；Windows 明确不支持的返回 null */
+export function commandFor(preset, platform = process.platform) {
+  if (!preset) return null;
+  if (platform === "win32" && preset.posixOnly) return null;
+  const override = preset.platforms && preset.platforms[platform];
+  if (override) return override;
+  return preset.command;
+}
+
+export function resolveAgent(name, { platform = process.platform, env = process.env } = {}) {
   const key = String(name).trim();
   const preset = EXECUTORS[key];
   if (!preset) {
@@ -133,31 +156,20 @@ export function resolveAgent(name) {
       hint: "可用：" + Object.keys(EXECUTORS).join(" / ") + "；自定义命令请用 --exec",
     });
   }
-  const binary = preset.requires || binaryOf(preset.command);
-  return { name: key, ...preset, binary, installed: Boolean(which(binary)), path: which(binary) };
+  const command = commandFor(preset, platform);
+  if (!command) {
+    throw new MoError("E_UNSUPPORTED_PLATFORM", "执行者 " + key + " 暂不支持当前平台：" + platform, {
+      hint: "换一个 --worker/--exec；或在目标平台上用自定义命令",
+    });
+  }
+  const binary = preset.requires || binaryOf(command);
+  const found = which(binary, { platform, env });
+  return { name: key, ...preset, command, binary, installed: Boolean(found), path: found };
 }
 
-/** 在 PATH 里找可执行文件（不执行它） */
-export function which(binary) {
-  if (String(binary).includes(path.sep) || String(binary).includes("/")) {
-    try {
-      fs.accessSync(binary, fs.constants.X_OK);
-      return binary;
-    } catch {
-      return null;
-    }
-  }
-  const dirs = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
-  for (const dir of dirs) {
-    const candidate = path.join(dir, binary);
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return candidate;
-    } catch {
-      // 继续找
-    }
-  }
-  return null;
+/** 在 PATH 里找可执行文件（不执行它）；Windows 走 PATHEXT */
+export function which(binary, options = {}) {
+  return findExecutable(binary, options);
 }
 
 /**
@@ -166,11 +178,24 @@ export function which(binary) {
  *   - 声明的 requires 存在（如果声明了）
  * 例：命令是 `node run.mjs`，但 requires: "claude"，那 node 和 claude 都得在。
  */
-export function workerStatus(preset) {
-  const program = binaryOf(preset.command);
+export function workerStatus(preset, { platform = process.platform, env = process.env } = {}) {
+  const command = commandFor(preset, platform);
+  if (!command) {
+    return {
+      program: "",
+      requires: preset.requires || null,
+      supported: false,
+      installed: false,
+      missing: [],
+      path: null,
+      requiresPath: null,
+    };
+  }
+
+  const program = binaryOf(command);
   const requires = preset.requires || "";
-  const programPath = program ? which(program) : null;
-  const requiresPath = requires ? which(requires) : null;
+  const programPath = program ? which(program, { platform, env }) : null;
+  const requiresPath = requires ? which(requires, { platform, env }) : null;
 
   const missing = [];
   if (program && !programPath) missing.push(program);
@@ -179,6 +204,7 @@ export function workerStatus(preset) {
   return {
     program,
     requires: requires || null,
+    supported: true,
     installed: missing.length === 0,
     missing: [...new Set(missing)],
     path: programPath,
@@ -186,15 +212,17 @@ export function workerStatus(preset) {
   };
 }
 
-export function listAgents() {
+export function listAgents(options = {}) {
+  const platform = options.platform || process.platform;
   return Object.entries(EXECUTORS).map(([name, preset]) => {
-    const status = workerStatus(preset);
+    const status = workerStatus(preset, options);
     return {
       name,
-      command: preset.command,
+      command: commandFor(preset, platform),
       description: preset.description,
       requires: preset.requires,
       binary: status.program,
+      supported: status.supported,
       installed: status.installed,
       missing: status.missing,
       path: status.path,

@@ -1,0 +1,30 @@
+# 兜底：真正的密钥扫描交给 gitleaks 默认规则集；
+# 内网域名 / 开发机路径由 scripts/check-noprivate.mjs 负责（那边用拆分字符串，不会自我命中）。
+title = "mo-agent"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mo-hms-app-secret"
+description = "HMS App Secret 不应提交（含 32 位以上十六进制值）"
+regex = '''"appSecret"\s*:\s*"[0-9a-fA-F]{32,}"'''
+tags = ["secret"]
+
+[[rules]]
+id = "mo-dev-home"
+description = "开发机绝对路径"
+regex = '''/Users/[A-Za-z0-9._-]+/'''
+tags = ["pii"]
+
+[allowlist]
+description = "测试里的假令牌与构建产物"
+paths = [
+  '''.*\.test\.mjs''',
+  '''cli/dist/.*''',
+]
+regexes = [
+  '''test-token''',
+  '''local-test''',
+  '''manual-sec''',
+]

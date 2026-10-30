@@ -352,7 +352,9 @@ test("settingsPathsFor：去重并保持主文件在前", () => {
   );
 });
 
-test("写入失败：返回错误而不是抛异常（例如目录不可写）", () => {
+const IS_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
+
+test("写入失败：返回错误而不是抛异常（例如目录不可写）", { skip: IS_ROOT ? "root 不受目录权限限制" : false }, () => {
   const ws = makeWorkspace();
   const primary = path.join(ws.home, ".qoder-cn", "settings.json");
   fs.mkdirSync(path.dirname(primary), { recursive: true });

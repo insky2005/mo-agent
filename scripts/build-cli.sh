@@ -43,10 +43,17 @@ ARGS=(build --compile --minify "$ROOT/cli/mo.mjs" --outfile "$OUT")
 
 bun "${ARGS[@]}"
 
+# Windows 目标由 bun 自动补 .exe；后面的大小统计与本机执行都按真实文件名走。
+# （交叉编译到 windows 时也补，避免 CI 里拿到一个没有扩展名的文件）
+if [ ! -f "$OUT" ] && [ -f "$OUT.exe" ]; then
+  OUT="$OUT.exe"
+fi
+
 echo "产物: $OUT ($(du -h "$OUT" | cut -f1))"
 
 HOST="bun-$(node -p 'process.platform + "-" + process.arch')"
 if [ -z "$TARGET" ] || [ "$TARGET" = "$HOST" ]; then
+  # 让交叉/本机产物都至少能自报版本，CI 用它做 smoke
   "$OUT" --version
 else
   echo "（交叉编译产物，跳过本机执行验证）"

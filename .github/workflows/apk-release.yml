@@ -1,0 +1,142 @@
+name: apk-release
+
+on:
+  push:
+    tags: ["apk-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（例如 apk-v0.2.0）"
+        required: true
+      dry_run:
+        description: "只构建、不发布"
+        type: boolean
+        default: true
+
+concurrency:
+  group: apk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "22"
+  JAVA_VERSION: "21"
+
+jobs:
+  build:
+    name: build apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 确认没有 AGC 配置（SEC-001）
+        run: |
+          if [ -f app/android/app/agconnect-services.json ]; then
+            echo "::error::仓库里出现了 agconnect-services.json，拒绝构建"
+            exit 1
+          fi
+
+      - name: 注入签名
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64 secret"
+            exit 1
+          fi
+          KS="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          cat > app/android/app/keystore.properties <<EOF
+          storeFile=$KS
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: 解析版本
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag || github.ref_name }}"
+          VERSION="${TAG#apk-v}"
+          MAJOR="${VERSION%%.*}"; REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"; PATCH="${REST#*.}"; PATCH="${PATCH%%[!0-9]*}"
+          CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "APK 版本 $VERSION（versionCode $CODE）"
+
+      - name: 构建
+        env:
+          MO_VERSION_CODE: ${{ steps.version.outputs.code }}
+          MO_VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: bash scripts/build-android.sh
+
+      - name: 产出发布用文件名
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/android/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="dist/mo-agent-android-${{ steps.version.outputs.version }}.apk"
+          mkdir -p dist
+          cp "$APK" "$OUT"
+          node scripts/checksums.mjs dist
+          ls -lh dist
+
+      - name: 产物密钥扫描（SEC-001）
+        run: node scripts/check-artifacts.mjs --enforce dist
+
+      - name: 清理签名材料
+        if: always()
+        run: rm -f app/android/app/keystore.properties "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/mo-agent-android-*
+          if-no-files-found: error
+
+  release:
+    name: 发布
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/mo-agent-android-*.apk
+            dist/*.sha256

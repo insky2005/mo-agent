@@ -63,14 +63,34 @@ for f in approvals/*.mjs; do
   esac
 done
 
-if [ -f host/notify-defaults.json ]; then
-  cp host/notify-defaults.json "$RUNTIME_STAGE/notify-defaults.json"
-else
-  echo "[build] 警告：缺少 host/notify-defaults.json，HMS 通道不会自动配置" >&2
-fi
+# ---- HMS 推送默认配置（SEC-001）----
+# 这份配置含 App Secret，只允许进本机构建的包；CI 一律不带。
+# 规则在 scripts/desktop-hms.mjs 里，有单测，别在 bash 里另写一份。
+HMS_DECISION="$(node scripts/desktop-hms.mjs)" || exit 1
+case "$HMS_DECISION" in
+  include)
+    cp host/notify-defaults.json "$RUNTIME_STAGE/notify-defaults.json"
+    echo "[build] ============================================================" 
+    echo "[build]  该产物内含 HMS App Secret，仅限本机自用"
+    echo "[build]  不要上传 Release、不要分发、不要提交仓库"
+    echo "[build] ============================================================" 
+    ;;
+  skip:*)
+    echo "[build] 未打包 HMS 推送配置（${HMS_DECISION#skip:}）；构建继续，HMS 通道不会自动配置"
+    ;;
+  *)
+    echo "[build] !! desktop-hms.mjs 输出异常：$HMS_DECISION" >&2
+    exit 1
+    ;;
+esac
 
 # 可选：把 APK 一起带上，供 /setup 页下载
+# 优先用本地构建的；没有就用 scripts/fetch-apk.sh 下到 ~/.mo-agent 的那份
 APK="app/android/app/build/outputs/apk/debug/app-debug.apk"
+if [ ! -f "$APK" ] && [ -f "$HOME/.mo-agent/app.apk" ]; then
+  APK="$HOME/.mo-agent/app.apk"
+  echo "[build] 用已下载的 APK: $APK"
+fi
 if [ -f "$APK" ]; then
   mkdir -p "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug"
   cp "$APK" "$RUNTIME_STAGE/app/android/app/build/outputs/apk/debug/app-debug.apk"
@@ -118,6 +138,9 @@ echo "[build] runtime 体积: $(du -sh "$RUNTIME_STAGE" | cut -f1)"
 # build.copy 只支持单文件，所以打成 tar.gz；壳首次启动解压到固定目录
 tar -czf desktop/runtime.tar.gz -C "$RUNTIME_STAGE" .
 echo "[build] runtime 包: $(du -sh desktop/runtime.tar.gz | cut -f1)"
+
+# 本地包允许带密钥，所以这里只提示；CI 发布前用 --enforce 直接失败。
+node scripts/check-artifacts.mjs desktop/runtime.tar.gz
 
 # ---- 2. Electrobun 构建（copy 会带上 runtime）----
 rm -rf desktop/build

@@ -59,6 +59,15 @@ bash scripts/install-cli.sh
 
 源码方式里，没有 bun 时安装脚本会退化为软链到仓库（需要 Node）；有 bun 则构建单文件二进制。
 
+Windows（PowerShell，先在本机构建 `cli\dist\mo.exe`）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-cli.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-cli.ps1 -Uninstall
+```
+
+Windows 上只对已验证 stdin 形态的无头执行者开放；未验证的模板标记为 posixOnly，在 Windows 会明确报不支持。
+
 **不要 `curl … | bash` 一把梭**：先把脚本下到临时文件，让用户有机会先看一眼再执行。
 
 ## 不能做的

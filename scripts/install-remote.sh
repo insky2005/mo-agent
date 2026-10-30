@@ -2,6 +2,7 @@
 # 从 GitHub Releases 安装 mo（不需要源码、不需要 Node）。
 #   curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
 #   ... | bash -s -- --with-skill    # 顺带安装 Agent 技能
+#   ... | bash -s -- --with-apk      # 顺带下载手机安装包到 ~/.mo-agent/app.apk
 #   MO_VERSION=v0.2.0 bash scripts/install-remote.sh      # 指定版本
 #   MO_CLI_BASE_URL=file:///path/to/dist bash scripts/install-remote.sh   # 本地验证
 set -euo pipefail
@@ -13,6 +14,7 @@ BASE="${MO_CLI_BASE_URL:-}"
 case "$(uname -s)" in
   Darwin) OS="darwin" ;;
   Linux) OS="linux" ;;
+  MINGW*|MSYS*|CYGWIN*) echo "Windows 请用：scripts/install-remote.ps1" >&2; exit 1 ;;
   *) echo "暂不支持的系统：$(uname -s)" >&2; exit 1 ;;
 esac
 
@@ -57,12 +59,23 @@ echo "✓ 已安装 $BIN_DIR/mo"
 "$BIN_DIR/mo" --version
 
 WITH_SKILL="${MO_WITH_SKILL:-0}"
+WITH_APK="${MO_WITH_APK:-0}"
 for arg in "$@"; do
   case "$arg" in
     --with-skill) WITH_SKILL=1 ;;
     --no-skill) WITH_SKILL=0 ;;
+    --with-apk) WITH_APK=1 ;;
   esac
 done
+
+# 手机扫码安装用的 APK：host 会从 ~/.mo-agent/app.apk 提供 /app.apk
+if [ "$WITH_APK" = "1" ]; then
+  if curl -fsSL "https://raw.githubusercontent.com/$REPO/main/scripts/fetch-apk.sh" | bash; then
+    echo "✓ APK"
+  else
+    echo "APK 下载失败，可稍后执行：bash scripts/fetch-apk.sh" >&2
+  fi
+fi
 
 if [ "$WITH_SKILL" = "1" ]; then
   if [ -t 0 ]; then

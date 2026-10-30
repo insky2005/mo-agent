@@ -55,6 +55,81 @@
 
 同类规则也适用于 `docs/reference/capabilities.md`（`npm run docs:capabilities`）。
 
+## CI 与发版
+
+### 流水线
+
+| workflow | 触发 | 做什么 |
+|---|---|---|
+| `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
+| `cli-release.yml` | push tag `v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
+| `apk-release.yml` | push tag `apk-v*` / 手动 | 版本取自 tag → 签名（secrets）→ 构建 APK → 扫描 → 发 Release |
+
+### 只验证构建（dry run）
+
+不想发版、只想确认五个平台都能构建时，手动触发并保持 `dry_run` 勾选：
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/insky2005/mo-agent/actions/workflows/cli-release.yml/dispatches \
+  -d '{"ref":"feat/cli-cross-platform","inputs":{"tag":"v0.2.0","dry_run":"true"}}'
+```
+
+或在 Actions 页面点「Run workflow」。dry run 会跑完 verify + 5 个平台的构建与冒烟，
+产物作为 artifact 可下载，但**不会建 tag、不会发 Release**。
+
+### 发版步骤
+
+1. 同时改 `package.json` 和 `cli/lib/version.mjs` 的版本（`npm run cli:version:check` 校验两者一致）；
+2. 提交后打 tag 并推送：`git tag v0.2.0 && git push origin v0.2.0`；
+3. Release 里会有 `mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及各自的 `.sha256` 和合并的 `SHA256SUMS`；
+4. 用户侧用 `install-remote.sh`（macOS/Linux）或 `install-remote.ps1`（Windows）拿 latest。
+
+### APK 单独发
+
+```bash
+git tag apk-v0.2.0 && git push origin apk-v0.2.0
+```
+
+- 在 ubuntu runner 上构建，**不带 `agconnect-services.json`**（workflow 里有断言，出现就失败），
+  所以 APK 没有 HMS 推送能力，也不含 AGC 凭据；
+- 签名材料走 GitHub Secrets，仓库里不放 keystore：
+  `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`。
+  本地构建放 `app/android/app/keystore.properties`（已 gitignore），没有就退回仓库里的 debug key；
+- 产物名 `mo-agent-android-<version>.apk`，versionCode 由 tag 推导（`0.2.0` → 200）；
+- 装到手机：`bash scripts/fetch-apk.sh` 把最新 APK 下到 `~/.mo-agent/app.apk`，
+  host 的 `/app.apk` 会优先用打包进运行时的那份，没有就用这份，手机扫码即可安装；
+  `curl ... | bash -s -- --with-apk` 装 CLI 时也能顺带下载。
+
+生成一把新 keystore（换签名会让已装 App 必须卸载重装）：
+
+```bash
+# 项目内放（Gradle 默认就找这个位置；两个文件都已 gitignore）
+mkdir -p app/android/app/keystore
+keytool -genkeypair -keystore app/android/app/keystore/release.jks -alias moagent \
+  -keyalg RSA -keysize 2048 -validity 10000
+
+cat > app/android/app/keystore.properties <<'EOF'
+storeFile=keystore/release.jks
+storePassword=你的store密码
+keyAlias=moagent
+keyPassword=你的key密码
+EOF
+
+base64 -i app/android/app/keystore/release.jks | pbcopy   # 粘进 GitHub Secret
+```
+
+> 放项目里也行：`.gitignore` 已覆盖 `*.jks` / `keystore.properties` / `app/android/app/keystore/release.*`，
+> 并且 `npm run check` 会检查这些文件**是否被 git 跟踪**，误提交会直接失败。
+> 但请另外**离线备份**一份——keystore 丢了就没法再给已安装用户发更新。
+
+### 注意
+
+- 每个平台都在**原生 runner** 上构建，产物会当场跑 `--version` 冒烟，不依赖交叉编译；
+- Windows 目前只有基线测试（不阻断），`session-launch` / `agent-hooks` 仍是 POSIX 实现，见 `docs/plans/cli-cross-platform-verify.md`；
+- 发布前会跑 `node scripts/check-artifacts.mjs --enforce dist`，任何产物带 HMS / 第三方密钥都会直接失败（SEC-001）；
+- macOS 产物是 ad-hoc 签名，首次运行可能需要在「隐私与安全性」里放行；想彻底免打扰需要 Developer ID 公证。
+
 ## 扫码配对
 
 两条路：
@@ -240,9 +315,6 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 - 支持按活跃 / 运行中 / 等待 / 完成 / 异常筛选，按标题 / 路径 / 最近内容搜索；SSE 推送会话与事件，同时按 host 轮询节奏轻量刷新钉钉连接、进程、数据源等快照字段，断线时自动退化为整份快照轮询。
   「活跃」和手机端「只看活跃」同口径：运行中、有待处理请求、当前选中，或最近 6 小时有更新（不在运行的分支除外）。
 
-![实时监控屏](docs/assets/monitor-screen.jpg)
-![会话详情](docs/assets/monitor-detail.jpg)
-
 监控屏和日志页一样只允许本机访问（回环地址 + 本机令牌），并且**只读**：批准和回答仍在手机或终端完成。
 顶栏的「设置」会打开设置中心；设置中心关闭后监控屏保持原样。
 
@@ -260,7 +332,12 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 - 因此分发包不再依赖本机仓库路径，也不需要用户安装 Node；
 - 开发时设置 MO_AGENT_ROOT=<仓库路径> 可直接运行源码。
 
-注意：host/notify-defaults.json 含 HMS App Secret，已加入 .gitignore；发布打包时必须随包提供。
+HMS 推送的默认配置（含 App Secret）只放在本地 `host/notify-defaults.json`，已加入 .gitignore：
+
+- **本地构建**：文件存在就打包进 runtime，装出来的 App 开箱可推送；`MO_AGENT_DESKTOP_HMS=0` 可强制不带；
+- **CI 构建**：一律不带（规则在 `scripts/desktop-hms.mjs`，有单测），构建照常成功，只是 HMS 通道不会自动配置；
+- **带密钥的包只能本机自用**：不能上传 Release、不能分发。发布前跑
+  `node scripts/check-artifacts.mjs --enforce <产物>`，扫到 `appSecret` / `client_secret` / `api_key` 会直接失败。
 
 ## 扫码装 App + 扫码配对
 

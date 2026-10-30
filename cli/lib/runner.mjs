@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveShell } from "./platform.mjs";
 
 const TAIL_LIMIT = 4000;
 const OUTPUT_LIMIT = 2 * 1024 * 1024;
@@ -36,9 +37,8 @@ export function runExecutor({ command, cwd, env, input, timeoutMs }) {
 
     let child;
     try {
-      // 默认 /bin/sh：模板只依赖 POSIX 子集，sh 到处都有。
-      // 需要 bash 特性（[[ ]]、数组、pipefail）时用 MO_SHELL=/bin/bash 覆盖。
-      const shell = env.MO_SHELL || (process.platform === "win32" ? true : "/bin/sh");
+      // POSIX 默认 /bin/sh；Windows 用 %ComSpec%；需要 bash 特性时 MO_SHELL 覆盖。
+      const shell = resolveShell(process.platform, env);
       child = spawn(command, {
         cwd,
         env,

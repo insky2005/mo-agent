@@ -1,0 +1,23 @@
+# 统一用 LF：Windows runner 默认 core.autocrlf=true，
+# 会把生成物改成 CRLF，导致 gen-skill / gen-capabilities 的 --check 误报「已过期」。
+* text=auto eol=lf
+
+# 二进制，别做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.icns binary
+*.ico binary
+*.keystore binary
+*.jks binary
+*.jar binary
+*.apk binary
+*.zip binary
+*.gz binary
+*.zst binary
+
+# Windows 脚本保持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
