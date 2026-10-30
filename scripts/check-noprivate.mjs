@@ -44,8 +44,24 @@ function listFiles() {
   }
 }
 
+// 文件名级兜底：这些东西就算被 git add -f 也不该进仓库
+const FORBIDDEN_FILES = [
+  { re: /(^|\/)keystore\.properties$/, name: "签名配置" },
+  { re: /\.jks$/i, name: "签名密钥" },
+  { re: /\.p12$/i, name: "签名密钥" },
+  { re: /(^|\/)agconnect-services\.json$/, name: "AGC 配置" },
+  { re: /(^|\/)notify-defaults\.json$/, name: "通知默认配置" },
+];
+
+const files = listFiles();
 const hits = [];
-for (const rel of listFiles()) {
+for (const rel of files) {
+  for (const rule of FORBIDDEN_FILES) {
+    if (rule.re.test(rel)) hits.push({ rel, line: 0, rule: rule.name, text: "（文件不应入库）" });
+  }
+}
+
+for (const rel of files) {
   if (!TEXT_EXT.test(rel)) continue;
   const full = path.join(ROOT, rel);
   let size = 0;

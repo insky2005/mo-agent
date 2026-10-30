@@ -104,16 +104,24 @@ git tag apk-v0.2.0 && git push origin apk-v0.2.0
 生成一把新 keystore（换签名会让已装 App 必须卸载重装）：
 
 ```bash
-mkdir -p ~/.mo-agent/keys && chmod 700 ~/.mo-agent/keys
-keytool -genkeypair -keystore ~/.mo-agent/keys/release.jks -alias moagent \
+# 项目内放（Gradle 默认就找这个位置；两个文件都已 gitignore）
+mkdir -p app/android/app/keystore
+keytool -genkeypair -keystore app/android/app/keystore/release.jks -alias moagent \
   -keyalg RSA -keysize 2048 -validity 10000
-chmod 600 ~/.mo-agent/keys/release.jks
-base64 -i ~/.mo-agent/keys/release.jks | pbcopy   # 粘进 GitHub Secret
+
+cat > app/android/app/keystore.properties <<'EOF'
+storeFile=keystore/release.jks
+storePassword=你的store密码
+keyAlias=moagent
+keyPassword=你的key密码
+EOF
+
+base64 -i app/android/app/keystore/release.jks | pbcopy   # 粘进 GitHub Secret
 ```
 
-> 放在 `~/.mo-agent/keys/` 只是为了和 App 数据目录一致；**位置本身不重要**，
-> 重要的是：在仓库外、权限 0600、**离线备份一份**——keystore 丢了就没法再给已安装的用户发更新。
-> 不要放 `~/.config` 或 iCloud/Dropbox 同步目录，签名私钥不该跟配置一起被云同步。
+> 放项目里也行：`.gitignore` 已覆盖 `*.jks` / `keystore.properties` / `app/android/app/keystore/release.*`，
+> 并且 `npm run check` 会检查这些文件**是否被 git 跟踪**，误提交会直接失败。
+> 但请另外**离线备份**一份——keystore 丢了就没法再给已安装用户发更新。
 
 ### 注意
 
