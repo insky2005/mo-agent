@@ -20,6 +20,7 @@ jobs:
   test:
     name: test ${{ matrix.os }} / node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +48,7 @@ jobs:
     # 等 Windows 适配收口后再改成必过。见 docs/plans/cli-cross-platform-verify.md §3.2。
     name: windows baseline（不阻断）
     runs-on: windows-latest
+    timeout-minutes: 45
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
