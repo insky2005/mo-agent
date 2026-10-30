@@ -46,6 +46,26 @@ bash scripts/install-cli.sh --no-completion  # 不写 shell 补全
 bash scripts/install-cli.sh --uninstall      # 卸载
 ```
 
+## 常驻服务（daemon）
+
+`mo daemon` 拉起 host（就是桌面 App 里那个常驻服务），手机扫码配对、下载 APK 都靠它。
+
+```bash
+mo daemon start            # 后台启动；顺手把 APK 下到 ~/.mo-agent/app.apk
+mo daemon start --foreground   # 前台跑，Ctrl+C 停
+mo daemon status           # 是否在跑 / 健康检查 / APK 是否就绪
+mo daemon stop
+```
+
+host 从哪来（按顺序找）：
+
+1. `MO_AGENT_ROOT` 指向的目录；
+2. 桌面版装好的运行时 `~/Library/Application Support/mo-agent/runtime`；
+3. 当前目录往上找到的源码仓库（要求 `host/index.mjs` 存在）。
+
+单文件 CLI 本身不含 host 与前端资源，所以脱离上面三者时只会报错并提示装桌面版。
+`/app.apk` 优先用打包进运行时的那份，没有就用 `~/.mo-agent/app.apk`。
+
 ### 1.3 装完要做的两件事
 
 **PATH**：如果 `~/.local/bin` 不在 PATH 里，加进 shell 配置（`~/.zshrc` 或 `~/.bashrc`）：

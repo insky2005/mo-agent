@@ -574,7 +574,7 @@ budget: { runtime: 45m, tokens: 200000, children: 0 }
 
 | 承诺 | 现状 |
 |---|---|
-| `mo daemon start` | 不存在；daemon 只能由桌面端拉起（纯 CLI 形态还跑不起来） |
+| `mo daemon start` | 已实现：拉起已存在的 host 运行时（桌面版运行时 / 源码 / `MO_AGENT_ROOT`），单文件 CLI 不含 host |
 | `mo manager check` | 不存在；用 `mo doctor` + 手工建一张卡验证 |
 | `mo agent remove` | 不存在；手工改各家 MCP 配置 |
 | `mo doctor --preflight` | 不存在；`mo doctor` 本身已是只读 |

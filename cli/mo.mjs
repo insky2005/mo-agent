@@ -23,6 +23,7 @@ import { terminalCommand } from "./commands/terminal.mjs";
 import { watchdogCommand } from "./commands/watchdog.mjs";
 import { configCommand } from "./commands/config.mjs";
 import { setupCommand } from "./commands/setup.mjs";
+import { daemonCommand } from "./commands/daemon.mjs";
 import { VERSION } from "./lib/version.mjs";
 import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
 
@@ -57,6 +58,7 @@ const ROUTES = {
   watchdog: watchdogCommand,
   config: configCommand,
   setup: setupCommand,
+  daemon: daemonCommand,
 };
 
 async function main(argv) {

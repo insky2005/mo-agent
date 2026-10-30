@@ -109,6 +109,16 @@ export const GROUPS = [
     ],
   },
   {
+    name: "daemon",
+    title: "常驻服务",
+    blurb: "拉起 host（桌面 App 里那个服务），手机扫码配对、下载 APK",
+    subs: [
+      ["start [--port N] [--foreground]", "后台启动 host；--foreground 前台跑，Ctrl+C 停", "顺手下载 APK 到 ~/.mo-agent/app.apk"],
+      ["stop", "停止 daemon", ""],
+      ["status", "是否在跑、健康检查、APK 是否就绪", "默认子命令"],
+    ],
+  },
+  {
     name: "config",
     title: "全局配置",
     blurb: "~/.mo-agent/config.json：只放全局、机器级的键（端口、日志、召回条数…）",
