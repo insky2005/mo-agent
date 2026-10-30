@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 给发布目录里的产物生成 SHA256：每个文件一份 .sha256，外加合并的 SHA256SUMS。
-// install-remote.sh 只认 <asset>.sha256，SHA256SUMS 给人看 / 给别的渠道用。
+// get-cli.sh 只认 <asset>.sha256，SHA256SUMS 给人看 / 给别的渠道用。
 //
 //   node scripts/checksums.mjs dist
 import crypto from "node:crypto";

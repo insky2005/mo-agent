@@ -18,7 +18,7 @@
 
 | 你先有 | 怎么做 | 结果 |
 |---|---|---|
-| 想先装 mo | `bash scripts/install-cli.sh`（或远端 `install-remote.sh`） | 装好命令后，终端里会提示/直接进入技能安装 |
+| 想先装 mo | `bash scripts/install-cli.sh`（或远端 `get-cli.sh`） | 装好命令后，终端里会提示/直接进入技能安装 |
 | 想先装技能 | `curl -fsSL .../skills/mo/SKILL.md -o ~/.agents/skills/mo/SKILL.md` | 主 Agent 首次使用时发现没有 `mo`，会停下来引导安装 |
 
 两条路的终点一样：`mo` 在 PATH 里 + `~/.agents/skills/mo/SKILL.md`（按需复制到各 Agent 目录）。
@@ -116,7 +116,7 @@ bash cli/demo/run.sh
 
 | 顺序 | 做法 | 结果 |
 |---|---|---|
-| **先 CLI** | `bash scripts/install-cli.sh` 或远端 `install-remote.sh` | 命令就位；技能用 `mo skill install`（或加 `--with-skill`） |
+| **先 CLI** | `bash scripts/install-cli.sh` 或远端 `get-cli.sh` | 命令就位；技能用 `mo skill install`（或加 `--with-skill`） |
 | **先技能** | `npx skills add insky2005/mo-agent` | 技能就位，首次使用时 Agent 引导你装 CLI |
 
 ### 2. 初始化项目
@@ -253,7 +253,7 @@ mo task dispatch <id>     # 派单，等回执
 对方只需要一条命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash
 ```
 
 脚本会按 `uname` 选产物、校验 sha256、装到 `~/.local/bin/mo`。
@@ -261,8 +261,8 @@ curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/scripts/ins
 指定版本或在本地验证：
 
 ```bash
-MO_VERSION=cli-v0.2.0 bash scripts/install-remote.sh
-MO_CLI_BASE_URL=file://$PWD/cli/dist bash scripts/install-remote.sh
+MO_VERSION=cli-v0.2.0 bash installer/get-cli.sh
+MO_CLI_BASE_URL=file://$PWD/cli/dist bash installer/get-cli.sh
 ```
 
 仓库地址已写成 `insky2005/mo-agent`；fork 或换仓库时用 `MO_AGENT_REPO=you/mo-agent` 覆盖。

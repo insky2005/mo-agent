@@ -100,7 +100,8 @@ git tag apk-v0.2.0 && git push origin apk-v0.2.0   # 只发 APK
 1. 同时改 `package.json` 和 `cli/lib/version.mjs` 的版本（`npm run cli:version:check` 校验两者一致）；
 2. 提交后打 tag 并推送：`git tag cli-v0.2.0 && git push origin cli-v0.2.0`；
 3. Release 里会有 `mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及各自的 `.sha256` 和合并的 `SHA256SUMS`；
-4. 用户侧用 `install-remote.sh`（macOS/Linux）或 `install-remote.ps1`（Windows）拿 latest。
+4. 用户侧用 `installer/get-cli.sh`（macOS/Linux）或 `installer/get-cli.ps1`（Windows）安装。
+   CI 里的 `create-release` 会按资产解析，不需要 `releases/latest`。
 
 ### APK 单独发
 
