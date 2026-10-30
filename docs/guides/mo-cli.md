@@ -51,11 +51,18 @@ bash scripts/install-cli.sh --uninstall      # 卸载
 `mo daemon` 拉起 host（就是桌面 App 里那个常驻服务），手机扫码配对、下载 APK 都靠它。
 
 ```bash
-mo daemon start            # 后台启动；顺手把 APK 下到 ~/.mo-agent/app.apk
+mo daemon start                # 后台启动；顺手把 APK 下到 ~/.mo-agent/app.apk
 mo daemon start --foreground   # 前台跑，Ctrl+C 停
-mo daemon status           # 是否在跑 / 健康检查 / APK 是否就绪
+mo daemon status               # 是否在跑 / 健康检查 / APK 是否就绪
 mo daemon stop
 ```
+
+两个命令都是幂等的，可以放心重复执行：
+
+- **`start` 时已经有 host 在跑**（比如桌面 App 开着）→ 不再起第二个，直接把访问信息打出来
+  （本机地址、配对页、`/app.apk`、带令牌的管理页），并顺手把 APK 备好；
+- **`stop` 只停自己拉起的那个**。如果是桌面 App 起的 host，会明确说「不是 mo daemon 启动的，不做处理」
+  并返回退出码 2 —— 避免把 App 的后端偷偷杀掉。
 
 host 从哪来（按顺序找）：
 

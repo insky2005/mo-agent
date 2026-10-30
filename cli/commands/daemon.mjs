@@ -66,6 +66,15 @@ function readConfigPort(env, home) {
 }
 
 // host 每次启动都会写 session.json（端口 + 本机令牌），用来找"不是我们拉起的"那个
+function readSessionToken(home) {
+  try {
+    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    return typeof info.token === "string" ? info.token : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readSessionPort(home) {
   try {
     const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
@@ -121,6 +130,19 @@ async function waitHealthy(port, timeoutMs = 15000) {
   return null;
 }
 
+async function printInfo(port, home, origin) {
+  const token = readSessionToken(home);
+  const tty = process.stdout.isTTY;
+  const admin = "http://127.0.0.1:" + port + "/setup" + (token ? "?token=" + token : "");
+  const apk = apkDest(home);
+
+  process.stdout.write("✓ host 已在运行（端口 " + port + "，" + origin + "）\n");
+  process.stdout.write("  本机    http://127.0.0.1:" + port + "/\n");
+  process.stdout.write("  配对    http://127.0.0.1:" + port + "/pair\n");
+  process.stdout.write("  安装    http://127.0.0.1:" + port + "/app.apk" + (fs.existsSync(apk) ? "（已就绪）" : "（未就绪：等 APK Release 发布后 mo daemon start 会自动下载）") + "\n");
+  process.stdout.write("  管理    " + (token ? (tty ? admin : "http://127.0.0.1:" + port + "/setup?token=<见 ~/.mo-agent/session.json>") : "http://127.0.0.1:" + port + "/setup") + "\n");
+}
+
 async function start(ctx, args) {
   const home = os.homedir();
   const env = ctx.env || process.env;
@@ -129,11 +151,8 @@ async function start(ctx, args) {
   const port = Number(opts.port) || readConfigPort(env, home);
 
   const existing = readPid(home);
-  if (existing && alive(existing.pid)) {
-    throw new MoError("E_DAEMON_RUNNING", "daemon 已在运行（pid " + existing.pid + "，端口 " + existing.port + "）", {
-      hint: "要重启先 mo daemon stop",
-    });
-  }
+  // pid 文件过期（进程没了）就清掉，别影响后面的判断
+  if (existing && !alive(existing.pid)) fs.rmSync(PID_FILE(home), { force: true });
 
   // 端口上已经有 host 在应答（常见于桌面 App 已经跑着）：
   // 再起一个会撞端口，而且健康检查会"成功"在别人的进程上，误报自己启动成功。
@@ -146,9 +165,17 @@ async function start(ctx, args) {
     }
   }
   if (occupiedPort) {
-    throw new MoError("E_PORT_IN_USE", "端口 " + occupiedPort + " 上已经有一个 host 在跑（可能是桌面 App）", {
-      hint: "先停掉它：退出桌面 App，或 mo daemon stop。同一台机器不要同时跑两个 host",
-    });
+    // 幂等：已经有一个 host 在跑，就把访问信息给出来，不再起第二个。
+    // 顺手把 APK 备好，这样桌面 App 起的 host 也能扫码装。
+    try {
+      await fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+    } catch {
+      // 没有 APK Release 就算了，不影响信息输出
+    }
+    const owner = existing && alive(existing.pid) ? "mo daemon 启动的" : "可能来自桌面 App";
+    await printInfo(occupiedPort, home, owner);
+    process.stdout.write("  （不会再起第二个；要停它请用对应方式：桌面 App 退出 / mo daemon stop）\n");
+    return 0;
   }
 
   const host = findHost({ env, home, cwd: ctx.cwd });
@@ -224,6 +251,13 @@ async function stop() {
   const info = readPid(home);
   if (!info || !alive(info.pid)) {
     fs.rmSync(PID_FILE(home), { force: true });
+    // 没有我们拉起的进程，但可能有一个外部 host（桌面 App）在跑——不要动它
+    const port = readSessionPort(home) || readConfigPort(process.env, home);
+    if (await health(port)) {
+      process.stdout.write("有 host 在跑（端口 " + port + "），但不是 mo daemon 启动的，不做处理\n");
+      process.stdout.write("  它可能来自桌面 App：请退出 App，或用那个入口停\n");
+      return 2;
+    }
     process.stdout.write("daemon 没在运行\n");
     return 0;
   }
