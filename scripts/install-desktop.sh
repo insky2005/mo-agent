@@ -12,7 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="desktop/build/stable-macos-arm64/mo-agent.app"
+SRC="$(ls -d desktop/build/stable-macos-*/mo-agent.app 2>/dev/null | head -1)"
 # 默认装到 /Applications —— 也就是 Finder 里「应用程序」显示的那个（macOS 惯例）。
 # 没有写权限（不在 admin 组）时退回 ~/Applications。
 DEFAULT_DIR="/Applications"

@@ -64,6 +64,7 @@
 | `ci.yml` | push `main` 或 `feat/**` / PR / 手动 | ubuntu + macOS × Node 20/22：`npm ci → npm run check → npm test`；Windows 先只记基线（`continue-on-error`） |
 | `cli-release.yml` | push tag `cli-v*` / 手动指定 tag | 版本一致性 → 测试 → 5 个平台**原生**构建 → 冒烟 → 产物扫描 → 发 Release + SHA256 + 构建来源证明 |
 | `apk-release.yml` | push tag `apk-v*` / 手动 | 版本取自 tag → 签名（secrets）→ 构建 APK → 扫描 → 发 Release |
+| `desktop-release.yml` | push tag `desktop-v*` / 手动 | macOS arm64 + x64 原生构建（默认不带语音）→ 扫描 → 发 Release |
 
 ### 只验证构建（dry run）
 
@@ -84,7 +85,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.githu
 |---|---|---|---|
 | CLI | `cli-v0.2.0` | `cli-release.yml` | `mo-{darwin,linux}-{arm64,x64}`、`mo-windows-x64.exe` |
 | APK | `apk-v0.2.0` | `apk-release.yml` | `mo-agent-android-0.2.0.apk` |
-| Desktop | `desktop-v0.2.0` | `desktop-release.yml`（待补） | `mo-agent.app`（仅 macOS） |
+| Desktop | `desktop-v0.2.0` | `desktop-release.yml` | `mo-agent-desktop-<ver>-macos-{arm64,x64}.zip` |
 
 三个组件各自独立发版，**顺序无所谓**：安装脚本不再用 `releases/latest`，
 而是从新到旧找第一个真的带目标资产的 release。
@@ -138,6 +139,18 @@ base64 -i app/android/app/keystore/release.jks | pbcopy   # 粘进 GitHub Secret
 > 放项目里也行：`.gitignore` 已覆盖 `*.jks` / `keystore.properties` / `app/android/app/keystore/release.*`，
 > 并且 `npm run check` 会检查这些文件**是否被 git 跟踪**，误提交会直接失败。
 > 但请另外**离线备份**一份——keystore 丢了就没法再给已安装用户发更新。
+
+### Desktop 单独发
+
+```bash
+git tag desktop-v0.2.0 && git push origin desktop-v0.2.0
+```
+
+- 矩阵：`macos-14`（arm64）+ `macos-13`（x64），各自原生构建；
+- 默认 `WITH_VOICE=0`（约 46MB），需要语音就在手动触发时勾上（会现下 252MB 模型）；
+- 构建前会尝试 `fetch-apk.sh`，拿到 APK 就一起打进分发版，setup 页可直接扫码安装；
+- 分发产物一律 `MO_AGENT_DESKTOP_HMS=0`，不带 HMS 凭据；
+- 发布前 `check-artifacts --enforce` 会递归解开 zip → .tar.zst → runtime.tar.gz 检查。
 
 ### 注意
 

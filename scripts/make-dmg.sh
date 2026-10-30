@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="desktop/build/stable-macos-arm64/mo-agent.app"
+APP="$(ls -d desktop/build/stable-macos-*/mo-agent.app 2>/dev/null | head -1)"
 OUT="desktop/build/mo-agent-$(date +%Y%m%d).dmg"
 
 if [ ! -d "$APP" ]; then

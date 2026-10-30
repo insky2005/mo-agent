@@ -1,0 +1,148 @@
+name: desktop-release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（例如 desktop-v0.2.0），版本必须与 package.json 一致"
+        required: true
+      dry_run:
+        description: "只构建、不发布"
+        type: boolean
+        default: true
+      with_voice:
+        description: "打包语音资源（约 252MB，首次要下载模型）"
+        type: boolean
+        default: false
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "22"
+  BUN_VERSION: "1.3.14"
+
+jobs:
+  build:
+    name: build macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+          - os: macos-13
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 解析版本
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="${{ inputs.tag || github.ref_name }}"
+          case "$RAW" in
+            desktop-v*) VERSION="${RAW#desktop-v}" ;;
+            *) echo "::error::tag 必须以 desktop-v 开头：$RAW"; exit 1 ;;
+          esac
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PKG" ]; then
+            echo "::error::tag $RAW 的版本 $VERSION 与 package.json $PKG 不一致"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RAW" >> "$GITHUB_OUTPUT"
+
+      - name: 安装 hutch（Electrobun 工具链）
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HUTCH_HOME="$RUNNER_TEMP/hutch"
+          mkdir -p "$HUTCH_HOME"
+          curl -fsSL https://hutch.blackboard.sh/hutch/install.sh | sh
+          echo "HUTCH_HOME=$HUTCH_HOME" >> "$GITHUB_ENV"
+          echo "$HUTCH_HOME/bin" >> "$GITHUB_PATH"
+          "$HUTCH_HOME/bin/hutch" --version || true
+
+      - name: 预取 APK（让分发版能扫码装 App）
+        shell: bash
+        run: bash scripts/fetch-apk.sh || echo "（没有可用 APK，跳过；setup 页将提示去下载）"
+
+      - name: 构建
+        shell: bash
+        env:
+          # 分发产物一律不带 HMS 凭据（SEC-001）；本地要带就自己构建
+          MO_AGENT_DESKTOP_HMS: "0"
+          WITH_VOICE: ${{ inputs.with_voice && '1' || '0' }}
+        run: bash scripts/build-desktop.sh
+
+      - name: 打包 zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(ls -d desktop/build/stable-macos-*/mo-agent.app | head -1)"
+          echo "产物：$APP"
+          mkdir -p dist
+          OUT="dist/mo-agent-desktop-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT"
+          node scripts/checksums.mjs dist
+          ls -lh dist
+
+      - name: 产物密钥扫描（SEC-001）
+        shell: bash
+        run: node scripts/check-artifacts.mjs --enforce dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: 发布
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 检查产物
+        run: |
+          set -euo pipefail
+          # 两个架构都到了才发，避免半套产物
+          ls dist/mo-agent-desktop-*-macos-arm64.zip
+          ls dist/mo-agent-desktop-*-macos-x64.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/mo-agent-desktop-*.zip
+            dist/*.sha256

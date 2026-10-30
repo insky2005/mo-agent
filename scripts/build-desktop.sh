@@ -146,7 +146,13 @@ node scripts/check-artifacts.mjs desktop/runtime.tar.gz
 rm -rf desktop/build
 ( cd desktop && hutch install && hutch run build )
 
-APP="desktop/build/stable-macos-arm64/mo-agent.app"
+# Electrobun 按架构分目录（stable-macos-arm64 / stable-macos-x64），别写死
+APP="$(ls -d desktop/build/stable-macos-*/mo-agent.app 2>/dev/null | head -1)"
+if [ -z "$APP" ]; then
+  echo "[build] !! 没找到 mo-agent.app，检查 desktop/build 下的目录结构" >&2
+  ls -d desktop/build/* 2>/dev/null >&2 || true
+  exit 1
+fi
 
 # 布局校验：成品必须是「launcher + 自解压包 + metadata.json」这一形态
 if [ ! -f "$APP/Contents/Resources/metadata.json" ]; then
