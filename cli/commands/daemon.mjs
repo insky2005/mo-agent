@@ -130,17 +130,39 @@ async function waitHealthy(port, timeoutMs = 15000) {
   return null;
 }
 
-async function printInfo(port, home, origin) {
-  const token = readSessionToken(home);
-  const tty = process.stdout.isTTY;
-  const admin = "http://127.0.0.1:" + port + "/setup" + (token ? "?token=" + token : "");
-  const apk = apkDest(home);
+// 令牌只在 TTY 下直接打印；重定向到文件/CI 时给占位符，避免令牌进日志
+export function formatLink(port, pathname, token, tty) {
+  const base = "http://127.0.0.1:" + port + pathname;
+  if (!token) return base;
+  return tty ? base + "?token=" + token : base + "?token=<见 ~/.mo-agent/session.json>";
+}
 
-  process.stdout.write("✓ host 已在运行（端口 " + port + "，" + origin + "）\n");
+function linkWithToken(port, pathname, home) {
+  return formatLink(port, pathname, readSessionToken(home), Boolean(process.stdout.isTTY));
+}
+
+function printAccess(port, home) {
+  const apk = apkDest(home);
   process.stdout.write("  本机    http://127.0.0.1:" + port + "/\n");
+  process.stdout.write("  监控    " + linkWithToken(port, "/monitor", home) + "\n");
   process.stdout.write("  配对    http://127.0.0.1:" + port + "/pair\n");
+  process.stdout.write("  管理    " + linkWithToken(port, "/setup", home) + "\n");
   process.stdout.write("  安装    http://127.0.0.1:" + port + "/app.apk" + (fs.existsSync(apk) ? "（已就绪）" : "（未就绪：等 APK Release 发布后 mo daemon start 会自动下载）") + "\n");
-  process.stdout.write("  管理    " + (token ? (tty ? admin : "http://127.0.0.1:" + port + "/setup?token=<见 ~/.mo-agent/session.json>") : "http://127.0.0.1:" + port + "/setup") + "\n");
+}
+
+// 刚起来的 host 写 session.json 可能比健康检查慢一点点，等它一下再拼带令牌的链接
+async function waitForToken(home, timeoutMs = 1500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (readSessionToken(home)) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
+
+async function printInfo(port, home, origin) {
+  process.stdout.write("✓ host 已在运行（端口 " + port + "，" + origin + "）\n");
+  printAccess(port, home);
 }
 
 async function start(ctx, args) {
@@ -237,12 +259,10 @@ async function start(ctx, args) {
     );
   }
 
-  process.stdout.write("✓ daemon 已启动\n");
-  process.stdout.write("  pid   " + child.pid + "\n");
-  process.stdout.write("  地址  http://127.0.0.1:" + port + "/\n");
-  process.stdout.write("  配对  http://127.0.0.1:" + port + "/pair\n");
-  process.stdout.write("  安装  http://127.0.0.1:" + port + "/app.apk" + (apk && fs.existsSync(apk.path) ? "（已就绪）" : "（未就绪）") + "\n");
-  process.stdout.write("  停止  mo daemon stop\n");
+  await waitForToken(home);
+  process.stdout.write("✓ daemon 已启动（pid " + child.pid + "）\n");
+  printAccess(port, home);
+  process.stdout.write("  停止    mo daemon stop\n");
   return 0;
 }
 
@@ -283,6 +303,7 @@ async function status() {
     if (body) {
       process.stdout.write("daemon  运行中（端口 " + port + "，不是 mo daemon 拉起的，可能是桌面 App）\n");
       process.stdout.write("  健康检查  ✓\n");
+      process.stdout.write("  监控      " + linkWithToken(port, "/monitor", home) + "\n");
       process.stdout.write("  APK       " + (fs.existsSync(apkDest(home)) ? "✓ " + apkDest(home) : "未下载") + "\n");
       return 0;
     }
@@ -292,6 +313,7 @@ async function status() {
   const body = await health(info.port);
   process.stdout.write("daemon  运行中（pid " + info.pid + "，端口 " + info.port + "）\n");
   process.stdout.write("  健康检查  " + (body ? "✓" : "✗ 无响应") + "\n");
+  if (body) process.stdout.write("  监控      " + linkWithToken(info.port, "/monitor", home) + "\n");
   process.stdout.write("  APK       " + (fs.existsSync(apkDest(home)) ? "✓ " + apkDest(home) : "未下载（mo daemon start 时会自动拉）") + "\n");
   return body ? 0 : 1;
 }

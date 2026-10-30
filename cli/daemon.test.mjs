@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findHost, readSessionPort } from "./commands/daemon.mjs";
+import { findHost, readSessionPort, formatLink } from "./commands/daemon.mjs";
 import { apkDest } from "./lib/apk.mjs";
 
 function tmp() {
@@ -63,4 +63,10 @@ test("从 session.json 里认出 host 端口（url 或 port 两种写法）", ()
 
   fs.writeFileSync(file, "not json");
   assert.equal(readSessionPort(home), null);
+});
+
+test("带令牌的链接：TTY 下直接给，非 TTY 给占位符", () => {
+  assert.equal(formatLink(7788, "/monitor", "abc", true), "http://127.0.0.1:7788/monitor?token=abc");
+  assert.equal(formatLink(7788, "/monitor", "abc", false), "http://127.0.0.1:7788/monitor?token=<见 ~/.mo-agent/session.json>");
+  assert.equal(formatLink(7788, "/monitor", null, true), "http://127.0.0.1:7788/monitor");
 });

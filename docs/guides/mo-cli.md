@@ -57,6 +57,20 @@ mo daemon status               # 是否在跑 / 健康检查 / APK 是否就绪
 mo daemon stop
 ```
 
+启动后直接给出这几条地址（`/monitor`、`/setup` 需要本机令牌，只在终端里展开）：
+
+```
+✓ daemon 已启动（pid 12345）
+  本机    http://127.0.0.1:7788/
+  监控    http://127.0.0.1:7788/monitor?token=…
+  配对    http://127.0.0.1:7788/pair
+  管理    http://127.0.0.1:7788/setup?token=…
+  安装    http://127.0.0.1:7788/app.apk（已就绪）
+  停止    mo daemon stop
+```
+
+重定向到文件或 CI 时，令牌会换成 `<见 ~/.mo-agent/session.json>`，避免写进日志。
+
 两个命令都是幂等的，可以放心重复执行：
 
 - **`start` 时已经有 host 在跑**（比如桌面 App 开着）→ 不再起第二个，直接把访问信息打出来
