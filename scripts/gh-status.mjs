@@ -7,13 +7,39 @@
 //   3. ~/.config/mo-agent/github.token（0600）
 //
 //   node scripts/gh-status.mjs
-//   GITHUB_REPO=owner/repo node scripts/gh-status.mjs
+//   node scripts/gh-status.mjs --repo owner/repo
+//   GITHUB_TOKEN=xxx node scripts/gh-status.mjs
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const REPO = process.env.GITHUB_REPO || "insky2005/mo-agent";
+const ARGS = process.argv.slice(2);
+
+function flag(name) {
+  const i = ARGS.indexOf(name);
+  return i >= 0 ? ARGS[i + 1] : null;
+}
+
+if (ARGS.includes("--help") || ARGS.includes("-h")) {
+  console.log(`用法：node scripts/gh-status.mjs [--repo owner/repo]
+
+读本机保存的 GitHub PAT，打印仓库、分支、最近 CI、开放 PR 与 issue。
+
+token 读取顺序：
+  1. 环境变量 GITHUB_TOKEN
+  2. macOS 钥匙串 ${"mo-agent-github-pat"}
+  3. ~/.config/mo-agent/github.token
+
+存 token（不会进 shell history）：
+  read -rsp "GitHub PAT: " PAT && echo && \\
+  security add-generic-password -a "$USER" -s mo-agent-github-pat -w "$PAT" -U && unset PAT
+
+需要的权限：Contents: Read、Actions: Read、Pull requests: Read、Issues: Read`);
+  process.exit(0);
+}
+
+const REPO = flag("--repo") || process.env.GITHUB_REPO || "insky2005/mo-agent";
 
 function readToken() {
   if (process.env.GITHUB_TOKEN) return { token: process.env.GITHUB_TOKEN, from: "环境变量 GITHUB_TOKEN" };

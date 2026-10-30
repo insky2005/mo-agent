@@ -34,7 +34,8 @@
     "gen:skill": "node scripts/gen-skill.mjs",
     "cli:walkthrough": "bash cli/demo/walkthrough.sh",
     "desktop:hms": "node scripts/desktop-hms.mjs",
-    "artifacts:check": "node scripts/check-artifacts.mjs"
+    "artifacts:check": "node scripts/check-artifacts.mjs",
+    "gh:status": "node scripts/gh-status.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
