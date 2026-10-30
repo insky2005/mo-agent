@@ -66,9 +66,34 @@ jobs:
         continue-on-error: true
 
       - name: 静态检查
-        run: npm run check 2>&1 | tee -a windows-check.log
+        run: npm run check 2>&1 | tee windows-check.log
         shell: bash
         continue-on-error: true
+
+      - name: 结果汇总（不阻断，但要让结论可见）
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "### Windows 基线" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ! -s windows-test.log ]; then
+            echo "- ⚠️ 测试没有产生日志（可能在安装依赖阶段就失败了）" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Windows baseline::测试没有产生日志"
+            exit 0
+          fi
+
+          SUMMARY="$(grep -E '^# (tests|pass|fail|cancelled) ' windows-test.log | tr '\n' ' ')"
+          if grep -qE '^# fail 0$' windows-test.log; then
+            echo "- ✅ 测试通过：${SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ❌ 测试失败：${SUMMARY:-没有汇总行}" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Windows baseline failed::${SUMMARY:-见 windows-test.log}"
+          fi
+
+          if grep -qE '^\[.*\]' windows-check.log 2>/dev/null; then
+            echo "- 静态检查输出见 artifact `windows-baseline-logs`" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

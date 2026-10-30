@@ -22,7 +22,7 @@ function flag(name) {
 }
 
 if (ARGS.includes("--help") || ARGS.includes("-h")) {
-  console.log(`用法：node scripts/gh-status.mjs [--repo owner/repo]
+  console.log(`用法：node scripts/gh-status.mjs [--repo owner/repo] [--run <run-id>]
 
 读本机保存的 GitHub PAT，打印仓库、分支、最近 CI、开放 PR 与 issue。
 
@@ -117,6 +117,25 @@ function ago(iso) {
   return Math.round(hour / 24) + " 天前";
 }
 
+// --run <id>：只看某次运行的 job/step 结论
+async function showRun(token, runId) {
+  const run = await api(token, "/repos/" + REPO + "/actions/runs/" + runId);
+  console.log("run " + run.id + "  " + (run.conclusion || run.status) + "  " + run.name + "  " + (run.head_branch || ""));
+  const jobs = await api(token, "/repos/" + REPO + "/actions/runs/" + runId + "/jobs");
+  for (const job of jobs.jobs || []) {
+    const failed = (job.steps || []).filter((s) => s.conclusion && s.conclusion !== "success" && s.conclusion !== "skipped");
+    const mark = job.conclusion === "success" ? "✅" : job.conclusion ? "❌" : "⏳";
+    console.log(mark + " " + job.name.padEnd(40) + (job.conclusion || job.status).padEnd(10) +
+      (job.started_at || "").slice(11, 19) + " → " + (job.completed_at || "").slice(11, 19));
+    for (const step of failed) console.log("     ✗ " + step.name + "（" + step.conclusion + "）");
+    // continue-on-error 的 job，API 可能把步骤结论归一成 success，颜色不可全信
+    if (/不阻断/.test(job.name)) {
+      console.log("     ℹ 非阻断任务：真实结论看 job summary 或 windows-test.log 里的 '# fail'");
+    }
+  }
+  console.log("\n" + run.html_url);
+}
+
 const found = readToken();
 if (!found) {
   console.error("没有找到 GitHub token。任选一种方式存：");
@@ -130,6 +149,17 @@ if (!found) {
   console.error('  read -rsp "GitHub PAT: " PAT && echo && printf "%s" "$PAT" > ~/.config/mo-agent/github.token');
   console.error("  chmod 600 ~/.config/mo-agent/github.token && unset PAT");
   process.exit(1);
+}
+
+const runId = flag("--run");
+if (runId) {
+  try {
+    await showRun(found.token, runId);
+  } catch (error) {
+    console.error("查询失败：" + error.message);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 try {
