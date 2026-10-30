@@ -6,6 +6,12 @@ title = "mo-agent"
 useDefault = true
 
 [[rules]]
+id = "mo-hms-app-secret"
+description = "HMS App Secret 不应提交（含 32 位以上十六进制值）"
+regex = '''"appSecret"\s*:\s*"[0-9a-fA-F]{32,}"'''
+tags = ["secret"]
+
+[[rules]]
 id = "mo-dev-home"
 description = "开发机绝对路径"
 regex = '''/Users/[A-Za-z0-9._-]+/'''

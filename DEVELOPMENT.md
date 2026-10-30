@@ -257,7 +257,12 @@ Capacitor 7 默认要 android-35，而本机 SDK 只有 34/36，且 SDK 目录�
 - 因此分发包不再依赖本机仓库路径，也不需要用户安装 Node；
 - 开发时设置 MO_AGENT_ROOT=<仓库路径> 可直接运行源码。
 
-注意：host/notify-defaults.json 含 HMS App Secret，已加入 .gitignore；发布打包时必须随包提供。
+HMS 推送的默认配置（含 App Secret）只放在本地 `host/notify-defaults.json`，已加入 .gitignore：
+
+- **本地构建**：文件存在就打包进 runtime，装出来的 App 开箱可推送；`MO_AGENT_DESKTOP_HMS=0` 可强制不带；
+- **CI 构建**：一律不带（规则在 `scripts/desktop-hms.mjs`，有单测），构建照常成功，只是 HMS 通道不会自动配置；
+- **带密钥的包只能本机自用**：不能上传 Release、不能分发。发布前跑
+  `node scripts/check-artifacts.mjs --enforce <产物>`，扫到 `appSecret` / `client_secret` / `api_key` 会直接失败。
 
 ## 扫码装 App + 扫码配对
 

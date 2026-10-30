@@ -18,6 +18,7 @@ const RULES = [
   { name: "开发机路径", re: new RegExp("/Users/" + LEGACY_USER + "\\b") },
   { name: "开发机路径", re: new RegExp("Users-" + LEGACY_USER + "-") },
   { name: "内网网段", re: /\b172\.18\.\d{1,3}\.\d{1,3}\b/ },
+  { name: "疑似密钥字段", re: /"appSecret"\s*:\s*"[0-9a-fA-F]{32,}"/ },
 ];
 
 const SKIP_DIRS = new Set([".git", "node_modules", "cli/dist", ".build", ".hutch", ".prestudy", ".cottontail-tmp"]);
