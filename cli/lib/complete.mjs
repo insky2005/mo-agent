@@ -199,7 +199,16 @@ function positionalFor(kind, cwd) {
   if (kind === "task") return taskItems(cwd);
   if (kind === "candidate") return candidateItems();
   if (kind === "configKey") return CONFIG_KEYS.map((spec) => item(spec.key, spec.range));
-  if (kind === "daemonTarget") return [item("monitor", "实时监控屏"), item("setup", "设置/安装页"), item("pair", "配对页")];
+  if (kind === "daemonTarget") {
+    return [
+      item("app", "安装与配对"),
+      item("dingtalk", "钉钉机器人绑定"),
+      item("agents", "Agent 配置"),
+      item("voice", "语音"),
+      item("system", "重启与日志"),
+      item("monitor", "实时监控屏"),
+    ];
+  }
   return [];
 }
 

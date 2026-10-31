@@ -134,7 +134,9 @@ async function waitHealthy(port, timeoutMs = 15000) {
 export function formatLink(port, pathname, token, tty) {
   const base = "http://127.0.0.1:" + port + pathname;
   if (!token) return base;
-  return tty ? base + "?token=" + token : base + "?token=<见 ~/.mo-agent/session.json>";
+  // pathname 里可能已经有 query（/settings?tab=app），这里要用 & 接
+  const sep = pathname.includes("?") ? "&" : "?";
+  return tty ? base + sep + "token=" + token : base + sep + "token=<见 ~/.mo-agent/session.json>";
 }
 
 function linkWithToken(port, pathname, home) {
@@ -145,7 +147,7 @@ function printAccess(port, home) {
   const apk = apkDest(home);
   process.stdout.write("  本机    http://127.0.0.1:" + port + "/\n");
   process.stdout.write("  监控    " + linkWithToken(port, "/monitor", home) + "\n");
-  process.stdout.write("  设置    " + linkWithToken(port, "/setup", home) + "\n");
+  process.stdout.write("  设置    " + linkWithToken(port, "/settings?tab=app", home) + "\n");
   process.stdout.write("  配对    http://127.0.0.1:" + port + "/pair\n");
   process.stdout.write("  安装    http://127.0.0.1:" + port + "/app.apk" + (fs.existsSync(apk) ? "（已就绪）" : "（未就绪：等 APK Release 发布后 mo daemon start 会自动下载）") + "\n");
 }
@@ -351,7 +353,18 @@ async function status() {
   return 0;
 }
 
-const OPEN_TARGETS = { monitor: "/monitor", setup: "/setup", pair: "/pair" };
+// 和托盘菜单对齐：设置页是带页签的 /settings，两个子菜单对应 app / dingtalk
+const OPEN_TARGETS = {
+  app: "/settings?tab=app",
+  dingtalk: "/settings?tab=dingtalk",
+  agents: "/settings?tab=agents",
+  voice: "/settings?tab=voice",
+  system: "/settings?tab=system",
+  monitor: "/monitor",
+  // 旧名字保留成别名，避免记两套
+  setup: "/settings?tab=app",
+  pair: "/settings?tab=app",
+};
 
 function openBrowser(url) {
   // 测试/CI 里别真的弹浏览器
@@ -370,10 +383,12 @@ function openBrowser(url) {
 
 async function open(ctx, args) {
   const home = os.homedir();
-  const target = (args.positional || [])[1] || "monitor";
+  const target = (args.positional || [])[1] || "app";
   const pathname = OPEN_TARGETS[target];
   if (!pathname) {
-    throw new MoError("E_USAGE", "不认识的目标：" + target, { hint: "mo daemon open monitor|setup|pair" });
+    throw new MoError("E_USAGE", "不认识的目标：" + target, {
+      hint: "mo daemon open app|dingtalk|agents|voice|system|monitor",
+    });
   }
 
   const info = readPid(home);

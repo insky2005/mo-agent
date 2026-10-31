@@ -69,4 +69,6 @@ test("带令牌的链接：TTY 下直接给，非 TTY 给占位符", () => {
   assert.equal(formatLink(7788, "/monitor", "abc", true), "http://127.0.0.1:7788/monitor?token=abc");
   assert.equal(formatLink(7788, "/monitor", "abc", false), "http://127.0.0.1:7788/monitor?token=<见 ~/.mo-agent/session.json>");
   assert.equal(formatLink(7788, "/monitor", null, true), "http://127.0.0.1:7788/monitor");
+  assert.equal(formatLink(7788, "/settings?tab=app", "abc", true), "http://127.0.0.1:7788/settings?tab=app&token=abc");
+  assert.equal(formatLink(7788, "/settings?tab=app", "abc", false), "http://127.0.0.1:7788/settings?tab=app&token=<见 ~/.mo-agent/session.json>");
 });

@@ -146,7 +146,7 @@ test("daemon 的子命令和 flag 能补全", () => {
   for (const name of ["start", "stop", "status", "open", "help"]) assert.ok(subs.includes(name), "缺 " + name);
 
   const targets = values(complete({ cwd: os.tmpdir(), words: ["daemon", "open", ""] }));
-  assert.deepEqual(targets.sort(), ["monitor", "pair", "setup"]);
+  assert.deepEqual(targets.sort(), ["agents", "app", "dingtalk", "monitor", "system", "voice"]);
 
   const flags = values(complete({ cwd: os.tmpdir(), words: ["daemon", "start", "--"] }));
   assert.ok(flags.includes("--port"));
