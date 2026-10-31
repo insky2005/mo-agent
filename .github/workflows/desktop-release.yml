@@ -139,6 +139,14 @@ jobs:
 
           hdiutil verify "$OUT"
 
+          # 挂一次确认布局：拖拽安装全靠 /Applications 这个软链，缺了就不算能装
+          MNT="$(mktemp -d)"
+          hdiutil attach "$OUT" -nobrowse -readonly -mountpoint "$MNT" > /dev/null
+          test -L "$MNT/Applications" || { echo "::error::镜像里缺 /Applications 软链"; exit 1; }
+          test -d "$MNT/mo-agent.app" || { echo "::error::镜像里缺 mo-agent.app"; exit 1; }
+          ls -la "$MNT"
+          hdiutil detach "$MNT" > /dev/null
+
           node scripts/checksums.mjs dist
           ls -lh dist
 
