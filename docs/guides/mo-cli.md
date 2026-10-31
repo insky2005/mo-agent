@@ -63,8 +63,8 @@ mo daemon stop
 ✓ daemon 已启动（pid 12345）
   本机    http://127.0.0.1:7788/
   监控    http://127.0.0.1:7788/monitor?token=…
+  设置    http://127.0.0.1:7788/setup?token=…
   配对    http://127.0.0.1:7788/pair
-  管理    http://127.0.0.1:7788/setup?token=…
   安装    http://127.0.0.1:7788/app.apk（已就绪）
   状态    mo daemon status
   打开    mo daemon open [monitor|setup|pair]

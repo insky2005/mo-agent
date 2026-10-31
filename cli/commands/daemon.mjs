@@ -145,8 +145,8 @@ function printAccess(port, home) {
   const apk = apkDest(home);
   process.stdout.write("  本机    http://127.0.0.1:" + port + "/\n");
   process.stdout.write("  监控    " + linkWithToken(port, "/monitor", home) + "\n");
+  process.stdout.write("  设置    " + linkWithToken(port, "/setup", home) + "\n");
   process.stdout.write("  配对    http://127.0.0.1:" + port + "/pair\n");
-  process.stdout.write("  管理    " + linkWithToken(port, "/setup", home) + "\n");
   process.stdout.write("  安装    http://127.0.0.1:" + port + "/app.apk" + (fs.existsSync(apk) ? "（已就绪）" : "（未就绪：等 APK Release 发布后 mo daemon start 会自动下载）") + "\n");
 }
 
