@@ -99,6 +99,14 @@ async function main(argv) {
   return await handler(ctx, subArgs);
 }
 
+// 输出被 head / grep -q 提前关闭时，别把 EPIPE 变成崩溃栈
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error) => {
+    if (error && error.code === "EPIPE") process.exit(0);
+    throw error;
+  });
+}
+
 main(process.argv.slice(2))
   .then((code) => {
     process.exitCode = typeof code === "number" ? code : 0;
