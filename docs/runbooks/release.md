@@ -211,6 +211,52 @@ git push origin main
 - 不要清理 `~/.mo-agent/`、不要删 tag、不要改分支保护；
 - 若过程中用了 `gh-status --run`，把失败的 run id 留在汇报里。
 
+## 11. 维护分支：发布后并回 main
+
+补丁版本（0.2.x）在独立分支上做，main 继续走下一个次版本。发完之后必须并回去，
+否则 main 会缺这些修复，下一个版本会把它们丢掉。
+
+### 分支上应该有的顺序
+
+```
+chore: 开始 0.2.1 开发        ← 先升版本号
+fix(...): 修复 1              ← 再落修复
+fix(...): 修复 2
+chore(release): 0.2.1        ← 最后收口 CHANGELOG
+```
+
+### 发版
+
+按第 5–8 步打 `cli-v0.2.1` / `apk-v0.2.1` / `desktop-v0.2.1`，验收同上。
+
+### 并回 main
+
+```bash
+git switch main
+git merge --no-ff release/0.2.1 -m "merge: 0.2.1 修复并回 main"
+```
+
+冲突基本只出现在两处：
+
+| 文件 | 怎么解 |
+|---|---|
+| `package.json` / `cli/lib/version.mjs` / `package-lock.json` | 保留 **main 的版本号**（更高那个），不要回退到 0.2.1 |
+| `CHANGELOG.md` | 两个小节都保留：`[0.3.0]`（未发时可以还是 Unreleased）在上，`[0.2.1]` 在下 |
+
+### 合并后必须验证
+
+```bash
+node scripts/check-version.mjs        # 还是 main 的版本号
+npm test
+npm run check
+grep -c 'label:' cli/commands/doctor.mjs   # 修复确实回来了（数量大于 0）
+```
+
+### 三条禁止
+
+- 不要 `git merge --squash`：会丢掉「哪个提交属于哪个版本」的信息，以后查账很难；
+- 不要在 main 上再 cherry-pick 同一批修复：会和这次合并打架；
+- 不要在确认不再发 0.2.x 之前删维护分支。
 ## 附：执行约定
 
 | 规则 | 原因 |
