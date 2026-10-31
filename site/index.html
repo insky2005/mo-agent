@@ -152,12 +152,12 @@
     <div class="wrap">
       <div class="section-head">
         <h2>三步开始</h2>
-        <p>先装 CLI，或者直接装桌面端。菜单栏常驻、不占 Dock，不打断你手头的事。</p>
+        <p>手机远程批准走桌面端。只想在终端里建卡、派单、看账本的话，装 CLI 就够了。</p>
       </div>
       <div class="steps">
         <div class="step">
           <h3>装桌面端</h3>
-          <p>从发布产物安装，菜单栏会出现 Mo Agent 图标。</p>
+          <p>从<a href="https://github.com/insky2005/mo-agent/releases">发布产物</a>下载安装，菜单栏出现 Mo Agent 图标，不占 Dock。</p>
         </div>
         <div class="step">
           <h3>手机扫码配对</h3>
@@ -168,8 +168,18 @@
           <p>菜单栏 →「一键配置 Agent…」，只写入 Mo Agent 自己的 hook，改动前自动备份。</p>
         </div>
       </div>
-      <pre><code># 只要 CLI（单文件二进制，不需要 Node）
-curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash</code></pre>
+
+      <div class="cli-block">
+        <div class="cli-head">
+          <h3>只要 CLI</h3>
+          <p>单文件二进制，不需要 Node。装在 <code>~/.local/bin/mo</code>（Windows 为 <code>%USERPROFILE%\.local\bin\mo.exe</code>），负责终端侧的建卡、派单与账本。</p>
+        </div>
+<pre><code><span class="cm"># macOS / Linux</span>
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash
+
+<span class="cm"># Windows（PowerShell）</span>
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.ps1 | iex"</code></pre>
+      </div>
     </div>
   </section>
 

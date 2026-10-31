@@ -401,6 +401,60 @@ code {
 
 pre code { color: #cfe0ff; }
 
+.cm { color: #66718a; }
+
+/* ---------- cli block ---------- */
+
+.cli-block {
+  margin-top: 22px;
+  padding: 22px 22px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.cli-head h3 {
+  margin: 0;
+  font-size: 16.5px;
+}
+
+.cli-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.cli-head code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c4cee2;
+  font-size: 12.5px;
+  word-break: break-all;
+}
+
+.cli-block pre {
+  margin: 18px 0 22px;
+  padding: 16px 18px;
+  background: #060911;
+  /* 安装命令宁可折行也不要横向裁掉，否则复制时容易少一截 */
+  overflow-x: visible;
+}
+
+.cli-block pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.step a,
+.section-head a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.step a:hover { color: #7fb0ff; }
+
 /* ---------- security ---------- */
 
 .grid-2 {
@@ -519,6 +573,30 @@ pre code { color: #cfe0ff; }
 @media (max-width: 560px) {
   .wrap { padding: 0 18px; }
   .hero-cta .btn { width: 100%; }
-  thead th:nth-child(2), tbody td:nth-child(2) { display: none; }
   .footer-top { flex-direction: column; }
+
+  /* 窄屏把表格改成卡片：能力列不能藏，那正是这张表要说的事 */
+  .table-wrap {
+    border: none;
+    background: transparent;
+  }
+
+  table, tbody, tr, td { display: block; }
+  thead { display: none; }
+
+  tbody tr {
+    margin-bottom: 12px;
+    padding: 6px 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+  }
+
+  tbody td {
+    padding: 4px 18px;
+    border-top: none;
+  }
+
+  tbody td:first-child { padding-top: 12px; }
+  tbody td:last-child { padding-bottom: 14px; color: var(--muted); }
 }
