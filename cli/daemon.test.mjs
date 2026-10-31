@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findHost, readSessionPort, formatLink } from "./commands/daemon.mjs";
+import { findHost, readSessionPort, formatLink, browserCommand } from "./commands/daemon.mjs";
 import { apkDest } from "./lib/apk.mjs";
 
 function tmp() {
@@ -71,4 +71,20 @@ test("链接令牌的三种呈现：full / masked / hidden", () => {
   assert.equal(formatLink(7788, "/monitor", "abcd1234", "hidden"), "http://127.0.0.1:7788/monitor?token=<见 ~/.mo-agent/session.json>");
   assert.equal(formatLink(7788, "/monitor", null, "masked"), "http://127.0.0.1:7788/monitor");
   assert.equal(formatLink(7788, "/settings?tab=app", "abcd1234", "full"), "http://127.0.0.1:7788/settings?tab=app&token=abcd1234");
+});
+
+test("--app 模式：macOS 优先 Chromium 系，没有就退回普通打开", () => {
+  const url = "http://127.0.0.1:7788/monitor";
+  const withChrome = (p) => p === "/Applications/Google Chrome.app";
+
+  assert.deepEqual(browserCommand("darwin", url, { app: true, exists: withChrome }), {
+    cmd: "open",
+    args: ["-na", "Google Chrome", "--args", "--app=" + url],
+  });
+  assert.deepEqual(browserCommand("darwin", url, { app: true, exists: () => false }), { cmd: "open", args: [url] });
+  assert.deepEqual(browserCommand("linux", url, { app: true, exists: (p) => p === "/usr/bin/chromium" }), {
+    cmd: "chromium",
+    args: ["--app=" + url],
+  });
+  assert.deepEqual(browserCommand("linux", url, {}), { cmd: "xdg-open", args: [url] });
 });

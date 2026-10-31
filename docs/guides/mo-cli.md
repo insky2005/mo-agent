@@ -105,6 +105,15 @@ mo daemon open monitor  # 监控屏
 
 它会自己拼令牌并调系统浏览器（macOS `open` / Linux `xdg-open` / Windows `start`）。
 
+想去掉地址栏、当成一个小窗口用，加 `--app`：
+
+```bash
+mo daemon open --app          # 监控屏，无地址栏
+mo daemon open app --app      # 设置页，无地址栏
+```
+
+需要本机装了 Chrome / Edge / Brave / Chromium 之一（用它们的 `--app=` 模式）；没有就退回普通浏览器，不影响使用。
+
 两个命令都是幂等的，可以放心重复执行：
 
 - **`start` 时已经有 host 在跑**（比如桌面 App 开着）→ 不再起第二个，直接把访问信息打出来

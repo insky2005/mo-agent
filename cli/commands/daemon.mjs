@@ -376,13 +376,50 @@ const OPEN_TARGETS = {
   pair: "/settings?tab=app",
 };
 
-function openBrowser(url) {
+/**
+ * 决定用什么命令打开链接。
+ * app=true 时优先用 Chromium 系浏览器的 --app 模式（无地址栏，像个小窗口）。
+ */
+export function browserCommand(platform, url, options = {}) {
+  const app = Boolean(options.app);
+  const exists = options.exists || fs.existsSync;
+
+  if (app && platform === "darwin") {
+    const apps = ["Google Chrome", "Microsoft Edge", "Brave Browser", "Chromium"];
+    for (const name of apps) {
+      if (exists("/Applications/" + name + ".app")) {
+        return { cmd: "open", args: ["-na", name, "--args", "--app=" + url] };
+      }
+    }
+  }
+
+  if (app && platform === "linux") {
+    for (const bin of ["google-chrome", "chromium", "chromium-browser", "brave-browser", "microsoft-edge"]) {
+      if (exists("/usr/bin/" + bin)) return { cmd: bin, args: ["--app=" + url] };
+    }
+  }
+
+  if (app && platform === "win32") {
+    for (const exe of [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    ]) {
+      if (exists(exe)) return { cmd: exe, args: ["--app=" + url] };
+    }
+  }
+
+  if (platform === "darwin") return { cmd: "open", args: [url] };
+  if (platform === "win32") return { cmd: "cmd", args: ["/c", "start", "", url] };
+  return { cmd: "xdg-open", args: [url] };
+}
+
+function openBrowser(url, options = {}) {
   // 测试/CI 里别真的弹浏览器
   if (String(process.env.MO_AGENT_NO_OPEN || "") === "1") return false;
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const argv = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const { cmd, args } = browserCommand(process.platform, url, options);
   try {
-    const child = spawn(cmd, argv, { detached: true, stdio: "ignore" });
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
     child.on("error", () => {});
     child.unref();
     return true;
@@ -414,7 +451,7 @@ async function open(ctx, args) {
   const token = readSessionToken(home);
   const real = formatLink(port, pathname, token, "full");
   const shown = formatLink(port, pathname, token, showToken ? "full" : "masked");
-  const ok = openBrowser(real);
+  const ok = openBrowser(real, { app: Boolean((args.options || {}).app) });
   process.stdout.write((ok ? "已在浏览器打开" : "浏览器没打开，手动访问") + "：" + shown + "\n");
   if (!showToken) process.stdout.write("  （令牌已脱敏；要完整链接加 --show-token）\n");
   return 0;
