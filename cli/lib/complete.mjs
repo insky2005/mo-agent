@@ -125,6 +125,7 @@ const SPEC = {
     },
   },
   setup: { subs: {} },
+  upgrade: { subs: {} },
   completion: { subs: { bash: { flags: [] }, zsh: { flags: [] } } },
   mcp: { subs: {} },
   doctor: { subs: {} },
@@ -144,9 +145,10 @@ const ENUMS = {
 const NO_SUB_FLAGS = {
   doctor: ["--json"],
   setup: ["--yes", "--dry-run", "--only", "--skip", "--json"],
+  upgrade: ["--check", "--dry-run", "--version", "--force", "--json"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "watchdog", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "upgrade", "watchdog", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };

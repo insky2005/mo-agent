@@ -108,6 +108,27 @@ bash cli/demo/run.sh
 | 回执非法 | `blocked(bad_receipt)`，例如 `done` 却没有验收证据 |
 | 卡住后重试 | `blocked → running → done`，账本留下完整时间线 |
 
+## 升级
+
+```bash
+mo upgrade --check            # 只检测：当前版本、最新版本
+mo upgrade                    # 检查 → 下载 → 校验 sha256 → 替换自己
+mo upgrade --dry-run          # 只打印会下载哪个资产、替换哪个文件
+mo upgrade --version 0.3.0    # 装指定版本（也可写 cli-v0.3.0）
+mo upgrade --force            # 同版本重装；降级时必须加
+```
+
+- 只认 `cli-v*` 的 Release，按平台找 `mo-<os>-<arch>[.exe]`；没有 `.sha256` 的版本直接拒绝安装；
+- 替换是**同目录 rename**：要么旧文件、要么新文件，不会留下半个二进制。替换前会先在临时文件上跑一次
+  `--version`，产物跑不起来或版本对不上就放弃；
+- 只有单文件二进制能自升级。`node cli/mo.mjs`、`npm link` 这类源码运行会拒绝替换，并提示
+  `git pull` + `bash scripts/install-cli.sh`（npm 全局安装则提示重装）；
+- 目录不可写时不会半截替换：提示用 `sudo`，或换 `MO_BIN_DIR` 重装；
+- `--check` 会把结果缓存到 `~/.mo-agent/upgrade-check.json`，`mo doctor` 只读缓存提示「有新版」，
+  不在别的命令里联网；
+- 退出码：命令跑通就是 0（`--check` 发现新版也是 0），失败 1，用法错误 2。脚本请读
+  `mo upgrade --check --json` 里的 `updateAvailable` / `current` / `latest` / `tag`。
+
 ## 操作路径
 
 两条安装线，两个初始化分支。

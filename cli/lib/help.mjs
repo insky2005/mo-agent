@@ -145,6 +145,12 @@ export const GROUPS = [
     ],
   },
   {
+    name: "upgrade",
+    title: "升级",
+    blurb: "查 GitHub Releases 上的最新 CLI；只有单文件二进制会自替换",
+    subs: [["", "检查并升级（已是最新就什么都不做）", "默认子命令"]],
+  },
+  {
     name: "watchdog",
     title: "看门狗",
     blurb: "把超时没回执的卡转成 blocked(timeout)，并落收件箱",
@@ -231,6 +237,13 @@ const OPTIONS = {
   config: [
     ["--json", "list / get：机器可读输出"],
   ],
+  upgrade: [
+    ["--check", "只检测，不下载、不替换（会刷新本地缓存）"],
+    ["--dry-run", "只打印要下载哪个资产、替换哪个文件"],
+    ["--version <标签|版本>", "装指定版本，如 cli-v0.3.0 或 0.3.0；降级要配合 --force"],
+    ["--force", "同版本也重装；降级时必须加"],
+    ["--json", "机器可读：current / latest / updateAvailable / tag"],
+  ],
   setup: [
     ["--yes", "不问，取默认（非 TTY 也是这个行为）"],
     ["--dry-run", "只检查、只报告，不写任何文件（不会执行）"],
@@ -271,6 +284,7 @@ export function renderHelp() {
     "第一次用",
     row("  mo setup", "首次装配（幂等；不碰仓库）"),
     row("  mo doctor", "自检（Node / 目录 / 记忆库 / 项目）"),
+    row("  mo upgrade --check", "看有没有新版（mo upgrade 直接升级）"),
     row("  mo agent", "接一个 Agent 时看这个"),
     row("  mo config list", "全局配置：值 + 来源（set / unset 改）"),
     row("  mo help <组>", "某组的子命令与选项（--mode、--wait 这些）"),

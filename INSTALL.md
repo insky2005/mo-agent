@@ -49,6 +49,18 @@ mo --version
 mo doctor
 ```
 
+### 升级
+
+装好之后随时可以查新版并原地升级（只替换 `mo` 自己这个文件）：
+
+```bash
+mo upgrade --check   # 只检测：当前 / 最新
+mo upgrade           # 下载 → 校验 sha256 → 替换
+```
+
+只认 `cli-v*` 的 Release，没有 `.sha256` 的版本会被拒绝。源码运行（`node cli/mo.mjs`）不会自替换，
+用 `git pull` + `bash scripts/install-cli.sh`。
+
 如果提示 `command not found`，把 `~/.local/bin` 加进 PATH：
 
 ```bash

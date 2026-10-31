@@ -24,6 +24,7 @@ import { watchdogCommand } from "./commands/watchdog.mjs";
 import { configCommand } from "./commands/config.mjs";
 import { setupCommand } from "./commands/setup.mjs";
 import { daemonCommand } from "./commands/daemon.mjs";
+import { upgradeCommand } from "./commands/upgrade.mjs";
 import { VERSION } from "./lib/version.mjs";
 import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
 
@@ -59,6 +60,7 @@ const ROUTES = {
   config: configCommand,
   setup: setupCommand,
   daemon: daemonCommand,
+  upgrade: upgradeCommand,
 };
 
 async function main(argv) {
@@ -73,7 +75,9 @@ async function main(argv) {
   const args = parseArgs(argv);
   const group = args.positional[0];
 
-  if (args.options.version || group === "version" || group === "--version") {
+  // mo upgrade --version 是「装指定版本」，不能被当成打印版本号
+  const wantsVersion = args.options.version && group !== "upgrade";
+  if (wantsVersion || group === "version" || group === "--version") {
     process.stdout.write(VERSION + "\n");
     return 0;
   }

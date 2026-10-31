@@ -185,6 +185,17 @@ mo doctor
 - 安装会写 `~/.local/bin`、可能改 shell 配置，所以它必须先问你；
 - 这条路不会自动配补全（远端安装器不写 rc），需要时自己执行 `mo completion`。
 
+### 1.6 升级 mo
+
+```bash
+mo upgrade --check   # 只检测：当前 / 最新
+mo upgrade           # 检查 → 下载 → sha256 校验 → 原子替换
+mo upgrade --dry-run # 只打印计划
+```
+
+只有单文件二进制能自升级；源码运行（`node cli/mo.mjs` / `npm link`）会拒绝替换，改用
+`git pull` + `bash scripts/install-cli.sh`。`--check` 的结果会缓存给 `mo doctor` 提示，不会在别的命令里联网。
+
 ## 2. 核心概念
 
 | 概念 | 是什么 | 存在哪 |
@@ -254,6 +265,7 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo mcp` | stdio MCP 服务（给主 Agent 接） |
 | `mo agent describe \| add` | 输出契约 / 合并 MCP 配置 |
 | `mo doctor` | 自检 |
+| `mo upgrade [--check\|--dry-run\|--version <标签>\|--force]` | 检测并升级 CLI（单文件二进制） |
 | `mo config list \| get \| set \| unset` | 全局配置（`~/.mo-agent/config.json`），值带来源 |
 | `mo setup [--yes] [--dry-run] [--only 步骤]` | 首次装配，幂等；不碰仓库 |
 | `mo help [组]` | 帮助；给组名看该组子命令（如 `mo help task`） |

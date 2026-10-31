@@ -6,6 +6,7 @@ import { moHome, ledgerDir } from "../lib/paths.mjs";
 import { listProjects } from "../lib/project.mjs";
 import { readEvents } from "../lib/store.mjs";
 import { memoryDir } from "../lib/knowledge.mjs";
+import { cachedUpdate } from "../lib/upgrade.mjs";
 
 /**
  * 自检：只有必需项失败才算失败。
@@ -26,9 +27,17 @@ export function doctorReport(cwd, options = {}) {
   const events = readEvents(home);
 
   const inProject = insideProject(cwd, projects);
+  // 只读本地缓存，不联网：mo upgrade --check 才会刷新它
+  const update = cachedUpdate(home, VERSION);
   const checks = [
     { name: "node", label: "Node", required: true, ok: true, value: process.versions.node },
-    { name: "mo-agent", label: "版本", required: true, ok: true, value: VERSION },
+    {
+      name: "mo-agent",
+      label: "版本",
+      required: true,
+      ok: true,
+      value: VERSION + (update ? "（有新版 " + update.latest + "：mo upgrade）" : ""),
+    },
     { name: "home", label: "数据目录", required: true, ok: fs.existsSync(home), value: home },
     { name: "ledger", label: "账本", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
     { name: "memory", label: "记忆库", required: false, ok: fs.existsSync(memory.dir), value: memory.dir },
