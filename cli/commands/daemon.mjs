@@ -162,7 +162,7 @@ async function waitForToken(home, timeoutMs = 1500) {
   return false;
 }
 
-const OPEN_HINT = "mo daemon open app|dingtalk|agents|voice|system|monitor";
+const OPEN_HINT = "mo daemon open [app|dingtalk|agents|voice|system|monitor]";
 
 function printActions() {
   process.stdout.write("  打开    " + OPEN_HINT + "\n");

@@ -67,7 +67,7 @@ mo daemon stop
   配对    http://127.0.0.1:7788/pair
   安装    http://127.0.0.1:7788/app.apk（已就绪）
   状态    mo daemon status
-  打开    mo daemon open app|dingtalk|agents|voice|system|monitor
+  打开    mo daemon open [app|dingtalk|agents|voice|system|monitor]
   停止    mo daemon stop
 ```
 
