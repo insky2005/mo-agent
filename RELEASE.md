@@ -1,5 +1,7 @@
 # 发布流程
 
+> 要让 AI 按步骤执行？用 [docs/runbooks/release.md](docs/runbooks/release.md)（含判据、失败分支和汇报模板）。
+
 三个组件各自独立发版，互不阻塞：
 
 | 组件 | tag | 产物 | 运行环境 |
