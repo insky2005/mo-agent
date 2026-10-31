@@ -137,8 +137,13 @@ export class PiControl {
   }
 
   cancel(sessionId) {
-    const item = this.enqueue(sessionId, { type: "abort" });
-    this.log.info("已向 Pi 会话 " + this.canonical(sessionId) + " 排队中断 " + item.id);
+    const id = this.canonical(sessionId);
+    const state = this.state(id);
+    if (!state || !this.isOnline(id)) throw new PiControlError("E_OFFLINE", "Pi 控制通道不在线");
+    // 中断优先：丢掉还没下发的指令，避免 abort 之后又被旧 prompt 起一轮。
+    state.queue = state.queue.filter((command) => command.type !== "prompt");
+    const item = this.enqueue(id, { type: "abort" });
+    this.log.info("已向 Pi 会话 " + id + " 排队中断 " + item.id);
     return { queued: true, id: item.id };
   }
 

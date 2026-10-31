@@ -61,7 +61,7 @@ POST /local/pi/event
 ## 边界
 
 - Mo 不在时：扩展读不到 `~/.mo-agent/session.json`，不注册、不轮询；Pi 照常使用。
-- 扩展 API 没有 `clear_queue`：`abort` 后已排队的 steering/followUp 可能继续。
+- 扩展 API 没有 `clear_queue`：host 会丢掉尚未下发的 prompt；已经进入 Pi 队列的 steering/followUp 仍可能继续。
 - 没有暂停/恢复。
 - 只控制 `ctx.mode === "tui"` 的会话；headless / JSON / RPC 模式直接 no-op。
 - 没装扩展的 Pi 仍然能被观测，只是不能发指令/中断。

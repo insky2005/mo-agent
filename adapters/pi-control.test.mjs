@@ -52,6 +52,15 @@ test("Pi 控制：先排队后轮询立即返回；abort 不带文本", async ()
   assert.deepEqual(commands.map((item) => item.type), ["abort", "prompt"]);
 });
 
+test("Pi 控制：abort 丢弃尚未下发的 prompt", async () => {
+  const control = make();
+  control.register({ sessionId: "abc" });
+  control.prompt("abc", "先做这个");
+  control.cancel("abc");
+  const commands = await control.poll("abc", 1000);
+  assert.deepEqual(commands.map((item) => item.type), ["abort"]);
+});
+
 test("Pi 控制：轮询超时返回空数组", async () => {
   const control = make();
   control.register({ sessionId: "abc" });
