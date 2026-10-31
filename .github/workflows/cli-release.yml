@@ -68,7 +68,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: CHANGELOG 有本版本小节
-        run: node scripts/check-changelog.mjs --release
+        shell: bash
+        # dry run 只验证构建与打包，不要求已经写好发版小节；
+        # 真正的发布（tag 触发，或 dry_run=false）才强制 --release。
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            node scripts/check-changelog.mjs
+          else
+            node scripts/check-changelog.mjs --release
+          fi
 
       - name: 静态检查
         run: npm run check
