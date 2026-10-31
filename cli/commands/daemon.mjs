@@ -303,26 +303,23 @@ async function stop() {
 async function status() {
   const home = os.homedir();
   const info = readPid(home);
-  if (!info || !alive(info.pid)) {
-    // 没有 pid 文件不代表没在跑：桌面 App 拉起的 host 同样在这个端口上
-    const port = readSessionPort(home) || readConfigPort(process.env, home);
-    const body = await health(port);
-    if (body) {
-      process.stdout.write("daemon  运行中（端口 " + port + "，不是 mo daemon 拉起的，可能是桌面 App）\n");
-      process.stdout.write("  健康检查  ✓\n");
-      process.stdout.write("  监控      " + linkWithToken(port, "/monitor", home) + "\n");
-      process.stdout.write("  APK       " + (fs.existsSync(apkDest(home)) ? "✓ " + apkDest(home) : "未下载") + "\n");
-      return 0;
-    }
-    process.stdout.write("daemon  未运行\n");
+  const managed = Boolean(info && alive(info.pid));
+  const port = managed ? info.port : (readSessionPort(home) || readConfigPort(process.env, home));
+  const body = await health(port);
+
+  if (!body) {
+    process.stdout.write("daemon  未运行" + (managed ? "（pid " + info.pid + " 没响应）" : "") + "\n");
+    process.stdout.write("  启动    mo daemon start\n");
     return 1;
   }
-  const body = await health(info.port);
-  process.stdout.write("daemon  运行中（pid " + info.pid + "，端口 " + info.port + "）\n");
-  process.stdout.write("  健康检查  " + (body ? "✓" : "✗ 无响应") + "\n");
-  if (body) process.stdout.write("  监控      " + linkWithToken(info.port, "/monitor", home) + "\n");
-  process.stdout.write("  APK       " + (fs.existsSync(apkDest(home)) ? "✓ " + apkDest(home) : "未下载（mo daemon start 时会自动拉）") + "\n");
-  return body ? 0 : 1;
+
+  const owner = managed ? "pid " + info.pid : "不是 mo daemon 拉起的，可能是桌面 App";
+  process.stdout.write("daemon  运行中（端口 " + port + "，" + owner + "）\n");
+  process.stdout.write("  健康    ✓\n");
+  printAccess(port, home);
+  process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");
+  process.stdout.write("  停止    mo daemon stop\n");
+  return 0;
 }
 
 const OPEN_TARGETS = { monitor: "/monitor", setup: "/setup", pair: "/pair" };
