@@ -82,14 +82,17 @@ xattr -dr com.apple.quarantine /Applications/mo-agent.app
 
 ## 3. 手机 App（Android）
 
-不需要单独下载：桌面端或 CLI 起来后，打开设置页的「安装与配对」，扫第一个二维码即可安装。
+**有 host 在跑**（桌面 App，或源码仓库里 `npm start`）时最省事：打开设置页「安装与配对」，
+扫第一个二维码，APK 由 host 直接发给你，不用自己找文件。
 
-也可以手动从 Releases 拿 `mo-agent-android-<版本>.apk`，或在本机执行：
+没有 host 的话，这两条也不依赖源码：
 
-```bash
-bash scripts/fetch-apk.sh                      # 下到 ~/.mo-agent/app.apk
-bash scripts/fetch-apk.sh /tmp/mo.apk          # 或指定路径
-```
+| 方式 | 怎么做 |
+|---|---|
+| 手动下载 | 在 Releases 里点 `mo-agent-android-<版本>.apk`（手机浏览器也能下） |
+| 装 CLI 时顺带拿 | `curl ... \| bash -s -- --with-apk`，存到 `~/.mo-agent/app.apk`，之后 host 的 `/app.apk` 用它 |
+
+> 装好的 APK 需要配对才有用：配对必须由 host 服务，所以**只装了 CLI 二进制、没装桌面也没源码**时，手机端暂时用不上。
 
 要求 Android 7.0+（minSdk 23）。
 
@@ -151,7 +154,8 @@ adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
 
 - 脚本会自动 `npx cap sync android`，并把 `versionCode` 加一（CI 里用 `MO_VERSION_CODE` 固定）；
 - 想用正式签名：把 keystore 放到 `app/android/app/keystore/`，写一份 `keystore.properties`（两者都已 gitignore）；没有就退回仓库里的 debug key；
-- 不带 `agconnect-services.json` 也能构建，只是没有 HMS 推送能力——CI 就是这么构建的。
+- 不带 `agconnect-services.json` 也能构建，只是没有 HMS 推送能力——CI 就是这么构建的；
+- 从本机直接取发布版（不构建）：`bash scripts/fetch-apk.sh`，默认下到 `~/.mo-agent/app.apk`，也可 `bash scripts/fetch-apk.sh /tmp/mo.apk`。
 
 > 更多细节（Electrobun 布局、语音资源、签名注入、CI 环境差异）见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
