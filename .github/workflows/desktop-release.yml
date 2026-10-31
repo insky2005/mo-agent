@@ -56,6 +56,9 @@ jobs:
       - name: 安装依赖
         run: npm ci --no-audit --no-fund
 
+      - name: CHANGELOG 有本版本小节
+        run: node scripts/check-changelog.mjs --release
+
       - name: 解析版本
         id: version
         shell: bash
@@ -141,6 +144,8 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
+          # 首次发版先按 pre-release 处理；要发正式版把这里改成 false
+          prerelease: true
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           files: |

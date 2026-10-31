@@ -67,6 +67,9 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: CHANGELOG 有本版本小节
+        run: node scripts/check-changelog.mjs --release
+
       - name: 静态检查
         run: npm run check
 
@@ -160,6 +163,8 @@ jobs:
           # 手动触发时 tag 可能还不存在，用当前提交而不是默认分支
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
+          # 首次发版先按 pre-release 处理；要发正式版把这里改成 false
+          prerelease: true
           fail_on_unmatched_files: true
           files: |
             dist/mo-darwin-arm64

@@ -69,6 +69,16 @@ git commit -m "chore: 版本 0.2.1"
 git push origin main
 ```
 
+### 第 1.5 步：更新 CHANGELOG
+
+把 `CHANGELOG.md` 里 `## [Unreleased]` 的内容挪到 `## [新版本] - 日期`，并留一个新的空 `Unreleased`。
+
+```bash
+node scripts/check-changelog.mjs --release   # 发版时必须有本版本小节
+```
+
+平时 `npm run check` 只要求存在 `Unreleased` 段；`--release` 由三个发版 workflow 在构建前调用。
+
 ### 第 2 步：等 main 的 CI 绿
 
 ```bash

@@ -39,6 +39,24 @@ node -p "require('./package.json').version"    # 记为 V
 - 要升版本时**两个文件必须一起改**：`package.json` 与 `cli/lib/version.mjs`；
 - 改完必须重跑 `node scripts/check-version.mjs`。
 
+## 2.5 更新 CHANGELOG（发版必须做）
+
+`CHANGELOG.md` 的 `## [Unreleased]` 里放**还没发布**的变更。发版时：
+
+1. 把 Unreleased 下的条目挪到新小节 `## [V] - YYYY-MM-DD`（日期用今天）；
+2. 在文件顶部重新留一个空的 `## [Unreleased]`；
+3. 只写**对外可见**的变化，分类用 `新增 / 变更 / 修复 / 移除`；
+4. 校验：
+
+```bash
+node scripts/check-changelog.mjs --release   # 期望输出「发版检查通过：V」
+```
+
+三个发版 workflow 在构建前都会跑这条，缺小节会直接红。
+
+没有用户可见变化时，在「变更」里写一行「内部重构，无用户可见变化」，不要留空小节。
+
+> 这条已经挂进 `npm run check`，缺小节会直接失败。
 ## 3. （可选但推荐）先 dry run
 
 拿构建矩阵练一遍，**不发 Release**。把下面三条里的 `0.2.0` 换成你的 V：
