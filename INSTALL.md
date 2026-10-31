@@ -73,11 +73,18 @@ export PATH="$HOME/.local/bin:$PATH"
 
 > 只有 **Apple Silicon（arm64）** 版本。Electrobun 不提供 macOS Intel 运行时，Intel 机器请用 CLI。
 
-从 Releases 下载 `mo-agent-desktop-<版本>-macos-arm64.zip`，解压后：
+从 Releases 下载 `mo-agent-desktop-<版本>-macos-arm64.dmg`，双击打开后把 **mo-agent.app** 拖进 Applications：
 
 ```bash
-cp -R mo-agent.app /Applications/
 open /Applications/mo-agent.app
+```
+
+偏好命令行的也可以用 `hdiutil` 挂载后拷贝：
+
+```bash
+hdiutil attach mo-agent-desktop-<版本>-macos-arm64.dmg
+cp -R /Volumes/Mo\ Agent/mo-agent.app /Applications/
+hdiutil detach /Volumes/Mo\ Agent
 ```
 
 首次打开可能被 Gatekeeper 拦（产物是 ad-hoc 签名，没有 Developer ID 公证）：

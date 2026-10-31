@@ -85,7 +85,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.githu
 |---|---|---|---|
 | CLI | `cli-v0.2.0` | `cli-release.yml` | `mo-{darwin,linux}-{arm64,x64}`、`mo-windows-x64.exe` |
 | APK | `apk-v0.2.0` | `apk-release.yml` | `mo-agent-android-0.2.0.apk` |
-| Desktop | `desktop-v0.2.0` | `desktop-release.yml` | `mo-agent-desktop-<ver>-macos-{arm64,x64}.zip` |
+| Desktop | `desktop-v0.2.0` | `desktop-release.yml` | `mo-agent-desktop-<ver>-macos-{arm64,x64}.dmg` |
 
 三个组件各自独立发版，**顺序无所谓**：安装脚本不再用 `releases/latest`，
 而是从新到旧找第一个真的带目标资产的 release。

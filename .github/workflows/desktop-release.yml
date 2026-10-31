@@ -100,21 +100,38 @@ jobs:
           WITH_VOICE: ${{ inputs.with_voice && '1' || '0' }}
         run: bash scripts/build-desktop.sh
 
-      - name: 打包 zip
+      - name: 产物密钥扫描（SEC-001）
+        shell: bash
+        # 扫的是 .app 本体而不是 dmg：dmg 是压缩镜像，直接扫字节什么也扫不到；
+        # 目录扫描还能顺着 .app 里的 runtime.tar.gz 往下展开。
+        run: |
+          set -euo pipefail
+          APP="$(ls -d desktop/build/stable-macos-*/mo-agent.app | head -1)"
+          node scripts/check-artifacts.mjs --enforce "$APP"
+
+      - name: 打包 DMG
         shell: bash
         run: |
           set -euo pipefail
           APP="$(ls -d desktop/build/stable-macos-*/mo-agent.app | head -1)"
           echo "产物：$APP"
           mkdir -p dist
-          OUT="dist/mo-agent-desktop-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT"
+
+          # 拖拽安装的标准布局：镜像里放 .app + 指向 /Applications 的软链。
+          # 用 ditto 而不是 cp -R，保留扩展属性与 ad-hoc 签名。
+          STAGE="$(mktemp -d)"
+          ditto "$APP" "$STAGE/mo-agent.app"
+          ln -s /Applications "$STAGE/Applications"
+
+          OUT="dist/mo-agent-desktop-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg"
+          # UDZO：压缩只读镜像，体积约为 .app 的一半；-ov 允许覆盖同名
+          hdiutil create -volname "Mo Agent" -srcfolder "$STAGE" -ov -format UDZO "$OUT"
+          rm -rf "$STAGE"
+
+          hdiutil verify "$OUT"
+
           node scripts/checksums.mjs dist
           ls -lh dist
-
-      - name: 产物密钥扫描（SEC-001）
-        shell: bash
-        run: node scripts/check-artifacts.mjs --enforce dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -137,7 +154,7 @@ jobs:
       - name: 检查产物
         run: |
           set -euo pipefail
-          ls dist/mo-agent-desktop-*-macos-arm64.zip
+          ls dist/mo-agent-desktop-*-macos-arm64.dmg
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -149,5 +166,5 @@ jobs:
           fail_on_unmatched_files: true
           target_commitish: ${{ github.sha }}
           files: |
-            dist/mo-agent-desktop-*.zip
+            dist/mo-agent-desktop-*.dmg
             dist/*.sha256

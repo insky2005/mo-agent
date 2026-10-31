@@ -11,7 +11,7 @@
 |---|---|---|
 | `cli-v<X.Y.Z>` | `cli-release.yml` | 5 个平台 `mo-*` + `.sha256` + `SHA256SUMS` |
 | `apk-v<X.Y.Z>` | `apk-release.yml` | `mo-agent-android-<X.Y.Z>.apk` + `.sha256` |
-| `desktop-v<X.Y.Z>` | `desktop-release.yml` | `mo-agent-desktop-<X.Y.Z>-macos-arm64.zip` + `.sha256` |
+| `desktop-v<X.Y.Z>` | `desktop-release.yml` | `mo-agent-desktop-<X.Y.Z>-macos-arm64.dmg` + `.sha256` |
 
 ## 1. 开始前的判据（任一不满足就停，向人汇报）
 
@@ -168,7 +168,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 - `cli-v$V`：`mo-darwin-arm64`、`mo-darwin-x64`、`mo-linux-x64`、`mo-linux-arm64`、`mo-windows-x64.exe`，以及每个的 `.sha256` 和 `SHA256SUMS`；
 - `apk-v$V`：`mo-agent-android-$V.apk` + `.sha256`；
-- `desktop-v$V`：`mo-agent-desktop-$V-macos-arm64.zip` + `.sha256`。
+- `desktop-v$V`：`mo-agent-desktop-$V-macos-arm64.dmg` + `.sha256`。
 
 ## 8. 冒烟（能跑就跑）
 

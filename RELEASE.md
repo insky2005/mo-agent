@@ -9,7 +9,7 @@
 |---|---|---|---|
 | CLI | `cli-v0.2.0` | 5 个平台的 `mo-*` 单文件 | 任意 |
 | APK | `apk-v0.2.0` | `mo-agent-android-0.2.0.apk` | ubuntu（带 Android SDK） |
-| Desktop | `desktop-v0.2.0` | `mo-agent-desktop-0.2.0-macos-arm64.zip` | macos-14 |
+| Desktop | `desktop-v0.2.0` | `mo-agent-desktop-0.2.0-macos-arm64.dmg` | macos-14 |
 
 顺序随意：安装脚本按**资产**解析，不依赖 `releases/latest`。
 
@@ -188,8 +188,9 @@ mo daemon start        # 起来后 /app.apk 可下载
 ### Desktop
 
 ```bash
-unzip -q mo-agent-desktop-0.2.1-macos-arm64.zip -d /tmp/mo-desk
+hdiutil attach mo-agent-desktop-0.2.1-macos-arm64.dmg -nobrowse -mountpoint /tmp/mo-desk
 open /tmp/mo-desk/mo-agent.app
+hdiutil detach /tmp/mo-desk
 ```
 
 ---
