@@ -1,0 +1,48 @@
+name: pages
+
+# 站点源码在 site/，构建产物即该目录本身；每次 push main 自动发布到 GitHub Pages。
+# 自定义域名由 site/CNAME 决定（mo-agent.mocampus.cn），必须随 artifact 一起上传，
+# 否则每次部署都会把后台登记的域名清掉，站点退回 insky2005.github.io。
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验站点文件
+        run: |
+          set -euo pipefail
+          test -f site/index.html || { echo "缺少 site/index.html"; exit 1; }
+          test -f site/assets/style.css || { echo "缺少 site/assets/style.css"; exit 1; }
+          # CNAME 丢了会静默丢掉自定义域名，这里显式拦住
+          test -f site/CNAME || { echo "缺少 site/CNAME"; exit 1; }
+          grep -qx 'mo-agent.mocampus.cn' site/CNAME || { echo "site/CNAME 内容不对"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
