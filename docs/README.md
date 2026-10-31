@@ -10,7 +10,7 @@ Mo Agent 的全部文档。先看「怎么读」，再按需跳转。
 | 要接入一个新 Agent | [architecture.md](architecture.md) §6 → [adapters/README.md](../adapters/README.md) → [reference/capabilities.md](reference/capabilities.md) |
 | 要改事件 / 状态 / 通知 | [spec/event-contract.md](spec/event-contract.md) → [adr/adr-0003](adr/adr-0003-event-contract.md) |
 | 要用或排障 | [guides/mo-cli.md](guides/mo-cli.md) → [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
-| 要发版 / 理版本号 | [guides/versioning.md](guides/versioning.md) → [../RELEASE.md](../RELEASE.md) → [runbooks/release.md](runbooks/release.md) |
+| 要发版 / 理版本号 | [runbooks/versioning.md](runbooks/versioning.md) → [../RELEASE.md](../RELEASE.md) → [runbooks/release.md](runbooks/release.md) |
 | 在做 workbench（个人工作台） | [spec/workbench-flow.md](spec/workbench-flow.md) |
 
 ## 目录

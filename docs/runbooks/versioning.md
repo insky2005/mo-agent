@@ -1,7 +1,7 @@
 # 版本管理
 
 发布、升级、修复三条线怎么配合。操作细节见 [RELEASE.md](../../RELEASE.md)（人）与
-[runbooks/release.md](../runbooks/release.md)（AI 执行）。
+[release.md](release.md)（AI 执行）。
 
 ## 一、三个数字从哪来
 
