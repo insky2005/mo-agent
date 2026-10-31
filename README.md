@@ -49,6 +49,8 @@ Mo Agent 从进程、会话记录和 Agent hooks 三个层面观察，不要求 
 
 ## 开始使用
 
+> 只想要命令：安装看 [INSTALL.md](INSTALL.md)，用法看 [USAGE.md](USAGE.md)，发版看 [RELEASE.md](RELEASE.md)。
+
 ### 1. 安装桌面端
 
 当前以 macOS 桌面版为主。从发布产物安装后，菜单栏会出现 Mo Agent 图标，不占 Dock；如需从源码构建，见 [DEVELOPMENT.md](DEVELOPMENT.md)。Linux / Windows 正在适配，方案见 [docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)。
