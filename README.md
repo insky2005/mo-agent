@@ -49,7 +49,10 @@ Mo Agent 从进程、会话记录和 Agent hooks 三个层面观察，不要求 
 
 ## 开始使用
 
-> 只想要命令：安装看 [INSTALL.md](INSTALL.md)，用法看 [USAGE.md](USAGE.md)，发版看 [RELEASE.md](RELEASE.md)。
+> 只想要命令：
+> 安装 [INSTALL.md](INSTALL.md)
+> 使用 [USAGE.md](USAGE.md)
+> 发布 [RELEASE.md](RELEASE.md)
 
 ### 1. 安装桌面端
 
