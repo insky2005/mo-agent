@@ -447,11 +447,14 @@ async function open(ctx, args) {
     });
   }
 
-  const showToken = Boolean((args.options || {})["show-token"]);
+  const opts = args.options || {};
+  // 默认用无地址栏的窗口；想看地址栏就加 --no-app
+  const appMode = !opts["no-app"];
+  const showToken = Boolean(opts["show-token"]);
   const token = readSessionToken(home);
   const real = formatLink(port, pathname, token, "full");
   const shown = formatLink(port, pathname, token, showToken ? "full" : "masked");
-  const ok = openBrowser(real, { app: Boolean((args.options || {}).app) });
+  const ok = openBrowser(real, { app: appMode });
   process.stdout.write((ok ? "已在浏览器打开" : "浏览器没打开，手动访问") + "：" + shown + "\n");
   if (!showToken) process.stdout.write("  （令牌已脱敏；要完整链接加 --show-token）\n");
   return 0;

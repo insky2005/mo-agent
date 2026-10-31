@@ -105,14 +105,14 @@ mo daemon open monitor  # 监控屏
 
 它会自己拼令牌并调系统浏览器（macOS `open` / Linux `xdg-open` / Windows `start`）。
 
-想去掉地址栏、当成一个小窗口用，加 `--app`：
+默认就用**无地址栏**的窗口打开（Chromium 系的 `--app=` 模式），像个小 App。
+想回到带地址栏的普通浏览器：
 
 ```bash
-mo daemon open --app          # 监控屏，无地址栏
-mo daemon open app --app      # 设置页，无地址栏
+mo daemon open --no-app
 ```
 
-需要本机装了 Chrome / Edge / Brave / Chromium 之一（用它们的 `--app=` 模式）；没有就退回普通浏览器，不影响使用。
+本机需要装了 Chrome / Edge / Brave / Chromium 之一；一个都没有时自动退回普通浏览器，不影响使用。
 
 两个命令都是幂等的，可以放心重复执行：
 

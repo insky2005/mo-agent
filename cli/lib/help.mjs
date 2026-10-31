@@ -115,7 +115,7 @@ export const GROUPS = [
     subs: [
       ["start [--port N] [--foreground]", "后台启动 host；--foreground 前台跑，Ctrl+C 停", "顺手下载 APK 到 ~/.mo-agent/app.apk"],
       ["open [app|dingtalk|agents|voice|system|monitor]", "打开设置页页签或监控屏（自动带令牌）", "默认 monitor；app=安装与配对，dingtalk=钉钉机器人绑定"],
-      ["open [目标] --app", "用 Chromium 的 --app 模式打开（无地址栏）", "Chrome/Edge/Brave/Chromium 都行，没有就退回普通浏览器"],
+      ["open [目标] [--no-app]", "默认用 Chromium 的 --app 模式打开（无地址栏）", "--no-app 才用普通浏览器；没装 Chromium 系会自动退回"],
       ["open app", "安装与配对（扫码装 App、配对）", "托盘「设置 → App 安装与配对」"],
       ["open dingtalk", "钉钉机器人绑定", "托盘「设置 → 钉钉机器人绑定」"],
       ["stop", "停止 daemon", ""],
