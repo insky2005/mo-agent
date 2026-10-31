@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { emit } from "../lib/output.mjs";
+import { emit, padDisplay } from "../lib/output.mjs";
 import { VERSION } from "../lib/version.mjs";
 import { moHome, ledgerDir } from "../lib/paths.mjs";
 import { listProjects } from "../lib/project.mjs";
@@ -25,14 +25,21 @@ export function doctorReport(cwd, options = {}) {
   const projects = listProjects(home);
   const events = readEvents(home);
 
+  const inProject = insideProject(cwd, projects);
   const checks = [
-    { name: "node", required: true, ok: true, value: process.versions.node },
-    { name: "mo-agent", required: true, ok: true, value: VERSION },
-    { name: "home", required: true, ok: fs.existsSync(home), value: home },
-    { name: "ledger", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
-    { name: "memory", required: false, ok: fs.existsSync(memory.dir), value: memory.dir },
-    { name: "projects", required: false, ok: projects.length > 0, value: projects.length + " 个" },
-    { name: "cwd-project", required: false, ok: insideProject(cwd, projects), value: cwd },
+    { name: "node", label: "Node", required: true, ok: true, value: process.versions.node },
+    { name: "mo-agent", label: "版本", required: true, ok: true, value: VERSION },
+    { name: "home", label: "数据目录", required: true, ok: fs.existsSync(home), value: home },
+    { name: "ledger", label: "账本", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
+    { name: "memory", label: "记忆库", required: false, ok: fs.existsSync(memory.dir), value: memory.dir },
+    { name: "projects", label: "已登记项目", required: false, ok: projects.length > 0, value: projects.length + " 个" },
+    {
+      name: "cwd-project",
+      label: "当前目录",
+      required: false,
+      ok: inProject,
+      value: cwd + (inProject ? "（属于已登记项目）" : "（未登记为项目）"),
+    },
   ];
 
   const ok = checks.filter((check) => check.required).every((check) => check.ok);
@@ -53,7 +60,7 @@ export function doctorCommand(ctx, args) {
     },
     () =>
       report.checks
-        .map((check) => (check.ok ? "✓ " : check.required ? "✗ " : "⚠ ") + check.name.padEnd(12) + " " + check.value)
+        .map((check) => (check.ok ? "✓ " : check.required ? "✗ " : "⚠ ") + padDisplay(check.label || check.name, 12) + " " + check.value)
         .join("\n"),
   );
   return report.ok ? 0 : 1;

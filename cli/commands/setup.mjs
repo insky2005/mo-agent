@@ -3,7 +3,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
 import { all, has } from "../lib/args.mjs";
-import { emit, isJson } from "../lib/output.mjs";
+import { emit, isJson, padDisplay } from "../lib/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import {
@@ -607,9 +607,9 @@ function summaryLines(report, remaining, covered = new Set()) {
   const notes = open.filter((check) => !SETUP_INFO_ONLY[check.name]);
   const infos = open.filter((check) => SETUP_INFO_ONLY[check.name]);
   const lines = ["汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过")];
-  for (const check of notes) lines.push("  ⚠ " + check.name.padEnd(12) + " " + check.value);
+  for (const check of notes) lines.push("  ⚠ " + padDisplay(check.label || check.name, 12) + " " + check.value);
   // 具体的下一步命令由「剩余动作」给出，这里只标一句说明，不重复
-  for (const check of infos) lines.push("  ℹ " + check.name.padEnd(12) + " " + check.value);
+  for (const check of infos) lines.push("  ℹ " + padDisplay(check.label || check.name, 12) + " " + check.value);
   if (remaining.length) {
     lines.push("", "剩余动作：");
     for (const item of remaining) lines.push("  - " + item.action);
