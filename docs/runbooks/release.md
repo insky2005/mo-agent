@@ -27,18 +27,25 @@ node scripts/gh-status.mjs        # 最近一次 ci 结论是 success
 若 `gh-status` 报「没有找到 GitHub token」：让人类把 token 放到
 `~/.dsh/oh-my-dsh/tokens/<owner>-<repo>`（0600），不要自己造。
 
-## 2. 确定版本号
+## 2. 确认版本号（通常已就位）
 
-从 `package.json` 读：
+本仓库用**后置升级**：每次发版完成后立刻把开发版本号升到下一个补丁号。所以正常情况下
+`package.json` 里的版本就已经是「这次要发的版本」，不需要改。
 
 ```bash
-node -p "require('./package.json').version"    # 记为 V
+node scripts/check-version.mjs     # 一致即可
 ```
 
-- 本次发布沿用 V（除非人类明确要求先升版本）；
-- 要升版本时**两个文件必须一起改**：`package.json` 与 `cli/lib/version.mjs`；
-- 改完必须重跑 `node scripts/check-version.mjs`。
+只有这两种情况需要手动改（两个文件必须一起改）：
 
+- 跳号（比如补发一个 0.3.0）；
+- 上一个版本漏了后置升级。
+
+```bash
+# 需要改时
+node -e '...'   # 或直接编辑 package.json 与 cli/lib/version.mjs，两处必须一致
+node scripts/check-version.mjs
+```
 ## 2.5 更新 CHANGELOG（发版必须做）
 
 `CHANGELOG.md` 的 `## [Unreleased]` 里放**还没发布**的变更。发版时：
@@ -175,6 +182,29 @@ mo --version                                    # 期望输出 $V
 - 遗留问题：<无 / 具体>
 ```
 
+## 9.5 发版后：升开发版本（必做）
+
+Release 发出来之后，main 上的开发版本号要往前走一格，否则下一个 tag 会和已发布的撞车。
+
+按下一轮**改动类型**决定升哪一位：
+
+| 下一轮的改动 | 升位 | 例子 |
+|---|---|---|
+| 有新增功能 / 行为变化（常规迭代） | **次版本 +1**，补丁位归零 | 0.2.0 → 0.3.0 |
+| 只有缺陷修复 | **修订号 +1** | 0.2.0 → 0.2.1 |
+
+1. 改两个文件：`package.json`、`cli/lib/version.mjs`（同一个新版本号）；
+2. 同步 `package-lock.json` 里的根版本（`npm install --package-lock-only` 或手工替换）；
+3. 在 `CHANGELOG.md` 的 `## [Unreleased]` 下记一行「发布后升版本号到 X」；
+4. 校验并提交：
+
+```bash
+node scripts/check-version.mjs          # 一致
+node scripts/check-changelog.mjs        # 有 Unreleased 段即可（--release 此时应当失败）
+git add package.json cli/lib/version.mjs package-lock.json CHANGELOG.md
+git commit -m "chore: 开始 <下一个版本> 开发"
+git push origin main
+```
 ## 10. 收尾
 
 - 若本次是第一次正式版，提醒人类把三个 workflow 里的 `prerelease: true` 改成 `false`；

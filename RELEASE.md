@@ -55,20 +55,21 @@ node scripts/gh-status.mjs
 
 ## 正式流程
 
-### 第 1 步：改版本号（两个文件必须同时改）
+### 第 1 步：确认版本号（通常已就位）
+
+本仓库用**后置升级**：发版完成后立刻把开发版本升到下一个补丁号。所以正常发版时，
+`package.json` 里的版本就是这次要发的版本，不需要改。
+
+```bash
+node scripts/check-version.mjs   # 一致即可
+```
+
+只有跳号（如补发 0.3.0）或上次漏了后置升级时才手动改，且两个文件必须一起改：
 
 | 文件 | 改什么 |
 |---|---|
-| `package.json` | `"version": "0.2.1"` |
-| `cli/lib/version.mjs` | `export const VERSION = "0.2.1"` |
-
-```bash
-npm run cli:version:check
-git add package.json cli/lib/version.mjs
-git commit -m "chore: 版本 0.2.1"
-git push origin main
-```
-
+| `package.json` | `"version": "X.Y.Z"` |
+| `cli/lib/version.mjs` | `export const VERSION = "X.Y.Z"` |
 ### 第 1.5 步：更新 CHANGELOG
 
 把 `CHANGELOG.md` 里 `## [Unreleased]` 的内容挪到 `## [新版本] - 日期`，并留一个新的空 `Unreleased`。
@@ -126,6 +127,31 @@ prerelease: true      # 首次发版先按 pre-release 处理
 > 安装脚本不依赖 `latest`，所以 pre-release 也能正常安装；`latest` 只影响手动点 Releases 页面的人。
 
 ---
+
+## 发版后：升开发版本（必做）
+
+Release 出来之后要让 main 的版本号前进一格，否则下一个 tag 会和已发布的撞车。
+
+按下一轮**改动类型**决定升哪一位：
+
+| 下一轮的改动 | 升位 | 例子 |
+|---|---|---|
+| 有新增功能 / 行为变化（常规迭代） | **次版本 +1**，补丁位归零 | 0.2.0 → 0.3.0 |
+| 只有缺陷修复 | **修订号 +1** | 0.2.0 → 0.2.1 |
+
+改了之后两处必须一致：
+
+```bash
+# 1) package.json / cli/lib/version.mjs / package-lock.json 三处改同一个版本号
+node scripts/check-version.mjs        # 一致
+node scripts/check-changelog.mjs      # 有 Unreleased 段；--release 此时应当失败
+
+git add package.json cli/lib/version.mjs package-lock.json CHANGELOG.md
+git commit -m "chore: 开始 <下一个版本> 开发"
+git push origin main
+```
+
+在 `CHANGELOG.md` 的 `[Unreleased]` 里记一行「发布后升版本号到 X」。
 
 ## 只验证、不发布（dry run）
 

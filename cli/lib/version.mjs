@@ -5,4 +5,4 @@
  * 编译后没有 package.json 可读，必须把版本内联进代码。
  * scripts/check-version.mjs 会校验它和 package.json 一致。
  */
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
