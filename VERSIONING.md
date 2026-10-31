@@ -54,14 +54,21 @@ main:  0.3.0 开发中 ──→ 打 tag cli-v0.3.0 ──→ 发布 ──→ �
 
 顺序不能反：**先声明版本 → 再落修复 → 最后收口**。
 
-发版时**在维护分支上打 tag**（不是 main）：
+发版时**在维护分支上打 tag**（不是 main），并且**只给变了的组件打**：
 
 ```bash
-git tag cli-v0.2.1
-git tag apk-v0.2.1
-git tag desktop-v0.2.1
-git push origin cli-v0.2.1 apk-v0.2.1 desktop-v0.2.1
+git tag cli-v0.2.1                  # 只有 CLI 变了就只打这一个
+git push origin cli-v0.2.1
 ```
+
+| 这次变了什么 | 打哪些 tag |
+|---|---|
+| 只有 CLI | `cli-v0.2.1` |
+| 只有 APK | `apk-v0.2.1` |
+| 只有桌面 | `desktop-v0.2.1` |
+| 多个都变 | 对应的那几个 |
+
+同一个版本号的 tag 必须指向同一个提交；补打漏掉的组件时不能有新提交，否则先升版本号。
 
 发完必须并回 main：
 

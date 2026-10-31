@@ -100,11 +100,27 @@ git commit -m "chore(release): 0.2.1"
    git push origin release/0.2.1
    git rev-parse --abbrev-ref HEAD      # 期望：release/0.2.1
    node scripts/check-version.mjs       # 期望：一致：0.2.1
-   git tag cli-v0.2.1
-   git tag apk-v0.2.1
-   git tag desktop-v0.2.1
-   git push origin cli-v0.2.1 apk-v0.2.1 desktop-v0.2.1
    ```
+
+   **只给变了的组件打 tag**（三个 workflow 互相独立，见下表）：
+
+   ```bash
+   git tag cli-v0.2.1                   # 只有 cli 变了就只打这一个
+   git push origin cli-v0.2.1
+   ```
+
+   | 这次变了什么 | 打哪些 tag |
+   |---|---|
+   | 只有 CLI | `cli-v0.2.1` |
+   | 只有 APK | `apk-v0.2.1` |
+   | 只有桌面 | `desktop-v0.2.1` |
+   | 两个 / 三个都变 | 对应的那几个 |
+
+   三条约束：
+
+   - 同一版本号的 tag **必须指向同一个提交**（都是维护分支 HEAD）；
+   - 补打漏掉的组件可以，但期间**不能有新的提交**，否则先升版本号再发；
+   - CHANGELOG 只写这次真发出去的组件。
 
    之后按 [release.md](release.md) 第 6–8 步观察与验收。
 
