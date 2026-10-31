@@ -184,27 +184,19 @@ mo --version                                    # 期望输出 $V
 
 ## 9.5 发版后：升开发版本（必做）
 
-Release 发出来之后，main 上的开发版本号要往前走一格，否则下一个 tag 会和已发布的撞车。
-
-按下一轮**改动类型**决定升哪一位：
-
-| 下一轮的改动 | 升位 | 例子 |
-|---|---|---|
-| 有新增功能 / 行为变化（常规迭代） | **次版本 +1**，补丁位归零 | 0.2.0 → 0.3.0 |
-| 只有缺陷修复 | **修订号 +1** | 0.2.0 → 0.2.1 |
-
-1. 改两个文件：`package.json`、`cli/lib/version.mjs`（同一个新版本号）；
-2. 同步 `package-lock.json` 里的根版本（`npm install --package-lock-only` 或手工替换）；
-3. 在 `CHANGELOG.md` 的 `## [Unreleased]` 下记一行「发布后升版本号到 X」；
-4. 校验并提交：
+发版成功后立刻把开发版本号推到下一个，否则下次 tag 会撞车。
 
 ```bash
-node scripts/check-version.mjs          # 一致
-node scripts/check-changelog.mjs        # 有 Unreleased 段即可（--release 此时应当失败）
-git add package.json cli/lib/version.mjs package-lock.json CHANGELOG.md
+git switch main
+node scripts/bump-version.mjs <下一个版本>   # 有功能 → 次版本 +1；纯修复 → 修订号 +1
+node scripts/check-version.mjs
+node scripts/check-changelog.mjs
+git add package.json package-lock.json cli/lib/version.mjs CHANGELOG.md
 git commit -m "chore: 开始 <下一个版本> 开发"
 git push origin main
 ```
+
+完整规则与分支模型见 [versioning.md](versioning.md)。
 ## 10. 收尾
 
 - 若本次是第一次正式版，提醒人类把三个 workflow 里的 `prerelease: true` 改成 `false`；
