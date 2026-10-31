@@ -59,10 +59,35 @@
           它不替 Agent 干活，只在它需要授权、等待回答、完成或失败的那一刻，把消息递到你面前。
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="https://github.com/insky2005/mo-agent/releases">下载 macOS 版</a>
+          <details class="dl">
+            <summary class="btn btn-primary">
+              下载
+              <svg class="caret" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </summary>
+            <div class="dl-menu" role="menu">
+              <a class="dl-item" role="menuitem" href="https://github.com/insky2005/mo-agent/releases"
+                 data-dl="desktop" data-tag="desktop-v" data-asset="macos-arm64\.zip$">
+                <span class="dl-name">macOS <em>Apple Silicon</em></span>
+                <span class="dl-state ok">可用</span>
+              </a>
+              <a class="dl-item" role="menuitem" href="https://github.com/insky2005/mo-agent/releases"
+                 data-dl="android" data-tag="apk-v" data-asset="android-.*\.apk$">
+                <span class="dl-name">Android <em>扫码安装</em></span>
+                <span class="dl-state ok">可用</span>
+              </a>
+              <div class="dl-item disabled" role="menuitem" aria-disabled="true">
+                <span class="dl-name">Linux</span>
+                <span class="dl-state wip">适配中</span>
+              </div>
+              <div class="dl-item disabled" role="menuitem" aria-disabled="true">
+                <span class="dl-name">Windows</span>
+                <span class="dl-state wip">适配中</span>
+              </div>
+              <a class="dl-all" href="https://github.com/insky2005/mo-agent/releases">查看全部发布版本 →</a>
+            </div>
+          </details>
           <a class="btn btn-ghost" href="#start">看怎么用</a>
         </div>
-        <p class="hero-meta">当前 macOS Apple Silicon 可用 · Android 已支持扫码配对 · Linux / Windows 适配中</p>
       </div>
       <div class="hero-art">
         <img src="assets/icon.svg" alt="Mo Agent 图标" width="300" height="300" />
@@ -241,5 +266,122 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ins
   </div>
 </footer>
 
+<script>
+  (function () {
+    // <details> 原生不会在点击外部或按 Esc 时收起
+    document.addEventListener('click', function (e) {
+      var open = document.querySelector('details.dl[open]');
+      if (open && !open.contains(e.target)) open.open = false;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('details.dl[open]').forEach(function (d) {
+          d.open = false;
+        });
+      }
+    });
+  })();
+
+  // 直接下载最新版
+  // 发布产物名带版本号（mo-agent-desktop-0.2.0-macos-arm64.zip），且 desktop / apk / cli
+  // 是三组独立的 tag，releases/latest/download 用不了，所以点的时候查一次 Releases API。
+  // 兜底：任何一步失败都退回发布页，不让按钮变成死链。
+  (function () {
+    var REPO = "insky2005/mo-agent";
+    var RELEASES = "https://github.com/" + REPO + "/releases";
+    var CACHE_KEY = "mo-releases-v1";
+    var TTL = 10 * 60 * 1000;
+
+    function cached() {
+      try {
+        var raw = sessionStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        var box = JSON.parse(raw);
+        if (Date.now() - box.at > TTL) return null;
+        return box.list;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function remember(list) {
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), list: list }));
+      } catch (e) {
+        /* 隐私模式下写不进去，忽略 */
+      }
+    }
+
+    function listReleases() {
+      var hit = cached();
+      if (hit) return Promise.resolve(hit);
+      return fetch("https://api.github.com/repos/" + REPO + "/releases?per_page=30", {
+        headers: { Accept: "application/vnd.github+json" }
+      }).then(function (r) {
+        if (!r.ok) throw new Error("api " + r.status);
+        return r.json();
+      }).then(function (list) {
+        remember(list);
+        return list;
+      });
+    }
+
+    function pick(list, tagPrefix, assetPattern) {
+      var re = new RegExp(assetPattern);
+      var rels = list
+        .filter(function (r) {
+          return !r.draft && (r.tag_name || "").indexOf(tagPrefix) === 0;
+        })
+        .sort(function (a, b) {
+          return new Date(b.published_at) - new Date(a.published_at);
+        });
+      for (var i = 0; i < rels.length; i++) {
+        var asset = (rels[i].assets || []).filter(function (a) {
+          return re.test(a.name);
+        })[0];
+        if (asset) return asset.browser_download_url;
+      }
+      return null;
+    }
+
+    function resolve(item) {
+      return listReleases().then(function (list) {
+        var url = pick(list, item.getAttribute("data-tag"), item.getAttribute("data-asset"));
+        if (!url) throw new Error("no asset");
+        return url;
+      });
+    }
+
+    function onClick(e) {
+      var item = e.target.closest("[data-dl]");
+      if (!item) return;
+      e.preventDefault();
+
+      var state = item.querySelector(".dl-state");
+      var label = state ? state.textContent : "";
+      if (state) state.textContent = "准备中…";
+      item.setAttribute("aria-busy", "true");
+
+      resolve(item)
+        .then(function (url) {
+          window.location.href = url;
+        })
+        .catch(function () {
+          window.location.href = RELEASES;
+        })
+        .then(function () {
+          setTimeout(function () {
+            if (state) state.textContent = label;
+            item.removeAttribute("aria-busy");
+          }, 3000);
+        });
+    }
+
+    document.addEventListener("click", onClick);
+
+    // 方便调试，也便于以后换成别的触发方式
+    window.MoDownloads = { resolve: resolve, listReleases: listReleases };
+  })();
+</script>
 </body>
 </html>
