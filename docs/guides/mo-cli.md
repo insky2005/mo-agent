@@ -92,7 +92,7 @@ CLI 拉起时写 `mo daemon`，桌面壳写 `desktop`；都没有时退回父进
 不想复制长链接就用：
 
 ```bash
-mo daemon open          # 安装与配对（默认）
+mo daemon open          # 监控屏（默认）
 mo daemon open dingtalk # 钉钉机器人绑定
 mo daemon open agents   # Agent 配置
 mo daemon open monitor  # 监控屏

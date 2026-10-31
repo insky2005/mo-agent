@@ -387,7 +387,8 @@ function openBrowser(url) {
 
 async function open(ctx, args) {
   const home = os.homedir();
-  const target = (args.positional || [])[1] || "app";
+  // 默认打开监控屏：它是日常最常看的页面
+  const target = (args.positional || [])[1] || "monitor";
   const pathname = OPEN_TARGETS[target];
   if (!pathname) {
     throw new MoError("E_USAGE", "不认识的目标：" + target, {
