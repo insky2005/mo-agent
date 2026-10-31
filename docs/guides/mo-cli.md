@@ -86,6 +86,9 @@ daemon 在跑（端口 7788，不是 mo daemon 拉起的），不做处理  # st
 
 `stop` 遇到不是自己拉起的，只提示并返回 2，不会去杀桌面 App 的进程。
 
+判断「谁启动的」靠 `~/.mo-agent/session.json` 里的 `launcher` 字段：
+CLI 拉起时写 `mo daemon`，桌面壳写 `desktop`；都没有时退回父进程名（`ps -o comm`）。
+
 不想复制长链接就用：
 
 ```bash

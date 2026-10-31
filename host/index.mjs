@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { loadConfig } from "./config.mjs";
 import { createLogger } from "./log.mjs";
 import { createRotatingSink } from "./log-file.mjs";
@@ -620,13 +621,44 @@ const moHost = createMoAgentServer({
 });
 runtime.clientCount = moHost.clientCount;
 
+// 谁把 host 拉起来的：优先用显式环境变量（CLI / 桌面壳会设置），
+// 否则尽力问一下父进程名字，纯粹用于展示。
+function parentName(pid) {
+  try {
+    if (process.platform === "linux") return fs.readFileSync("/proc/" + pid + "/comm", "utf8").trim();
+    const out = execFileSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 500 });
+    return out.trim().split("/").pop() || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveLauncher() {
+  const by = process.env.MO_AGENT_LAUNCHED_BY;
+  if (by) return { by, pid: Number(process.env.MO_AGENT_LAUNCHED_PID) || null };
+  const name = parentName(process.ppid);
+  return { by: name ? "unknown(" + name + ")" : "unknown", pid: process.ppid };
+}
+
+const LAUNCHER = resolveLauncher();
+
 function writeSessionFile(port) {
   const dir = path.dirname(sessionFile);
   const file = sessionFile;
   try {
     fs.mkdirSync(dir, { recursive: true });
     // 管理页鉴权也读这个令牌，文件权限收紧到仅当前用户。
-    fs.writeFileSync(file, JSON.stringify({ url: "http://127.0.0.1:" + port, token: localToken }, null, 2), { mode: 0o600 });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        url: "http://127.0.0.1:" + port,
+        token: localToken,
+        pid: process.pid,
+        launcher: LAUNCHER.by,
+        launcherPid: LAUNCHER.pid,
+      }, null, 2),
+      { mode: 0o600 },
+    );
     try { fs.chmodSync(file, 0o600); } catch (error) { /* 非 POSIX 或无权限时忽略 */ }
     return file;
   } catch (error) {
@@ -642,6 +674,7 @@ function banner(port) {
   lines.push("  本机:     http://127.0.0.1:" + port + "/");
   for (const item of localIPv4List()) lines.push("  手机:     http://" + item.address + ":" + port + "/   (" + item.name + ")");
   lines.push("  配对码:   " + moHost.pin);
+  lines.push("  启动者:   " + LAUNCHER.by + (LAUNCHER.pid ? " (pid " + LAUNCHER.pid + ")" : ""));
   lines.push("  数据源:   " + created.adapters.map((a) => a.name).join(", "));
   lines.push("  Agent档案: " + profiles.map((p) => p.id + (p.enabled === false ? "(未启用)" : "")).join(", "));
   lines.push("  Agent接入: http://127.0.0.1:" + port + "/agents （hooks 一键配置）");

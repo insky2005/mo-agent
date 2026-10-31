@@ -166,14 +166,32 @@ function printNext() {
   process.stdout.write("  停止    mo daemon stop\n");
 }
 
+function readSessionLauncher(home) {
+  try {
+    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    return {
+      launcher: typeof info.launcher === "string" ? info.launcher : null,
+      pid: Number(info.launcherPid) || null,
+    };
+  } catch {
+    return { launcher: null, pid: null };
+  }
+}
+
 // 统一成「（pid X，端口 Y）」；不是我们拉起的，把归属写进括号
-function where(port, pidInfo) {
+function where(port, pidInfo, home) {
   if (pidInfo && pidInfo.pid && alive(pidInfo.pid)) return "pid " + pidInfo.pid + "，端口 " + port;
-  return "端口 " + port + "，不是 mo daemon 拉起的";
+  const { launcher, pid } = readSessionLauncher(home);
+  if (launcher === "desktop") return "端口 " + port + "，由桌面 App 启动";
+  if (launcher === "mo daemon") return "端口 " + port + "，由 mo daemon 启动（pid 文件已丢）";
+  const m = typeof launcher === "string" ? launcher.match(/^unknown\((.+)\)$/) : null;
+  if (m) return "端口 " + port + "，" + m[1] + " 启动的";
+  const parent = pid ? "（父进程 pid " + pid + "）" : "";
+  return "端口 " + port + "，不是 mo daemon 拉起的" + parent;
 }
 
 async function printInfo(port, home, pidInfo) {
-  process.stdout.write("✓ daemon 已在运行（" + where(port, pidInfo) + "）\n");
+  process.stdout.write("✓ daemon 已在运行（" + where(port, pidInfo, home) + "）\n");
   printAccess(port, home);
 }
 
@@ -240,7 +258,13 @@ async function start(ctx, args) {
     cwd: host.root,
     detached: !foreground,
     stdio: foreground ? "inherit" : ["ignore", errFd, errFd],
-    env: { ...env, MO_AGENT_ROOT: host.root, MO_AGENT_NO_PARENT_WATCH: "1" },
+    env: {
+      ...env,
+      MO_AGENT_ROOT: host.root,
+      MO_AGENT_NO_PARENT_WATCH: "1",
+      MO_AGENT_LAUNCHED_BY: "mo daemon",
+      MO_AGENT_LAUNCHED_PID: String(process.pid),
+    },
   });
   if (errFd !== null) fs.closeSync(errFd);
 
@@ -286,7 +310,7 @@ async function stop() {
     // 没有我们拉起的进程，但可能有一个外部 host（桌面 App）在跑——不要动它
     const port = readSessionPort(home) || readConfigPort(process.env, home);
     if (await health(port)) {
-      process.stdout.write("daemon 在跑（" + where(port, null) + "），不做处理\n");
+      process.stdout.write("daemon 在跑（" + where(port, null, home) + "），不做处理\n");
       process.stdout.write("  停止    请退出桌面 App，或用那个入口停\n");
       return 2;
     }
@@ -294,7 +318,7 @@ async function stop() {
     return 0;
   }
 
-  process.stdout.write("停止 daemon（" + where(info.port, info) + "）\n");
+  process.stdout.write("停止 daemon（" + where(info.port, info, home) + "）\n");
   process.kill(info.pid, "SIGTERM");
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline && alive(info.pid)) {
@@ -319,7 +343,7 @@ async function status() {
     return 1;
   }
 
-  process.stdout.write("daemon  运行中（" + where(port, managed ? info : null) + "）\n");
+  process.stdout.write("daemon  运行中（" + where(port, managed ? info : null, home) + "）\n");
   process.stdout.write("  健康    ✓\n");
   printAccess(port, home);
   process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");

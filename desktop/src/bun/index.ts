@@ -356,6 +356,9 @@ async function ensureHost(): Promise<boolean> {
         env: {
           ...process.env,
           MO_AGENT_ROOT: root,
+          // 让 host 自己知道是谁拉起来的（mo daemon status 会用）
+          MO_AGENT_LAUNCHED_BY: "desktop",
+          MO_AGENT_LAUNCHED_PID: String(process.pid),
           MO_AGENT_LOG_FILE: LOG_FILE,
           // WorkBuddy 从 Finder 启动时 PATH 里没有 node；写 hook 时用这个绝对路径。
           MO_AGENT_NODE: resolveNode(),
