@@ -131,16 +131,22 @@ async function waitHealthy(port, timeoutMs = 15000) {
 }
 
 // 令牌只在 TTY 下直接打印；重定向到文件/CI 时给占位符，避免令牌进日志
-export function formatLink(port, pathname, token, tty) {
+/**
+ * mode: "full" 完整令牌 / "masked" 只露前 4 位 / "hidden" 占位符
+ * 默认不打印完整令牌，避免它留在终端回滚、CI 日志里。
+ */
+export function formatLink(port, pathname, token, mode = "hidden") {
   const base = "http://127.0.0.1:" + port + pathname;
   if (!token) return base;
   // pathname 里可能已经有 query（/settings?tab=app），这里要用 & 接
   const sep = pathname.includes("?") ? "&" : "?";
-  return tty ? base + sep + "token=" + token : base + sep + "token=<见 ~/.mo-agent/session.json>";
+  if (mode === "full") return base + sep + "token=" + token;
+  if (mode === "masked") return base + sep + "token=" + token.slice(0, 4) + "…";
+  return base + sep + "token=<见 ~/.mo-agent/session.json>";
 }
 
 function linkWithToken(port, pathname, home) {
-  return formatLink(port, pathname, readSessionToken(home), Boolean(process.stdout.isTTY));
+  return formatLink(port, pathname, readSessionToken(home), "masked");
 }
 
 function printAccess(port, home) {
@@ -404,9 +410,13 @@ async function open(ctx, args) {
     });
   }
 
-  const url = formatLink(port, pathname, readSessionToken(home), true);
-  const ok = openBrowser(url);
-  process.stdout.write((ok ? "已在浏览器打开" : "浏览器没打开，手动访问") + "：" + url + "\n");
+  const showToken = Boolean((args.options || {})["show-token"]);
+  const token = readSessionToken(home);
+  const real = formatLink(port, pathname, token, "full");
+  const shown = formatLink(port, pathname, token, showToken ? "full" : "masked");
+  const ok = openBrowser(real);
+  process.stdout.write((ok ? "已在浏览器打开" : "浏览器没打开，手动访问") + "：" + shown + "\n");
+  if (!showToken) process.stdout.write("  （令牌已脱敏；要完整链接加 --show-token）\n");
   return 0;
 }
 

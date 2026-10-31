@@ -62,8 +62,8 @@ mo daemon stop
 ```
 ✓ daemon 已启动（pid 12345）
   本机    http://127.0.0.1:7788/
-  监控    http://127.0.0.1:7788/monitor?token=…
-  设置    http://127.0.0.1:7788/setup?token=…
+  监控    http://127.0.0.1:7788/monitor?token=9rjw…
+  设置    http://127.0.0.1:7788/settings?tab=app&token=9rjw…
   配对    http://127.0.0.1:7788/pair
   安装    http://127.0.0.1:7788/app.apk（已就绪）
   状态    mo daemon status
@@ -71,7 +71,12 @@ mo daemon stop
   停止    mo daemon stop
 ```
 
-重定向到文件或 CI 时，令牌会换成 `<见 ~/.mo-agent/session.json>`，避免写进日志。
+令牌默认**脱敏**（只露前 4 位）；重定向到文件或 CI 时换成 `<见 ~/.mo-agent/session.json>`。
+需要完整链接时加 `--show-token`：
+
+```bash
+mo daemon open monitor --show-token
+```
 
 四个子命令的说法统一成 `（pid X，端口 Y）`；不是 `mo daemon` 拉起的，括号里直接写清楚：
 

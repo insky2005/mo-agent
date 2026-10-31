@@ -65,10 +65,10 @@ test("从 session.json 里认出 host 端口（url 或 port 两种写法）", ()
   assert.equal(readSessionPort(home), null);
 });
 
-test("带令牌的链接：TTY 下直接给，非 TTY 给占位符", () => {
-  assert.equal(formatLink(7788, "/monitor", "abc", true), "http://127.0.0.1:7788/monitor?token=abc");
-  assert.equal(formatLink(7788, "/monitor", "abc", false), "http://127.0.0.1:7788/monitor?token=<见 ~/.mo-agent/session.json>");
-  assert.equal(formatLink(7788, "/monitor", null, true), "http://127.0.0.1:7788/monitor");
-  assert.equal(formatLink(7788, "/settings?tab=app", "abc", true), "http://127.0.0.1:7788/settings?tab=app&token=abc");
-  assert.equal(formatLink(7788, "/settings?tab=app", "abc", false), "http://127.0.0.1:7788/settings?tab=app&token=<见 ~/.mo-agent/session.json>");
+test("链接令牌的三种呈现：full / masked / hidden", () => {
+  assert.equal(formatLink(7788, "/monitor", "abcd1234", "full"), "http://127.0.0.1:7788/monitor?token=abcd1234");
+  assert.equal(formatLink(7788, "/monitor", "abcd1234", "masked"), "http://127.0.0.1:7788/monitor?token=abcd…");
+  assert.equal(formatLink(7788, "/monitor", "abcd1234", "hidden"), "http://127.0.0.1:7788/monitor?token=<见 ~/.mo-agent/session.json>");
+  assert.equal(formatLink(7788, "/monitor", null, "masked"), "http://127.0.0.1:7788/monitor");
+  assert.equal(formatLink(7788, "/settings?tab=app", "abcd1234", "full"), "http://127.0.0.1:7788/settings?tab=app&token=abcd1234");
 });
