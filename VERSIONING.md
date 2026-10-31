@@ -54,6 +54,15 @@ main:  0.3.0 开发中 ──→ 打 tag cli-v0.3.0 ──→ 发布 ──→ �
 
 顺序不能反：**先声明版本 → 再落修复 → 最后收口**。
 
+发版时**在维护分支上打 tag**（不是 main）：
+
+```bash
+git tag cli-v0.2.1
+git tag apk-v0.2.1
+git tag desktop-v0.2.1
+git push origin cli-v0.2.1 apk-v0.2.1 desktop-v0.2.1
+```
+
 发完必须并回 main：
 
 ```bash

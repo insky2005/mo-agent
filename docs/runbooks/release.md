@@ -106,6 +106,14 @@ git push origin main
 
 ## 5. 打 tag 并推送
 
+**tag 打在哪个提交，就以哪个提交的 `package.json` 为准**——workflow 会 checkout 这个 tag
+校验版本号。所以先确认你站在正确的分支上：
+
+```bash
+git rev-parse --abbrev-ref HEAD        # main 发次版本；release/x.y.z 发补丁
+node scripts/check-version.mjs         # 必须是这次要发的版本
+```
+
 ```bash
 git tag cli-v$V
 git tag apk-v$V

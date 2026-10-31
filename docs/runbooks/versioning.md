@@ -94,7 +94,19 @@ git add CHANGELOG.md
 git commit -m "chore(release): 0.2.1"
 ```
 
-5. **发版**：按 [release.md](release.md) 第 5–8 步打 `*-v0.2.1` 三个 tag。
+5. **发版**：在**维护分支上**打 tag（不是在 main 上），workflow 会 checkout 这个 tag 校验版本号。
+
+   ```bash
+   git push origin release/0.2.1
+   git rev-parse --abbrev-ref HEAD      # 期望：release/0.2.1
+   node scripts/check-version.mjs       # 期望：一致：0.2.1
+   git tag cli-v0.2.1
+   git tag apk-v0.2.1
+   git tag desktop-v0.2.1
+   git push origin cli-v0.2.1 apk-v0.2.1 desktop-v0.2.1
+   ```
+
+   之后按 [release.md](release.md) 第 6–8 步观察与验收。
 
 6. **并回 main**：§5。
 
