@@ -162,10 +162,16 @@ async function waitForToken(home, timeoutMs = 1500) {
   return false;
 }
 
+const OPEN_HINT = "mo daemon open app|dingtalk|agents|voice|system|monitor";
+
+function printActions() {
+  process.stdout.write("  打开    " + OPEN_HINT + "\n");
+  process.stdout.write("  停止    mo daemon stop\n");
+}
+
 function printNext() {
   process.stdout.write("  状态    mo daemon status\n");
-  process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");
-  process.stdout.write("  停止    mo daemon stop\n");
+  printActions();
 }
 
 function readSessionLauncher(home) {
@@ -228,7 +234,6 @@ async function start(ctx, args) {
     }
     await printInfo(occupiedPort, home, existing);
     printNext();
-    process.stdout.write("  （不会再起第二个；上面注明了它由谁启动）\n");
     return 0;
   }
 
@@ -348,8 +353,7 @@ async function status() {
   process.stdout.write("daemon  运行中（" + where(port, managed ? info : null, home) + "）\n");
   process.stdout.write("  健康    ✓\n");
   printAccess(port, home);
-  process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");
-  process.stdout.write("  停止    mo daemon stop\n");
+  printActions();
   return 0;
 }
 
