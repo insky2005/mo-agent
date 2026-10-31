@@ -66,6 +66,8 @@ mo daemon stop
   配对    http://127.0.0.1:7788/pair
   管理    http://127.0.0.1:7788/setup?token=…
   安装    http://127.0.0.1:7788/app.apk（已就绪）
+  状态    mo daemon status
+  打开    mo daemon open [monitor|setup|pair]
   停止    mo daemon stop
 ```
 

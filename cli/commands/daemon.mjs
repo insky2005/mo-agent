@@ -160,6 +160,12 @@ async function waitForToken(home, timeoutMs = 1500) {
   return false;
 }
 
+function printNext() {
+  process.stdout.write("  状态    mo daemon status\n");
+  process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");
+  process.stdout.write("  停止    mo daemon stop\n");
+}
+
 async function printInfo(port, home, origin) {
   process.stdout.write("✓ host 已在运行（端口 " + port + "，" + origin + "）\n");
   printAccess(port, home);
@@ -196,7 +202,8 @@ async function start(ctx, args) {
     }
     const owner = existing && alive(existing.pid) ? "mo daemon 启动的" : "可能来自桌面 App";
     await printInfo(occupiedPort, home, owner);
-    process.stdout.write("  （不会再起第二个；要停它请用对应方式：桌面 App 退出 / mo daemon stop）\n");
+    printNext();
+    process.stdout.write("  （不会再起第二个。`mo daemon stop` 只停命令行起的；桌面 App 起的请退出 App）\n");
     return 0;
   }
 
@@ -262,7 +269,7 @@ async function start(ctx, args) {
   await waitForToken(home);
   process.stdout.write("✓ daemon 已启动（pid " + child.pid + "）\n");
   printAccess(port, home);
-  process.stdout.write("  停止    mo daemon stop\n");
+  printNext();
   return 0;
 }
 
