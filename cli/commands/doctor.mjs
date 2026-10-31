@@ -11,6 +11,13 @@ import { memoryDir } from "../lib/knowledge.mjs";
  * 自检：只有必需项失败才算失败。
  * ledger / memory / cwd-project 属于"还没用到"，用 ⚠ 提示，不阻塞。
  */
+/** 当前目录是否落在某个已登记项目里（含子目录） */
+export function insideProject(cwd, projects) {
+  return (projects || []).some((project) =>
+    (project.paths || []).some((root) => cwd === root || cwd.startsWith(root + "/") || cwd.startsWith(root + "\\")),
+  );
+}
+
 /** 只读检查项：mo doctor 与 mo setup 的汇总共用 */
 export function doctorReport(cwd, options = {}) {
   const home = options.home || moHome();
@@ -25,7 +32,7 @@ export function doctorReport(cwd, options = {}) {
     { name: "ledger", required: false, ok: fs.existsSync(ledgerDir(home)), value: events.length + " 条事件" },
     { name: "memory", required: false, ok: fs.existsSync(memory.dir), value: memory.dir },
     { name: "projects", required: false, ok: projects.length > 0, value: projects.length + " 个" },
-    { name: "cwd-project", required: false, ok: projects.some((p) => (p.paths || []).includes(cwd)), value: cwd },
+    { name: "cwd-project", required: false, ok: insideProject(cwd, projects), value: cwd },
   ];
 
   const ok = checks.filter((check) => check.required).every((check) => check.ok);
