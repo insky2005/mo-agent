@@ -2,10 +2,11 @@ name: ci
 
 on:
   push:
-    # main 与功能分支都跑；PR 上也会跑一次
+    # main、功能分支、维护分支都跑；PR 上也会跑一次
     branches:
       - main
       - "feat/**"
+      - "release/**"
   pull_request:
   workflow_dispatch:
 

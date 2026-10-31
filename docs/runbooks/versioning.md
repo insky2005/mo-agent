@@ -68,7 +68,7 @@ node scripts/check-changelog.mjs --release   # 期望：[changelog] 发版检查
 
 补丁不走 main，从上一个发布点拉分支。
 
-1. **建分支**
+1. **建分支**（`release/**` 会触发 CI，和 main 一样跑测试）
 
 ```bash
 git switch -c release/0.2.1 <上一个发布点的提交>
