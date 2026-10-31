@@ -15,6 +15,14 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 修复
 
+## [0.2.1] - 2026-10-31
+
+### 修复
+
+- `mo doctor` 的自检项改用中文名称，`cwd-project` 改为「当前目录」并直接说明是否属于项目。
+- `mo doctor` 在已登记项目的**子目录**里不再误报「不在项目内」。
+- `mo setup` 不再把项目相关自检算作「待处理」，家目录下也不再建议就地 `mo project init`。
+
 ## [0.2.0] - 2026-10-31
 
 首个对外版本（pre-release）。

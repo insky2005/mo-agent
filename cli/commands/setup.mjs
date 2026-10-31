@@ -3,7 +3,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
 import { all, has } from "../lib/args.mjs";
-import { emit, isJson } from "../lib/output.mjs";
+import { emit, isJson, padDisplay } from "../lib/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import {
@@ -560,10 +560,18 @@ function parseIdList(options, name, validIds) {
   return ids;
 }
 
+function remedyFor(check) {
+  // 在家目录跑 setup 时，别建议在这里 init——会认领整个家目录
+  if (check.name === "cwd-project") {
+    return fs.existsSync(path.join(check.value, ".git")) ? "mo project init ." : "cd <仓库> && mo project init";
+  }
+  return REMEDY[check.name] || "mo doctor 查看";
+}
+
 function remainingActions(report) {
   return report.checks
     .filter((check) => !check.ok)
-    .map((check) => ({ check: check.name, value: check.value, action: REMEDY[check.name] || "mo doctor 查看" }));
+    .map((check) => ({ check: check.name, value: check.value, action: remedyFor(check) }));
 }
 
 /** 本次已经做掉/计划要做的步骤覆盖了哪些自检项（dry-run 时别把它们算成"剩余动作"） */
@@ -588,10 +596,20 @@ function entryLines(entry, dryRun = false) {
   return lines;
 }
 
+// setup 不碰仓库，所以「在不在项目里」不是它要处理的事——只作提示，不算待处理
+const SETUP_INFO_ONLY = {
+  "cwd-project": "当前目录不是 mo 项目；要建卡派单先 mo project init",
+  projects: "还没登记任何项目；在仓库里 mo project init",
+};
+
 function summaryLines(report, remaining, covered = new Set()) {
-  const notes = report.checks.filter((check) => !check.ok && !covered.has(check.name));
+  const open = report.checks.filter((check) => !check.ok && !covered.has(check.name));
+  const notes = open.filter((check) => !SETUP_INFO_ONLY[check.name]);
+  const infos = open.filter((check) => SETUP_INFO_ONLY[check.name]);
   const lines = ["汇总：自检" + (notes.length ? "有 " + notes.length + " 项待处理" : "全部通过")];
-  for (const check of notes) lines.push("  ⚠ " + check.name.padEnd(12) + " " + check.value);
+  for (const check of notes) lines.push("  ⚠ " + padDisplay(check.label || check.name, 12) + " " + check.value);
+  // 具体的下一步命令由「剩余动作」给出，这里只标一句说明，不重复
+  for (const check of infos) lines.push("  ℹ " + padDisplay(check.label || check.name, 12) + " " + check.value);
   if (remaining.length) {
     lines.push("", "剩余动作：");
     for (const item of remaining) lines.push("  - " + item.action);
