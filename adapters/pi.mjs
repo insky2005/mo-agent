@@ -47,6 +47,16 @@ export class PiAdapter extends TranscriptAdapter {
     return caps;
   }
 
+  /** 控制扩展上下线后立即刷新会话能力，避免 UI 等到下一次轮询。 */
+  refreshControl(sessionId) {
+    const target = String(sessionId || "");
+    const st = [...this.sessions.values()].find((item) => {
+      const id = this.idFor(item.sessionId);
+      return id === target || id === "pi:" + target;
+    });
+    if (st) this.publish(st);
+  }
+
   /** 前缀扫描（大文件只看尾部时用来补轮次/最后提问）。 */
   userTurnText(line) {
     if (!line || line.indexOf('"type":"message"') === -1) return "";
@@ -203,9 +213,17 @@ export class PiAdapter extends TranscriptAdapter {
     st.status = status;
 
     const title = this.titleFor(st);
-    if (prev === status && st.publishedMtime === st.mtimeMs && st.publishedTitle === title) return;
+    const capabilities = this.capabilitiesFor(st);
+    const controlSig = JSON.stringify(capabilities.control || []);
+    if (
+      prev === status
+      && st.publishedMtime === st.mtimeMs
+      && st.publishedTitle === title
+      && st.publishedControl === controlSig
+    ) return;
     st.publishedMtime = st.mtimeMs;
     st.publishedTitle = title;
+    st.publishedControl = controlSig;
 
     const sessionId = this.idFor(st.sessionId);
     const record = {
@@ -213,7 +231,7 @@ export class PiAdapter extends TranscriptAdapter {
       sessionId,
       agent: this.name,
       agentLabel: this.labelFor(st),
-      capabilities: this.capabilitiesFor(st),
+      capabilities,
       title,
       cwd: st.cwd,
       status,

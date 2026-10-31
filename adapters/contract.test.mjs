@@ -13,7 +13,7 @@ const profiles = loadProfiles(profilesDir);
 const quiet = { info() {}, warn() {}, error() {}, debug() {} };
 
 const RUN_END = new Set(["explicit", "inferred", "none"]);
-const OBSERVE = new Set(["process", "transcript", "native-api", "acp", "log"]);
+const OBSERVE = new Set(["process", "transcript", "native-api", "acp", "extension", "log"]);
 const ATTENTION = new Set(["hook", "native", "derived", "extension", "none"]);
 const APPROVAL = new Set(["allow", "deny", "none"]);
 

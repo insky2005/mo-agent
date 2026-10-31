@@ -6,6 +6,6 @@
 |---|---|---|---|---|---|---|---|---|
 | `claude-code` | Claude Code | `process`, `transcript` | `explicit` | `hook` | `allow` | — | `jsonl-transcript` | `./claude-code.mjs` |
 | `dsh` | DeepSeek Harness | `process`, `native-api` | `inferred` | `native` | `allow` | `prompt`, `cancel` | `native-api` | `./dsh-monitor.mjs` |
-| `pi` | Pi | `process`, `transcript` | `explicit` | `extension` | `none` | — | `jsonl-transcript` | `./pi.mjs` |
+| `pi` | Pi | `process`, `transcript`, `extension` | `explicit` | `extension` | `none` | `prompt`, `cancel` | `jsonl-transcript` | `./pi.mjs` |
 | `qoder-cn` | Qoder CN | `process`, `transcript` | `explicit` | `hook` | `allow` | — | `jsonl-transcript` | `./qoder-cn.mjs` |
 | `workbuddy` | WorkBuddy | `transcript` | `inferred` | `hook` | `allow` | — | `jsonl-transcript` | `./workbuddy.mjs` |

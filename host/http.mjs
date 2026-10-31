@@ -83,6 +83,7 @@ export function createMoAgentServer(options) {
   const hub = options.hub;
   const broker = options.broker;
   const dsh = options.dsh;
+  const piControl = options.piControl || null;
   const processes = options.processes;
   const dshMonitor = options.monitor;
   const runtime = options.runtime;
@@ -349,6 +350,49 @@ export function createMoAgentServer(options) {
         const result = await options.voiceReload();
         return json(res, 200, result);
       }
+      // ---- Pi 控制扩展（仅本机；扩展主动长轮询） ----
+      if (pathname === "/local/pi/session" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, Object.assign({ ok: true }, piControl.register(body)));
+        } catch (error) {
+          return json(res, 400, { ok: false, code: error.code || null, error: error.message || "注册失败" });
+        }
+      }
+      if (pathname === "/local/pi/commands" && req.method === "GET") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+        const sessionId = url.searchParams.get("sessionId");
+        if (!sessionId) return json(res, 400, { ok: false, error: "缺少 sessionId" });
+        const wait = Number(url.searchParams.get("wait")) || 25000;
+        try {
+          const commands = await piControl.poll(sessionId, wait);
+          if (!res.writableEnded) return json(res, 200, { ok: true, commands });
+          return;
+        } catch (error) {
+          const status = error.code === "E_NOT_FOUND" ? 404 : 400;
+          return json(res, status, { ok: false, code: error.code || null, error: error.message || "轮询失败" });
+        }
+      }
+      if (pathname === "/local/pi/ack" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, Object.assign({ ok: true }, piControl.ack(body.sessionId, body)));
+        } catch (error) {
+          return json(res, 404, { ok: false, code: error.code || null, error: error.message || "会话不存在" });
+        }
+      }
+      if (pathname === "/local/pi/event" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+        const body = await readBody(req);
+        return json(res, 200, Object.assign({ ok: true }, piControl.event(body.sessionId, body)));
+      }
+
       if (pathname === "/local/voice-test" && req.method === "POST") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         if (typeof options.voiceTest !== "function") {
@@ -565,6 +609,17 @@ export function createMoAgentServer(options) {
         if (!canControl(session, "prompt")) {
           return json(res, 409, { ok: false, error: (session.agentLabel || session.agent || "该 Agent") + " 会话仅观测，不能发送指令" });
         }
+        if (session.agent === "pi") {
+          if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+          try {
+            const value = piControl.prompt(body.sessionId, String(body.text), body.mode);
+            log.info("已向 Pi 会话 " + body.sessionId + " 发送指令");
+            return json(res, 200, { ok: true, value });
+          } catch (error) {
+            const status = error.code === "E_OFFLINE" ? 409 : error.code === "E_USAGE" ? 400 : 500;
+            return json(res, status, { ok: false, code: error.code || null, error: error.message || "发送失败" });
+          }
+        }
         if (!dsh) return json(res, 503, { ok: false, error: "控制通道不可用" });
         const value = await dsh.prompt(body.sessionId, String(body.text), body.mode);
         log.info("已向会话 " + body.sessionId + " 发送指令");
@@ -578,6 +633,17 @@ export function createMoAgentServer(options) {
         if (!session) return json(res, 404, { ok: false, error: "会话不存在或已离线" });
         if (!canControl(session, "cancel")) {
           return json(res, 409, { ok: false, error: (session.agentLabel || session.agent || "该 Agent") + " 会话仅观测，不能中断" });
+        }
+        if (session.agent === "pi") {
+          if (!piControl) return json(res, 503, { ok: false, error: "控制通道不可用" });
+          try {
+            const value = piControl.cancel(body.sessionId);
+            log.info("已请求中断 Pi 会话 " + body.sessionId);
+            return json(res, 200, { ok: true, value });
+          } catch (error) {
+            const status = error.code === "E_OFFLINE" ? 409 : 500;
+            return json(res, status, { ok: false, code: error.code || null, error: error.message || "中断失败" });
+          }
         }
         if (!dsh) return json(res, 503, { ok: false, error: "控制通道不可用" });
         const value = await dsh.cancel(body.sessionId);

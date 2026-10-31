@@ -18,12 +18,16 @@
   "capabilities": {
     "observe": [
       "process",
-      "transcript"
+      "transcript",
+      "extension"
     ],
     "runEnd": "explicit",
     "attention": "extension",
     "approval": "none",
-    "control": []
+    "control": [
+      "prompt",
+      "cancel"
+    ]
   },
   "hooks": {
     "kind": "pi-extension",

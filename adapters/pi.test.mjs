@@ -196,3 +196,27 @@ test("Pi 适配器：session_info 作为会话名，history 跟随活动分支",
   assert.equal(history.turns[1].prompt, "新分支");
   assert.equal(history.turns[1].response, "新分支回答");
 });
+
+test("Pi 适配器：控制扩展在线时才暴露 prompt/cancel", () => {
+  const { root, project } = setup();
+  const sessionId = "sess-pi-control";
+  const file = path.join(project, "2026-10-25T05-00-00-000Z_" + sessionId + ".jsonl");
+  const u1 = message("user", "需要控制");
+  const a1 = message("assistant", [{ type: "text", text: "好" }], { stopReason: "stop", parentId: u1.id });
+  fs.writeFileSync(file, line(header(sessionId, "/tmp/project")) + line(u1) + line(a1));
+
+  let online = false;
+  const control = { isOnline: () => online };
+  const hub = new Hub({ log: quiet });
+  const events = [];
+  hub.store.subscribe((event) => events.push(event));
+  const adapter = new PiAdapter({ hub, log: quiet, control, profile: { session: { root } } });
+  adapter.tick();
+  assert.deepEqual(hub.get("pi:" + sessionId).capabilities.control, []);
+
+  online = true;
+  events.length = 0;
+  adapter.refreshControl("pi:" + sessionId);
+  assert.deepEqual(hub.get("pi:" + sessionId).capabilities.control, ["prompt", "cancel"]);
+  assert.ok(events.some((event) => event.type === EVENT.SESSION_UPSERT));
+});
