@@ -166,17 +166,14 @@ function printNext() {
   process.stdout.write("  停止    mo daemon stop\n");
 }
 
-function originLine(pidInfo) {
-  if (pidInfo && pidInfo.pid && alive(pidInfo.pid)) {
-    const started = pidInfo.startedAt ? new Date(pidInfo.startedAt).toLocaleString() : "未知时间";
-    return "mo daemon（pid " + pidInfo.pid + "，启动于 " + started + "）";
-  }
-  return "桌面 App 或其它进程（不是 mo daemon 拉起的）";
+// 统一成「（pid X，端口 Y）」；不是我们拉起的，把归属写进括号
+function where(port, pidInfo) {
+  if (pidInfo && pidInfo.pid && alive(pidInfo.pid)) return "pid " + pidInfo.pid + "，端口 " + port;
+  return "端口 " + port + "，不是 mo daemon 拉起的";
 }
 
 async function printInfo(port, home, pidInfo) {
-  process.stdout.write("✓ host 已在运行（端口 " + port + "）\n");
-  process.stdout.write("  来源    " + originLine(pidInfo) + "\n");
+  process.stdout.write("✓ daemon 已在运行（" + where(port, pidInfo) + "）\n");
   printAccess(port, home);
 }
 
@@ -275,7 +272,7 @@ async function start(ctx, args) {
   }
 
   await waitForToken(home);
-  process.stdout.write("✓ daemon 已启动（pid " + child.pid + "）\n");
+  process.stdout.write("✓ daemon 已启动（pid " + child.pid + "，端口 " + port + "）\n");
   printAccess(port, home);
   printNext();
   return 0;
@@ -289,8 +286,7 @@ async function stop() {
     // 没有我们拉起的进程，但可能有一个外部 host（桌面 App）在跑——不要动它
     const port = readSessionPort(home) || readConfigPort(process.env, home);
     if (await health(port)) {
-      process.stdout.write("有 host 在跑（端口 " + port + "），不做处理\n");
-      process.stdout.write("  来源    " + originLine(null) + "\n");
+      process.stdout.write("daemon 在跑（" + where(port, null) + "），不做处理\n");
       process.stdout.write("  停止    请退出桌面 App，或用那个入口停\n");
       return 2;
     }
@@ -298,8 +294,7 @@ async function stop() {
     return 0;
   }
 
-  process.stdout.write("停止 host（端口 " + info.port + "）\n");
-  process.stdout.write("  来源    " + originLine(info) + "\n");
+  process.stdout.write("停止 daemon（" + where(info.port, info) + "）\n");
   process.kill(info.pid, "SIGTERM");
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline && alive(info.pid)) {
@@ -324,8 +319,7 @@ async function status() {
     return 1;
   }
 
-  process.stdout.write("daemon  运行中（端口 " + port + "）\n");
-  process.stdout.write("  来源    " + originLine(managed ? info : null) + "\n");
+  process.stdout.write("daemon  运行中（" + where(port, managed ? info : null) + "）\n");
   process.stdout.write("  健康    ✓\n");
   printAccess(port, home);
   process.stdout.write("  打开    mo daemon open [monitor|setup|pair]\n");

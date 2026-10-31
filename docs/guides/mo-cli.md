@@ -73,15 +73,18 @@ mo daemon stop
 
 重定向到文件或 CI 时，令牌会换成 `<见 ~/.mo-agent/session.json>`，避免写进日志。
 
-`status` 和 `stop` 会多打一行 `来源`，说清这个 host 是谁启动的：
+四个子命令的说法统一成 `（pid X，端口 Y）`；不是 `mo daemon` 拉起的，括号里直接写清楚：
 
 ```
-daemon  运行中（端口 7788）
-  来源    mo daemon（pid 12345，启动于 2026/10/31 08:17:32）
-  来源    桌面 App 或其它进程（不是 mo daemon 拉起的）
+✓ daemon 已启动（pid 12345，端口 7788）        # start 新起
+✓ daemon 已在运行（pid 12345，端口 7788）      # start 幂等
+daemon  运行中（pid 12345，端口 7788）         # status
+
+✓ daemon 已在运行（端口 7788，不是 mo daemon 拉起的）   # 桌面 App 起的
+daemon 在跑（端口 7788，不是 mo daemon 拉起的），不做处理  # stop 拒绝
 ```
 
-`stop` 遇到第二种只会提示并返回 2，不会去杀别人启动的 host。
+`stop` 遇到不是自己拉起的，只提示并返回 2，不会去杀桌面 App 的进程。
 
 不想复制长链接就用：
 
