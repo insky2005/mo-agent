@@ -9,6 +9,16 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 新增
 
+### 变更
+
+### 修复
+
+## [0.2.0] - 2026-10-31
+
+首个对外版本（pre-release）。
+
+### 新增
+
 - **任务卡工作流**：`mo task create / confirm / approve / reject / dispatch / status / list / cancel / verify / logs`；
   人批准会校验卡片指纹，验收按 `run:` / `check:` / `human:` 三类执行，全过程写账本。
 - **执行者与终端**：`mo worker` 支持无头与会话型执行者、项目级覆盖、默认执行者；`mo terminal` 注册终端并设默认。
