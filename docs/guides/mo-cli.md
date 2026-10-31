@@ -109,7 +109,7 @@ mo daemon open monitor  # 监控屏
 想回到带地址栏的普通浏览器：
 
 ```bash
-mo daemon open --no-app
+mo daemon open --browser
 ```
 
 本机需要装了 Chrome / Edge / Brave / Chromium 之一；一个都没有时自动退回普通浏览器，不影响使用。

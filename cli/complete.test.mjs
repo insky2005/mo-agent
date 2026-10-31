@@ -148,6 +148,13 @@ test("daemon 的子命令和 flag 能补全", () => {
   const targets = values(complete({ cwd: os.tmpdir(), words: ["daemon", "open", ""] }));
   assert.deepEqual(targets.sort(), ["agents", "app", "dingtalk", "monitor", "system", "voice"]);
 
+  const openFlags = complete({ cwd: os.tmpdir(), words: ["daemon", "open", "--"] });
+  const names = openFlags.map((f) => f.value);
+  assert.ok(names.includes("--browser"));
+  assert.ok(names.includes("--show-token"));
+  // 补全条目要带说明
+  assert.match(openFlags.find((f) => f.value === "--browser").description, /浏览器/);
+
   const flags = values(complete({ cwd: os.tmpdir(), words: ["daemon", "start", "--"] }));
   assert.ok(flags.includes("--port"));
   assert.ok(flags.includes("--foreground"));

@@ -448,8 +448,8 @@ async function open(ctx, args) {
   }
 
   const opts = args.options || {};
-  // 默认用无地址栏的窗口；想看地址栏就加 --no-app
-  const appMode = !opts["no-app"];
+  // 默认用无地址栏的窗口；想看地址栏就加 --browser（--no-app 保留为旧写法）
+  const appMode = !(opts.browser || opts["no-app"]);
   const showToken = Boolean(opts["show-token"]);
   const token = readSessionToken(home);
   const real = formatLink(port, pathname, token, "full");

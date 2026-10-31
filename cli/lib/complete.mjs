@@ -119,7 +119,7 @@ const SPEC = {
   daemon: {
     subs: {
       start: { flags: ["--port", "--foreground"] },
-      open: { flags: [], positional: "daemonTarget" },
+      open: { flags: ["--browser", "--show-token"], positional: "daemonTarget" },
       stop: { flags: [] },
       status: { flags: [] },
     },
@@ -274,8 +274,23 @@ export function complete(ctx = {}) {
   return flagItems(flags, current);
 }
 
+/** flag 的说明，补全时一起显示；没列到的给空串 */
+const FLAG_DESC = {
+  "--browser": "用普通浏览器打开（带地址栏）",
+  "--show-token": "链接里显示完整令牌",
+  "--port": "端口号，默认 7788",
+  "--foreground": "前台运行，Ctrl+C 停",
+  "--json": "机器可读输出",
+  "--help": "看这一组的用法",
+  "--project": "指定项目",
+  "--yes": "跳过确认",
+  "--dry-run": "只预演，不落盘",
+  "--only": "只跑指定步骤",
+  "--skip": "跳过指定步骤",
+};
+
 function flagItems(flags, current) {
-  return unique(flags).map((flag) => item(flag, "")).filter(startsWith(current));
+  return unique(flags).map((flag) => item(flag, FLAG_DESC[flag] || "")).filter(startsWith(current));
 }
 
 /** zsh 的 _describe 需要 "值:说明"；把值里可能出现的冒号换掉 */
