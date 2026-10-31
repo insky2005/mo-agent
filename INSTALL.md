@@ -104,14 +104,56 @@ npm ci
 npm start                       # 直接跑 host（前台）
 ```
 
-构建并安装 CLI 到本机：
+### CLI
 
 ```bash
-bash scripts/build-cli.sh       # 产物在 cli/dist/mo
+bash scripts/build-cli.sh       # 产物在 cli/dist/mo（本机架构）
 bash scripts/install-cli.sh     # 构建并装到 ~/.local/bin
 ```
 
-桌面与 Android 的构建见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+交叉编译指定平台（需要 bun）：
+
+```bash
+TARGET=bun-linux-x64 OUT_NAME=mo-linux-x64 bash scripts/build-cli.sh
+```
+
+### 桌面 App（macOS arm64）
+
+前提：macOS + bun + [hutch](https://hutch.blackboard.sh)（Electrobun 工具链，脚本会提示安装命令）。
+
+```bash
+bash scripts/build-desktop.sh            # 产物 desktop/build/stable-macos-*/mo-agent.app
+bash scripts/install-desktop.sh          # 装到 /Applications（无写权限时退回 ~/Applications）
+```
+
+常见变体：
+
+| 需求 | 命令 |
+|---|---|
+| 轻包（不含 254MB 语音资源，约 46MB） | `WITH_VOICE=0 bash scripts/build-desktop.sh` |
+| 顺带打包 APK（扫码即可装） | 先 `bash scripts/build-android.sh`，再构建桌面 |
+| 首次构建要下模型 | 直接跑，脚本会调 `build-whisper.sh`（约 252MB） |
+
+构建时会把 HMS 默认配置一起打进去，除非显式关掉：
+
+```bash
+MO_AGENT_DESKTOP_HMS=0 bash scripts/build-desktop.sh   # 发布用：不带任何凭据
+```
+
+### Android APK
+
+前提：JDK 21 + Android SDK（默认读 `$ANDROID_HOME`，或 `~/Library/Android/sdk`）。
+
+```bash
+bash scripts/build-android.sh            # 产物 app/android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+- 脚本会自动 `npx cap sync android`，并把 `versionCode` 加一（CI 里用 `MO_VERSION_CODE` 固定）；
+- 想用正式签名：把 keystore 放到 `app/android/app/keystore/`，写一份 `keystore.properties`（两者都已 gitignore）；没有就退回仓库里的 debug key；
+- 不带 `agconnect-services.json` 也能构建，只是没有 HMS 推送能力——CI 就是这么构建的。
+
+> 更多细节（Electrobun 布局、语音资源、签名注入、CI 环境差异）见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
 ---
 
