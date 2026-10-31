@@ -190,12 +190,12 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ins
         <p>没有你的决定，它不会替你放行。这条写在设计里，也写在代码里。</p>
       </div>
       <ul class="grid-2">
-        <li><strong>本机优先</strong>：管理页只允许电脑本机访问，并且必须携带本机令牌。</li>
+        <li><strong>本机优先</strong>：只允许本机访问，且必须携带本机令牌。</li>
         <li><strong>不自动放行</strong>：超时或无法确认，一律交回本地终端。</li>
-        <li><strong>语音有分寸</strong>：批准需要复述口令，音频只在本机识别，不上传。</li>
-        <li><strong>改动可回退</strong>：只增删自己写入的 hook，修改前自动备份，坏 JSON 不覆盖。</li>
-        <li><strong>配对一次性</strong>：二维码令牌默认 5 分钟、兑换即失效。</li>
-        <li><strong>来源可查</strong>：source-available，全部代码在 GitHub 上公开可读。</li>
+        <li><strong>语音有分寸</strong>：批准需复述口令，音频只在本机识别。</li>
+        <li><strong>改动可回退</strong>：只增删自己的 hook，改前自动备份。</li>
+        <li><strong>配对一次性</strong>：令牌 5 分钟有效，兑换即作废。</li>
+        <li><strong>来源可查</strong>：源码公开，可逐行审计。</li>
       </ul>
     </div>
   </section>
