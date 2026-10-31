@@ -1,7 +1,7 @@
 # 发布 Runbook（给 AI 执行）
 
 > 面向执行 Agent 的操作手册：**逐步可执行、每步有判据、失败有分支**。
-> 人类可读的版本见 [RELEASE.md](../../RELEASE.md)。
+> 人类可读的版本见 [RELEASE.md](../../RELEASE.md)；版本号规则与分支模型见 [../guides/versioning.md](../guides/versioning.md)。
 
 ## 0. 你要交付什么
 
