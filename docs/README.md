@@ -51,6 +51,7 @@ docs/
 |---|---|
 | [mo-cli.md](guides/mo-cli.md) | **mo CLI 使用说明**：概念、上手、命令速查、验收、日志排障 |
 | [agent-hooks.md](guides/agent-hooks.md) | 一键配置各家 Agent 的 hooks：写什么、怎么回退、安全边界 |
+| [pi-control.md](guides/pi-control.md) | Pi 观测 + 控制扩展：安装、指令/中断、边界与逃生口 |
 | [voice.md](guides/voice.md) | 语音批准与口述：用法、口令、排障 |
 
 ### reference/ — 查表

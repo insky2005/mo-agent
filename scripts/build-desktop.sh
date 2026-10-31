@@ -47,6 +47,9 @@ for f in adapters/*.mjs; do
     *) cp "$f" "$RUNTIME_STAGE/adapters/" ;;
   esac
 done
+# Pi 控制扩展源文件：安装时由脚本复制到 ~/.pi/agent/extensions/
+mkdir -p "$RUNTIME_STAGE/integrations/pi"
+cp -R integrations/pi/. "$RUNTIME_STAGE/integrations/pi/"
 for f in core/*.mjs; do
   case "$f" in
     *.test.mjs) ;;

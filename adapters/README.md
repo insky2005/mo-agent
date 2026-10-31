@@ -17,9 +17,9 @@ cp adapters/profiles/_template.json adapters/profiles/<id>.json
 | `module` | adapter 模块，相对 `adapters/`，例如 `"./foo.mjs"` |
 | `export` | 模块里导出的类名；缺省用 `default` |
 | `session` | 数据源位置/格式，adapter 自己解释 |
-| `capabilities.observe` | `process` / `transcript` / `native-api` / `acp` / `log` |
+| `capabilities.observe` | `process` / `transcript` / `native-api` / `acp` / `extension` / `log` |
 | `capabilities.runEnd` | `explicit` / `inferred` / `none` |
-| `capabilities.attention` | `hook` / `native` / `derived` / `none` |
+| `capabilities.attention` | `hook` / `native` / `derived` / `extension` / `none` |
 | `capabilities.approval` | `allow` / `deny` / `none` |
 | `hooks.events` | 厂商 hook 名 → 规范事件，例如 `"Notification": "notice"` |
 
@@ -51,7 +51,8 @@ export class FooAdapter {
 
 - [adapters/dsh-monitor.mjs](dsh-monitor.mjs)：`runEnd: inferred`，轮次推进 + 实时 status；
 - [adapters/claude-code.mjs](claude-code.mjs)：`runEnd: explicit`，transcript `end_turn`；
-- [adapters/qoder-cn.mjs](qoder-cn.mjs)：同一个 transcript 基类，换目录与命名。
+- [adapters/qoder-cn.mjs](qoder-cn.mjs)：同一个 transcript 基类，换目录与命名；
+- [adapters/pi.mjs](pi.mjs)：不同构的 JSONL（`type: "message"` + 树形分支），单独解析。
 
 如果新 Agent 的 transcript 也是 Claude Code 同构（`user` / `assistant` / `stop_reason`），
 不要复制一份解析逻辑，直接继承 [adapters/transcript-adapter.mjs](transcript-adapter.mjs)，
@@ -74,7 +75,7 @@ npm test
 ## 4. 注册与打包
 
 不需要改 `adapters/registry.mjs`：它按 `profile.module` 动态 import。
-桌面构建会把 `adapters/*.mjs` 与 `core/*.mjs` 一起复制进运行时，所以动态加载在打包后也能工作。
+桌面构建会把 `adapters/*.mjs`、`core/*.mjs` 与 `integrations/pi` 一起复制进运行时，所以动态加载/扩展安装都能在打包后工作。
 
 ## 5. hooks（可选）
 
@@ -90,3 +91,13 @@ hook-cli 会读 profile 的映射：
 - `notice` → `/local/notify`（只提醒）
 
 其它目标（如 `run.completed`）暂不走 hook 路径，避免与 adapter 的完成信号重复。
+
+## 6. 进程内控制扩展（Pi）
+
+Pi 没有外部 hook 配置，也没有原生工具审批；要控制用户自己开的 Pi，只能装一个进程内扩展：
+
+- 扩展源码：`integrations/pi/`
+- 安装/卸载：`host/pi-extension.mjs`、`scripts/install-pi-extension.mjs`
+- 协议：host 的 `/local/pi/*` 长轮询（见 `host/http.mjs`、`adapters/pi-control.mjs`）
+
+它只做 `sendUserMessage` / `ctx.abort` / 事件上报，不注册 `tool_call`，所以不会拦工具，也不会因为 Mo 不在而阻断 Pi。

@@ -1,7 +1,7 @@
 # Agent 适配性矩阵
 
 > 持续更新的总表：记录每个 Agent **能不能接进 mo-agent、靠什么接、接到什么程度**。
-> 最后更新：2026-10-21 · 版本 v0.2
+> 最后更新：2026-10-25 · 版本 v0.3
 
 本表是「研究态」总表，和运行态表分工如下：
 
@@ -14,7 +14,7 @@
 
 ## 0. 一眼看结论
 
-- **已接入 3 个**：Claude Code、DeepSeek Harness、Qoder CN。
+- **已接入 4 个**：Claude Code、DeepSeek Harness、Qoder CN、Pi（观测；控制需装扩展）。
 - **WorkBuddy 代码已落地**：profile + genie transcript 适配器 + hook 一键配置 + 11 个测试；还差一次真机 hook 验证。
 - **同源低价**：Gemini CLI / Qwen Code（同一套 hook 语义），Cursor（放行型 hook，IDE 用户多）。
 - **只能走 ACP**：Codex、Kimi（hook 审批路径目前是坏的）。ACP 只能控制「我们自己启动的会话」，补不了旁路观测。
@@ -29,6 +29,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | **Claude Code** | CLI | `~/.claude/projects/*/*.jsonl` | explicit | `PermissionRequest` | ✅ | ✅ | — | ✅ 已接入 | L2 |
 | **DeepSeek Harness** | 桌面 / CLI | 原生 API | inferred | 原生事件 | ✅ | — | prompt / cancel | ✅ 已接入 | L2 |
+| **Pi** | CLI | `~/.pi/agent/sessions/*/*.jsonl` | explicit | 无原生工具审批 | ❌ | 社区 `pi-acp` 不支持 `request_permission` | prompt / cancel（需装控制扩展） | ✅ 观测已接入；控制需扩展 | L2 观测 / L2 控制 |
 | **Qoder CN** | 桌面 + IDE | `~/.qoder-cn/projects/*/*.jsonl` | explicit | `PermissionRequest` / `Notification` / `Stop` | ✅ | ✅ | — | ✅ 已接入 | L2 观测 / L1 放行 |
 | **WorkBuddy** | 桌面 | `~/.workbuddy/projects/*/*.jsonl`（genie） | inferred | `PermissionRequest` / `Notification` | ✅ | ✅ | — | 🟡 已实现，待真机验证 | L2 观测（测试）/ L1 放行 |
 | **CodeBuddy CLI** | CLI | 待确认 | 待确认 | `PreToolUse` / `PermissionRequest` | ✅ 预计 | ✅ | — | 🟠 待实测 | L1 |
