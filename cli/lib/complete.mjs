@@ -119,6 +119,7 @@ const SPEC = {
   daemon: {
     subs: {
       start: { flags: ["--port", "--foreground"] },
+      open: { flags: [], positional: "daemonTarget" },
       stop: { flags: [] },
       status: { flags: [] },
     },
@@ -198,6 +199,7 @@ function positionalFor(kind, cwd) {
   if (kind === "task") return taskItems(cwd);
   if (kind === "candidate") return candidateItems();
   if (kind === "configKey") return CONFIG_KEYS.map((spec) => item(spec.key, spec.range));
+  if (kind === "daemonTarget") return [item("monitor", "实时监控屏"), item("setup", "设置/安装页"), item("pair", "配对页")];
   return [];
 }
 

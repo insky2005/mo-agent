@@ -71,6 +71,16 @@ mo daemon stop
 
 重定向到文件或 CI 时，令牌会换成 `<见 ~/.mo-agent/session.json>`，避免写进日志。
 
+不想复制长链接就用：
+
+```bash
+mo daemon open          # 监控屏（默认）
+mo daemon open setup    # 设置/安装页
+mo daemon open pair     # 配对页
+```
+
+它会自己拼令牌并调系统浏览器（macOS `open` / Linux `xdg-open` / Windows `start`）。
+
 两个命令都是幂等的，可以放心重复执行：
 
 - **`start` 时已经有 host 在跑**（比如桌面 App 开着）→ 不再起第二个，直接把访问信息打出来

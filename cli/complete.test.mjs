@@ -143,7 +143,10 @@ test("无子命令的组不瞎给 taskId", () => {
 
 test("daemon 的子命令和 flag 能补全", () => {
   const subs = values(complete({ cwd: os.tmpdir(), words: ["daemon", ""] }));
-  for (const name of ["start", "stop", "status", "help"]) assert.ok(subs.includes(name), "缺 " + name);
+  for (const name of ["start", "stop", "status", "open", "help"]) assert.ok(subs.includes(name), "缺 " + name);
+
+  const targets = values(complete({ cwd: os.tmpdir(), words: ["daemon", "open", ""] }));
+  assert.deepEqual(targets.sort(), ["monitor", "pair", "setup"]);
 
   const flags = values(complete({ cwd: os.tmpdir(), words: ["daemon", "start", "--"] }));
   assert.ok(flags.includes("--port"));

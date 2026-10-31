@@ -114,6 +114,7 @@ export const GROUPS = [
     blurb: "拉起 host（桌面 App 里那个服务），手机扫码配对、下载 APK",
     subs: [
       ["start [--port N] [--foreground]", "后台启动 host；--foreground 前台跑，Ctrl+C 停", "顺手下载 APK 到 ~/.mo-agent/app.apk"],
+      ["open [monitor|setup|pair]", "在浏览器打开对应页面（自动带本机令牌）", "默认 monitor"],
       ["stop", "停止 daemon", ""],
       ["status", "是否在跑、健康检查、APK 是否就绪", "默认子命令"],
     ],

@@ -318,10 +318,50 @@ async function status() {
   return body ? 0 : 1;
 }
 
+const OPEN_TARGETS = { monitor: "/monitor", setup: "/setup", pair: "/pair" };
+
+function openBrowser(url) {
+  // 测试/CI 里别真的弹浏览器
+  if (String(process.env.MO_AGENT_NO_OPEN || "") === "1") return false;
+  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const argv = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    const child = spawn(cmd, argv, { detached: true, stdio: "ignore" });
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function open(ctx, args) {
+  const home = os.homedir();
+  const target = (args.positional || [])[1] || "monitor";
+  const pathname = OPEN_TARGETS[target];
+  if (!pathname) {
+    throw new MoError("E_USAGE", "不认识的目标：" + target, { hint: "mo daemon open monitor|setup|pair" });
+  }
+
+  const info = readPid(home);
+  const port = (info && info.port) || readSessionPort(home) || readConfigPort(process.env, home);
+  if (!(await health(port))) {
+    throw new MoError("E_DAEMON_DOWN", "daemon 没在运行（端口 " + port + " 无响应）", {
+      hint: "先 mo daemon start",
+    });
+  }
+
+  const url = formatLink(port, pathname, readSessionToken(home), true);
+  const ok = openBrowser(url);
+  process.stdout.write((ok ? "已在浏览器打开" : "浏览器没打开，手动访问") + "：" + url + "\n");
+  return 0;
+}
+
 export async function daemonCommand(ctx, args) {
   const sub = (args.positional || [])[0];
   if (!sub || sub === "status") return status();
   if (sub === "start") return start(ctx, args);
   if (sub === "stop") return stop();
+  if (sub === "open") return open(ctx, args);
   throw new MoError("E_USAGE", "未知子命令：" + sub, { hint: "mo daemon start|stop|status" });
 }
