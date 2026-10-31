@@ -1,0 +1,36 @@
+{
+  "id": "pi",
+  "label": "Pi",
+  "enabled": true,
+  "module": "./pi.mjs",
+  "export": "PiAdapter",
+  "process": {
+    "match": [
+      "(^|/)pi(\\s|$)",
+      "pi-coding-agent/dist/(bundle/)?cli\\.js"
+    ]
+  },
+  "session": {
+    "kind": "jsonl-transcript",
+    "root": "~/.pi/agent/sessions",
+    "pattern": "--*/*.jsonl"
+  },
+  "capabilities": {
+    "observe": [
+      "process",
+      "transcript"
+    ],
+    "runEnd": "explicit",
+    "attention": "extension",
+    "approval": "none",
+    "control": []
+  },
+  "hooks": {
+    "kind": "pi-extension",
+    "events": {}
+  },
+  "approval": {
+    "capability": "none",
+    "mechanism": "不做审批；控制扩展只负责发指令/中断"
+  }
+}
