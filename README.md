@@ -53,6 +53,7 @@ Mo Agent 从进程、会话记录和 Agent hooks 三个层面观察，不要求 
 > 安装 [INSTALL.md](INSTALL.md)
 > 使用 [USAGE.md](USAGE.md)
 > 发布 [RELEASE.md](RELEASE.md)
+> 版本 [VERSIONING.md](VERSIONING.md)
 
 ### 1. 安装桌面端
 

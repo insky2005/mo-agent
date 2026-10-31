@@ -1,7 +1,7 @@
 # 版本管理（可执行）
 
-> 面向执行 Agent：每一步都能直接跑，带判据和期望输出。一次完整的发布动作见 [release.md](release.md)。
-> 人类阅读版流程见 [RELEASE.md](../../RELEASE.md)。
+> 面向执行 Agent：每一步都能直接跑，带判据和期望输出。
+> 人类阅读版：[VERSIONING.md](../../VERSIONING.md)（规则与模型）、[RELEASE.md](../../RELEASE.md)（发布流程）。
 
 ## 0. 按场景跳转
 
