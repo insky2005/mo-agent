@@ -856,12 +856,12 @@ function renderPiExtensionRow(item, nextPath) {
   const missing = files.filter((file) => file.missingSource);
   const error = item.error || (missing.length ? "安装源文件缺失：" + missing.map((file) => file.name).join("、") : "");
   const badge = error
-    ? { cls: "warn", text: "不可用" }
+    ? { cls: "warn", text: "控制扩展不可用" }
     : item.installed && item.outdated
-      ? { cls: "warn", text: "需要更新" }
+      ? { cls: "warn", text: "控制扩展待更新" }
       : item.installed
-        ? { cls: "ok", text: "已安装" }
-        : { cls: "off", text: "未安装" };
+        ? { cls: "ok", text: "控制扩展已安装" }
+        : { cls: "off", text: "控制扩展未安装" };
   const dir = item.dir || "~/.pi/agent/extensions";
   const installLabel = item.installed ? (item.outdated ? "更新控制扩展" : "重新安装") : "安装控制扩展";
   const actions = error
@@ -883,7 +883,7 @@ function renderPiExtensionRow(item, nextPath) {
         : "")
       + "</div>";
   return "<div class='agent'><div class='agent-main'>"
-    + "<div class='agent-title'><strong>Pi 控制扩展</strong>"
+    + "<div class='agent-title'><strong>Pi</strong>"
     + "<span class='badge " + badge.cls + "'>" + badge.text + "</span>"
     + "<span class='agent-id'>pi</span></div>"
     + "<div class='agent-path'>安装目录：<code>" + escapeHtml(dir) + "</code></div>"
@@ -895,8 +895,7 @@ function renderPiExtensionRow(item, nextPath) {
 export function renderAgentsSection(ctx, url, mode = "standalone") {
   const agents = ctx.hooksManager ? ctx.hooksManager.status() : [];
   // 只列当前启用的 Agent；未启用的档案不算「目前支持」。
-  // Pi 没有 hook，控制扩展由下面的独立卡片管理，避免同一条 Agent 出现两次。
-  const visible = agents.filter((item) => item.enabled !== false && item.kind !== "pi-extension");
+  const visible = agents.filter((item) => item.enabled !== false);
   // 可配置的排在前面，原生接入的排在后面；不分组、不加标题。
   visible.sort((a, b) => Number(!!b.supported) - Number(!!a.supported));
   const configurable = visible.filter((item) => item.supported);
@@ -907,15 +906,20 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
   const bad = url.searchParams.get("bad") === "1";
   const nextPath = mode === "settings" ? "/settings?tab=agents" : "/agents";
 
-  let piRow = "";
+  let piStatus = null;
   if (ctx.piExtension && typeof ctx.piExtension.status === "function") {
     try {
-      piRow = renderPiExtensionRow(ctx.piExtension.status(), nextPath);
+      piStatus = ctx.piExtension.status();
     } catch (error) {
-      piRow = renderPiExtensionRow({ error: (error && error.message) || String(error) }, nextPath);
+      piStatus = { error: (error && error.message) || String(error) };
     }
   }
-  const rows = visible.map((item) => renderAgentRow(item, canWrite, nextPath)).join("") + piRow;
+  const hasPiProfile = visible.some((item) => item.kind === "pi-extension");
+  // Pi 没有 hook；控制扩展状态就是它的 Agent 行，不另起一块。
+  const rows = visible.map((item) => {
+    if (item.kind === "pi-extension" && piStatus) return renderPiExtensionRow(piStatus, nextPath);
+    return renderAgentRow(item, canWrite, nextPath);
+  }).join("") + (!hasPiProfile && piStatus ? renderPiExtensionRow(piStatus, nextPath) : "");
 
   const topAction = configurable.length
     ? "<form method='post' action='/setup/hooks/apply'>"
