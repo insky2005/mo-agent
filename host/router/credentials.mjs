@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { MoError } from "../../core/errors.mjs";
 import { ROUTER_ERROR } from "../../core/router.mjs";
-import { readJsonSafe } from "./fsx.mjs";
+import { readJsonSafe, writeJsonPrivate } from "./fsx.mjs";
 import { credentialsFile } from "./paths.mjs";
 
 /**
@@ -77,6 +77,42 @@ export function resolveCredentials(home, env) {
     };
   }
   return { ok: true, provider, model, apiKey, source: "env", env: buildEnv(provider, apiKey) };
+}
+
+/**
+ * 写凭据（0600）。只在 setup 时调用；启动只读不写。
+ * @returns {{provider: string, model: string, redacted: string}}
+ */
+export function writeCredentials(home, input) {
+  const value = input || {};
+  const provider = String(value.provider || DEFAULT_PROVIDER).trim();
+  const model = String(value.model || DEFAULT_MODEL).trim();
+  const apiKey = String(value.apiKey || "").trim();
+  if (!providerEnvName(provider)) {
+    throw new MoError(ROUTER_ERROR.NO_CREDENTIAL, "不支持的 provider：" + provider, {
+      hint: "可用：" + Object.keys(PROVIDER_ENV).join(" / "),
+    });
+  }
+  if (!apiKey) {
+    throw new MoError(ROUTER_ERROR.NO_CREDENTIAL, "缺少 API key");
+  }
+  writeJsonPrivate(credentialsFile(home), {
+    v: 1,
+    provider,
+    model,
+    apiKey,
+    updatedAt: new Date().toISOString(),
+  });
+  return { provider, model, redacted: redactSecret(apiKey) };
+}
+
+export function deleteCredentials(home) {
+  try {
+    fs.rmSync(credentialsFile(home), { force: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 把凭据投影成运行时认的环境变量；换运行时只改这一张表 */

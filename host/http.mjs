@@ -514,6 +514,58 @@ export function createMoAgentServer(options) {
         }
       }
 
+      if (pathname === "/local/router/setup" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, await router.setup(body));
+        } catch (error) {
+          return json(res, 400, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "配置失败",
+            hint: (error && error.details && error.details.hint) || null,
+            detail: (error && error.details && error.details.detail) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/reset" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.reset());
+      }
+
+      if (pathname === "/local/router/runtime/list" && req.method === "GET") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.runtimes());
+      }
+
+      if (pathname === "/local/router/runtime/install" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, await router.runtimeInstall(body));
+        } catch (error) {
+          return json(res, 500, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "安装失败",
+            hint: (error && error.details && error.details.hint) || null,
+            detail: (error && error.details && error.details.detail) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/runtime/prune" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.runtimePrune());
+      }
+
       if (pathname === "/local/router/stop" && req.method === "POST") {
         if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
         if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });

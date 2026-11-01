@@ -2,18 +2,17 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { ROUTER_ERROR } from "../../core/router.mjs";
-import { one } from "../lib/args.mjs";
+import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 
 /**
- * mo router —— 指挥台（Router）的开关与状态。
+ * mo router —— 指挥台（Router）的开关、配置与运行时安装。
  *
- * 生命周期归 host（实现计划 §6 R2）：这里只发本机 HTTP 请求，不自己 spawn 进程，
+ * 生命周期与安装都归 host（实现计划 §6 R2）：这里只发本机 HTTP 请求，不自己 spawn 进程，
  * 否则 CLI 与桌面 App 会各起一个，pid 文件互相覆盖。
  */
 
-const USAGE = "mo router start|stop|status|restart";
+const USAGE = "mo router start|stop|status|restart|setup|reset|runtime";
 
 function sessionFile(home) {
   return path.join(home, ".mo-agent", "session.json");
@@ -32,7 +31,7 @@ export function readHostSession(home) {
   }
 }
 
-async function callRouter(home, pathname, method) {
+async function callRouter(home, pathname, method, body) {
   const session = readHostSession(home);
   if (!session) {
     throw new MoError("E_DAEMON_DOWN", "mo daemon 没在运行（没有 session.json）", {
@@ -42,33 +41,41 @@ async function callRouter(home, pathname, method) {
   const url = "http://127.0.0.1:" + session.port + pathname;
   const headers = {};
   if (session.token) headers["x-mo-agent-token"] = session.token;
+  const init = { method: method || "GET", headers };
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
+    init.body = JSON.stringify(body);
+  }
   let response;
   try {
-    response = await fetch(url, { method: method || "GET", headers });
+    response = await fetch(url, init);
   } catch (error) {
     throw new MoError("E_DAEMON_DOWN", "连不上 host：" + (error && error.message ? error.message : error), {
       hint: "mo daemon status 看看",
     });
   }
-  let body = null;
+  let payload = null;
   try {
-    body = await response.json();
+    payload = await response.json();
   } catch {
-    body = null;
+    payload = null;
   }
-  if (!response.ok || (body && body.ok === false)) {
-    const code = (body && body.code) || "E_ROUTER_START_FAILED";
-    const message = (body && body.error) || "host 返回 " + response.status;
-    throw new MoError(code, message, body && body.hint ? { hint: body.hint } : undefined);
+  if (!response.ok || (payload && payload.ok === false)) {
+    const code = (payload && payload.code) || "E_ROUTER_START_FAILED";
+    const message = (payload && payload.error) || "host 返回 " + response.status;
+    const details = {};
+    if (payload && payload.hint) details.hint = payload.hint;
+    if (payload && payload.detail) details.detail = payload.detail;
+    throw new MoError(code, message, Object.keys(details).length ? details : undefined);
   }
-  return body || {};
+  return payload || {};
 }
 
 function describe(status) {
   if (!status.running) {
     const lines = ["指挥台  未运行"];
     lines.push("  启动    mo router start");
-    if (!status.onboarded) lines.push("  说明    第一次启动需要先配置模型与凭据");
+    if (!status.onboarded) lines.push("  首次    先 mo router runtime install，再 mo router setup");
     return lines.join("\n");
   }
   const lines = ["指挥台  运行中（pid " + status.pid + "）"];
@@ -79,18 +86,98 @@ function describe(status) {
   return lines.join("\n");
 }
 
+async function runtimeCommand(home, args) {
+  const action = args.positional[1] || "list";
+
+  if (action === "list") {
+    const value = await callRouter(home, "/local/router/runtime/list", "GET");
+    emit(args.options, value, (data) => {
+      const lines = ["运行时  清单 pin 在 " + data.pinned + (data.inUse ? "，当前在用 " + data.inUse : "")];
+      if (!data.runtimes.length) {
+        lines.push("  还没有安装：mo router runtime install");
+      } else {
+        for (const item of data.runtimes) {
+          const mark = item.version === data.inUse ? "*" : " ";
+          lines.push("  " + mark + " " + item.version + (item.installed ? "" : "（文件缺失）"));
+        }
+      }
+      return lines.join("\n");
+    });
+    return 0;
+  }
+
+  if (action === "install") {
+    const version = one(args.options, "version");
+    const force = has(args.options, "force");
+    process.stderr.write("安装运行时" + (version ? " " + version : "") + "…（首次会下载约 150MB 依赖）\n");
+    const value = await callRouter(home, "/local/router/runtime/install", "POST", {
+      version: version || undefined,
+      force,
+    });
+    emit(args.options, value, (data) => {
+      if (data.reused) return "✓ 运行时已存在（" + data.version + "），沿用 " + data.dir;
+      return "✓ 运行时已安装（" + data.version + "）\n  " + data.dir + "\n  Node " + (data.nodeVersion || data.node);
+    });
+    return 0;
+  }
+
+  if (action === "prune") {
+    const value = await callRouter(home, "/local/router/runtime/prune", "POST");
+    emit(args.options, value, (data) => {
+      if (!data.removed.length) return "没有需要清理的旧版本（保留：" + data.kept.join(" / ") + "）";
+      return "✓ 已删除旧版本：" + data.removed.join(" / ") + "\n  保留：" + data.kept.join(" / ");
+    });
+    return 0;
+  }
+
+  throw new MoError("E_USAGE", "未知子命令：router runtime " + action, {
+    hint: "mo router runtime install|list|prune",
+  });
+}
+
 export async function routerCommand(ctx, args) {
   const sub = args.positional[0] || "status";
   const home = (ctx && ctx.home) || os.homedir();
+
+  if (sub === "runtime") return runtimeCommand(home, args);
+
+  if (sub === "setup") {
+    const provider = one(args.options, "provider");
+    const model = one(args.options, "model");
+    const apiKey = one(args.options, "key");
+    const test = !has(args.options, "no-test");
+    if (!provider && !apiKey) {
+      throw new MoError("E_USAGE", "setup 需要 --provider 与 --key", {
+        hint: 'mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...',
+      });
+    }
+    const value = await callRouter(home, "/local/router/setup", "POST", { provider, model, apiKey, test });
+    emit(args.options, value, (data) => {
+      const lines = ["✓ 指挥台已配置"];
+      lines.push("  模型    " + data.provider + " / " + data.model);
+      lines.push("  凭据    " + data.redacted + "（" + data.source + "）");
+      if (data.test && data.test.tested) {
+        lines.push(data.test.ok ? "  测通    ✓ " + data.test.ms + "ms" : "  测通    ✗ " + data.test.error);
+      } else if (data.test && data.test.reason) {
+        lines.push("  测通    " + data.test.reason);
+      }
+      return lines.join("\n");
+    });
+    return 0;
+  }
+
+  if (sub === "reset") {
+    const value = await callRouter(home, "/local/router/reset", "POST");
+    emit(args.options, value, (data) => (data.removed ? "✓ 已删除 Router 的凭据" : "本来就没有凭据"));
+    return 0;
+  }
 
   if (sub === "start") {
     const value = await callRouter(home, "/local/router/start", "POST");
     emit(args.options, value, (data) => {
       if (data.attached) return "指挥台已在运行（pid " + data.pid + "），没有重复启动";
       const head = "✓ 指挥台已启动（pid " + data.pid + "）";
-      const warnings = Array.isArray(data.warnings) && data.warnings.length
-        ? "\n  " + data.warnings.join("\n  ")
-        : "";
+      const warnings = Array.isArray(data.warnings) && data.warnings.length ? "\n  " + data.warnings.join("\n  ") : "";
       return head + warnings + "\n  工作台  " + data.cwd + "\n  打开终端窗口后即可对话";
     });
     return 0;
@@ -115,7 +202,5 @@ export async function routerCommand(ctx, args) {
     return 0;
   }
 
-  throw new MoError("E_USAGE", "未知子命令：router " + sub + "（" + USAGE + "）", {
-    hint: USAGE,
-  });
+  throw new MoError("E_USAGE", "未知子命令：router " + sub + "（" + USAGE + "）", { hint: USAGE });
 }

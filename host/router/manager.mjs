@@ -12,7 +12,9 @@ import {
   admitRuntime,
 } from "../../core/router.mjs";
 import { buildPiArgv } from "./argv.mjs";
-import { resolveCredentials } from "./credentials.mjs";
+import { deleteCredentials, redactSecret, resolveCredentials, writeCredentials } from "./credentials.mjs";
+import { probeModel } from "./probe.mjs";
+import { installRuntime, listRuntimes, manifestFor, pruneRuntimes } from "./install.mjs";
 import { openTerminal } from "./terminal.mjs";
 import { renderRouterScript } from "./script.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
@@ -118,6 +120,7 @@ export function createRouterManager(options) {
   const now = opts.now || Date.now;
   const spawnImpl = opts.spawn || spawn;
   const openTerminalImpl = opts.openTerminal || openTerminal;
+  const probe = opts.probe || probeModel;
 
   if (!home) throw new Error("createRouterManager 需要 home");
   if (!hub) throw new Error("createRouterManager 需要 hub");
@@ -192,6 +195,28 @@ export function createRouterManager(options) {
     writeJsonPrivate(files.mcp, { mcpServers: { mo: { command, args: ["mcp"] } } }, 0o600);
   }
 
+  /**
+   * 把 mo 的控制扩展复制进私有配置目录。
+   * 复制而不是引用用户全局的 ~/.pi/agent/extensions：Router 的扩展必须与它自己的
+   * 版本绑在一起，用户改自己的 Pi 不该影响 Router 的控制通道。
+   */
+  function ensureExtension() {
+    const source = new URL("../../integrations/pi/mo-agent-control.js", import.meta.url);
+    const sourceImpl = new URL("../../integrations/pi/mo-agent-control-impl.js", import.meta.url);
+    try {
+      if (!fs.existsSync(source)) return false;
+      fs.mkdirSync(path.dirname(files.extension), { recursive: true });
+      fs.copyFileSync(source, files.extension);
+      if (fs.existsSync(sourceImpl)) {
+        fs.copyFileSync(sourceImpl, path.join(path.dirname(files.extension), "mo-agent-control-impl.js"));
+      }
+      return true;
+    } catch (error) {
+      log.warn("复制控制扩展失败（手机/钉钉将无法给指挥台发指令）: " + (error && error.message ? error.message : error));
+      return false;
+    }
+  }
+
   function ensureAssets(runtime) {
     fs.mkdirSync(files.config, { recursive: true });
     fs.mkdirSync(files.sessions, { recursive: true });
@@ -199,6 +224,7 @@ export function createRouterManager(options) {
     writeFilePrivate(files.contract, renderRouterContract(), 0o600);
     writeFilePrivate(files.readme, WORKBENCH_README, 0o644);
     writeMcpConfig();
+    ensureExtension();
     return runtime;
   }
 
@@ -236,6 +262,8 @@ export function createRouterManager(options) {
       sessionDir: files.sessions,
       extensionPath,
       offline: true,
+      provider: credentials.provider,
+      model: credentials.model,
     });
 
     const headless = String(env.MO_ROUTER_HEADLESS || "") === "1";
@@ -334,7 +362,106 @@ export function createRouterManager(options) {
     return { ok: true, stopped: Boolean(pid), pid: pid || null };
   }
 
-  return { status, start, stop, files, resolveRuntime };
+  /**
+   * 引导：写凭据（0600）→ 可选测通 → 标记 onboarded。
+   * 不启动 Router；启动是另一个动作，失败原因要能分开看。
+   */
+  async function setup(input) {
+    const value = input || {};
+    if (value.apiKey) writeCredentials(home, value);
+
+    const credentials = resolveCredentials(home, env);
+    if (!credentials.ok) {
+      throw new MoError(credentials.code, credentials.reason + "（用 mo router setup --provider … --key … 配置）", {
+        provider: credentials.provider,
+      });
+    }
+
+    let test = { tested: false, reason: "已跳过测通" };
+    if (value.test !== false) {
+      const runtime = resolveRuntime({ home, env, platform });
+      if (!runtime) {
+        test = { tested: false, reason: "运行时还没安装，先 mo router runtime install 再测通" };
+      } else {
+        const result = await probe({
+          bin: runtime.bin,
+          provider: credentials.provider,
+          model: credentials.model,
+          env: credentials.env,
+          timeoutMs: value.timeoutMs,
+        });
+        test = { tested: true, ok: result.ok, ms: result.ms, text: result.text || null, error: result.error || null };
+        if (!result.ok) {
+          throw new MoError(ROUTER_ERROR.START_FAILED, "测通失败：" + (result.error || "未知原因"), {
+            hint: "检查 provider / 模型名 / key；也可以先 mo router setup --no-test 跳过",
+            detail: test,
+          });
+        }
+      }
+    }
+
+    const state = readState() || {};
+    writeJsonPrivate(files.state, {
+      ...state,
+      v: 1,
+      onboarded: true,
+      runtime: state.runtime || "pi",
+      version: state.version || null,
+      provider: credentials.provider,
+      model: credentials.model,
+      configuredAt: new Date(now()).toISOString(),
+    });
+
+    log.info("指挥台配置完成：provider=" + credentials.provider + " model=" + credentials.model + " key=" + redactSecret(credentials.apiKey));
+    return {
+      ok: true,
+      provider: credentials.provider,
+      model: credentials.model,
+      redacted: redactSecret(credentials.apiKey),
+      source: credentials.source,
+      test,
+    };
+  }
+
+  function reset() {
+    const removed = deleteCredentials(home);
+    const state = readState();
+    if (state) writeJsonPrivate(files.state, { ...state, onboarded: false });
+    return { ok: true, removed };
+  }
+
+  /** 运行时安装：耗时操作，HTTP 层会等它跑完（首次约 1–3 分钟） */
+  function runtimeInstall(input) {
+    const value = input || {};
+    return installRuntime({
+      home,
+      env,
+      log,
+      platform,
+      version: value.version,
+      force: Boolean(value.force),
+    });
+  }
+
+  function runtimes() {
+    const manifest = manifestFor("pi");
+    const state = readState() || {};
+    return {
+      ok: true,
+      pinned: manifest.version,
+      inUse: state.version || null,
+      ...listRuntimes({ home, env, platform }),
+    };
+  }
+
+  function runtimePrune() {
+    const manifest = manifestFor("pi");
+    const state = readState() || {};
+    const keep = [manifest.version, state.version].filter(Boolean);
+    return { ok: true, ...pruneRuntimes({ home, env, platform, keep }) };
+  }
+
+  return { status, start, stop, setup, reset, runtimeInstall, runtimes, runtimePrune, files, resolveRuntime };
 }
 
 function sleepSync(ms) {

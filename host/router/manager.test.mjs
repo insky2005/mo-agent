@@ -96,6 +96,9 @@ test("headless 启动：写状态、注入 hub、可 attach、可停止", async 
     assert.equal(mcp.mcpServers.mo.command, "mo");
     assert.deepEqual(mcp.mcpServers.mo.args, ["mcp"]);
 
+    // 控制扩展进了私有目录：手机/钉钉才能给指挥台发指令
+    assert.ok(fs.existsSync(P.extensionFile(home)), "控制扩展没复制进私有配置目录");
+
     // hub 里的会话带 router 角色
     const session = hub.get("mo-router");
     assert.ok(session, "hub 里没有 Router 会话");

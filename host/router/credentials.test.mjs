@@ -3,7 +3,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROVIDER_ENV, buildEnv, providerEnvName, redactSecret, resolveCredentials } from "./credentials.mjs";
+import {
+  DEFAULT_MODEL,
+  DEFAULT_PROVIDER,
+  PROVIDER_ENV,
+  buildEnv,
+  deleteCredentials,
+  providerEnvName,
+  redactSecret,
+  resolveCredentials,
+  writeCredentials,
+} from "./credentials.mjs";
 import { credentialsFile } from "./paths.mjs";
 
 function tempHome() {
@@ -56,6 +66,34 @@ test("没有凭据时给出稳定错误码，不静默启动", () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, "E_ROUTER_NO_CREDENTIAL");
   assert.match(result.reason, /DEEPSEEK_API_KEY/);
+});
+
+test("写凭据：0600、可回读、只露后四位", () => {
+  const home = tempHome();
+  const written = writeCredentials(home, { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-abcdefg9999" });
+  assert.equal(written.redacted, "****9999");
+  assert.equal(fs.statSync(credentialsFile(home)).mode & 0o777, 0o600);
+
+  const raw = fs.readFileSync(credentialsFile(home), "utf8");
+  assert.ok(raw.includes("sk-abcdefg9999"));
+
+  const back = resolveCredentials(home, {});
+  assert.equal(back.ok, true);
+  assert.equal(back.source, "file");
+  assert.equal(back.provider, "deepseek");
+
+  assert.equal(deleteCredentials(home), true);
+  assert.equal(fs.existsSync(credentialsFile(home)), false);
+  assert.equal(resolveCredentials(home, {}).ok, false);
+});
+
+test("写凭据时缺 key 或不支持的 provider 都拒绝", () => {
+  const home = tempHome();
+  assert.throws(() => writeCredentials(home, { apiKey: "" }), (error) => error.code === "E_ROUTER_NO_CREDENTIAL");
+  assert.throws(
+    () => writeCredentials(home, { provider: "nope", apiKey: "sk-x" }),
+    (error) => error.code === "E_ROUTER_NO_CREDENTIAL"
+  );
 });
 
 test("不支持的 provider 明确报错", () => {

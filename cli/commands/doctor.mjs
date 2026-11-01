@@ -7,6 +7,8 @@ import { listProjects } from "../lib/project.mjs";
 import { readEvents } from "../lib/store.mjs";
 import { memoryDir } from "../lib/knowledge.mjs";
 import { cachedUpdate } from "../lib/upgrade.mjs";
+import { credentialsFile, routerFile, runtimeRoot } from "../../host/router/paths.mjs";
+import { readJsonSafe } from "../../host/router/fsx.mjs";
 
 /**
  * 自检：只有必需项失败才算失败。
@@ -17,6 +19,32 @@ export function insideProject(cwd, projects) {
   return (projects || []).some((project) =>
     (project.paths || []).some((root) => cwd === root || cwd.startsWith(root + "/") || cwd.startsWith(root + "\\")),
   );
+}
+
+/**
+ * 指挥台：只看有没有装运行时、有没有凭据、跑没跑。
+ * 三项都不是必需项——没配过指挥台是完全正常的状态。
+ */
+function routerCheck(home) {
+  const state = readJsonSafe(routerFile(home), null) || {};
+  let versions = [];
+  try {
+    versions = fs
+      .readdirSync(path.join(runtimeRoot({ home, env: process.env }), "routers", "pi"))
+      .filter((name) => !name.includes(".tmp-"));
+  } catch {
+    versions = [];
+  }
+  const hasCredentials = fs.existsSync(credentialsFile(home));
+  const running = Boolean(state.pid);
+
+  let value;
+  if (running) value = "运行中（pid " + state.pid + "，模型 " + (state.model || "?") + "）";
+  else if (!versions.length) value = "未安装运行时：mo router runtime install";
+  else if (!hasCredentials) value = "未配置凭据：mo router setup";
+  else value = "已就绪，未运行：mo router start";
+
+  return { name: "router", label: "指挥台", required: false, ok: running, value };
 }
 
 /** 只读检查项：mo doctor 与 mo setup 的汇总共用 */
@@ -49,6 +77,7 @@ export function doctorReport(cwd, options = {}) {
       ok: inProject,
       value: cwd + (inProject ? "（属于已登记项目）" : "（未登记为项目）"),
     },
+    routerCheck(home),
   ];
 
   const ok = checks.filter((check) => check.required).every((check) => check.ok);

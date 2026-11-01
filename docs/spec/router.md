@@ -337,7 +337,10 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 ## 11. 升级与回滚
 
-- 版本 pin 在代码里的 `router/runtimes.json`（随 mo 版本走），**不是 latest**；
+- 版本 pin 在代码里的 `host/router/runtimes.json`（随 mo 版本走），**不是 latest**；
+- 安装方式：`npm install --prefix <staging>` 装进临时目录，用**私有 npm cache**（`<runtimeRoot>/npm-cache`），
+  避免用户 `~/.npm` 损坏时把安装拖下水；自检通过后 `rename` 到最终目录，失败不留半个安装；
+- Node 下限来自运行时清单（Pi 1.3.0 要求 `>=22.19.0`），由安装器负责找并钉进 `bin/pi` 的 shim；
 - 升级：下载到 `routers/<id>/<new>/` → 校验 → 写 `router.json.version` → 重启；旧版目录保留；
 - 回滚：把 `version` 改回旧值 + 重启；
 - `mo router runtime prune` 清理旧版本；
@@ -392,7 +395,7 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 | # | 假设 | 怎么验 |
 |---|---|---|
-| A1 | `--tools 'read,grep,find,ls,mcp__mo__*'` 的语义与帮助文本一致（含 `mcp__` 条目才把 MCP 也纳入白名单） | 起一个 Router，让它列可用工具 |
+| A1 | `--tools 'read,grep,find,ls,mcp__mo__*'` 的语义与帮助文本一致（含 `mcp__` 条目才把 MCP 也纳入白名单） | 起一个 Router，让它列可用工具。**已部分实测**：私有配置目录 + `mcp.json` 下 `pi mcp list` 返回 `mo: connected, 8 tools`；`--tools` 对该模式是否放行仍未验 |
 | A2 | 独立 `PI_CODING_AGENT_DIR` 下 Pi 缺 `bin/fd`、`bin/rg` 时 `grep`/`find` 是否降级或自动下载 | 空配置目录起一次，观察网络与报错 |
 | A3 | `PI_OFFLINE=1` 只关启动期网络操作，不影响模型调用 | 设该变量后跑一次对话 |
 | A4 | 私有 install 里的启动器不会因 `PI_CODING_AGENT_DIR` 变化而找不到自身 release | 换目录后 `--version` |

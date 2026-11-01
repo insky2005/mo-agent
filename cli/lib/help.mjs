@@ -159,6 +159,9 @@ export const GROUPS = [
       ["stop", "停止", ""],
       ["status", "看状态：跑没跑、用哪个模型、工作台在哪", "未运行退出码 1"],
       ["restart", "重启", ""],
+      ["setup --provider --key", "配置模型与凭据（0600 落盘）", "默认会测通；--no-test 跳过"],
+      ["reset", "删除 Router 的凭据", ""],
+      ["runtime install|list|prune", "安装/查看/清理私有运行时", "版本 pin 在 runtimes.json"],
     ],
   },
   {
