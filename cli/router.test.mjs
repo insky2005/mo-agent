@@ -25,8 +25,10 @@ test("readHostSession：读端口与令牌；端口缺失视为不可用", () =>
 
 test("host 没起来时命令给 E_DAEMON_DOWN，而不是未处理异常", async () => {
   const home = tempHome();
-  await assert.rejects(() => routerCommand({ home }, { positional: ["status"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
-  await assert.rejects(() => routerCommand({ home }, { positional: ["start"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
+  const safe = { home, autoStart: false };
+  await assert.rejects(() => routerCommand(safe, { positional: ["status"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
+  await assert.rejects(() => routerCommand(safe, { positional: ["start"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
+  await assert.rejects(() => routerCommand(safe, { positional: ["runtime"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
 });
 
 test("未知子命令给用法", async () => {

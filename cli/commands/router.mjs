@@ -4,6 +4,7 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
+import { daemonCommand } from "./daemon.mjs";
 
 /**
  * mo router —— 指挥台（Router）的开关、配置与运行时安装。
@@ -31,8 +32,34 @@ export function readHostSession(home) {
   }
 }
 
-async function callRouter(home, pathname, method, body) {
-  const session = readHostSession(home);
+/** 需要 host 的动作可以自动把它拉起来；MO_AGENT_NO_AUTOSTART=1 可关 */
+async function ensureHost(ctx) {
+  if (String(process.env.MO_AGENT_NO_AUTOSTART || "") === "1") return false;
+  if (ctx && ctx.autoStart === false) return false;
+  process.stderr.write("host 没在运行，正在拉起…\n");
+  try {
+    const code = await daemonCommand(
+      { cwd: (ctx && ctx.cwd) || process.cwd(), env: process.env },
+      { positional: ["start"], options: {} },
+    );
+    return code === 0;
+  } catch (error) {
+    process.stderr.write("拉起 host 失败：" + (error && error.message ? error.message : error) + "\n");
+    return false;
+  }
+}
+
+/**
+ * @param {{autoStart?: boolean, cwd?: string}} options
+ *   autoStart: 连不上就顺手把 host 拉起来（只给"需要 host 才能做"的动作开）
+ */
+async function callRouter(home, pathname, method, body, options) {
+  const opts = options || {};
+  let session = readHostSession(home);
+  if (!session && opts.autoStart) {
+    await ensureHost(opts);
+    session = readHostSession(home);
+  }
   if (!session) {
     throw new MoError("E_DAEMON_DOWN", "mo daemon 没在运行（没有 session.json）", {
       hint: "先 mo daemon start，或打开桌面 App",
@@ -50,8 +77,28 @@ async function callRouter(home, pathname, method, body) {
   try {
     response = await fetch(url, init);
   } catch (error) {
-    throw new MoError("E_DAEMON_DOWN", "连不上 host：" + (error && error.message ? error.message : error), {
-      hint: "mo daemon status 看看",
+    if (opts.autoStart) {
+      await ensureHost(opts);
+      const retry = readHostSession(home);
+      if (retry) {
+        try {
+          response = await fetch("http://127.0.0.1:" + retry.port + pathname, { ...init, headers: retry.token ? { ...headers, "x-mo-agent-token": retry.token } : headers });
+        } catch (retryError) {
+          response = null;
+        }
+      }
+    }
+    if (!response) {
+      throw new MoError("E_DAEMON_DOWN", "连不上 host：" + (error && error.message ? error.message : error), {
+        hint: "mo daemon status 看看",
+      });
+    }
+  }
+
+  // 旧构建的 host 没有 /local/router/* 路由，别让人去猜 404 是什么意思
+  if (response && response.status === 404 && pathname.startsWith("/local/router/")) {
+    throw new MoError("E_ROUTER_HOST_OLD", "host 是旧构建，还没有指挥台接口", {
+      hint: "在仓库里用 MO_AGENT_ROOT=\"$PWD\" node host/index.mjs 起 host，或跑 ./scripts/build-desktop.sh 重建桌面运行时",
     });
   }
   let payload = null;
@@ -86,11 +133,13 @@ function describe(status) {
   return lines.join("\n");
 }
 
-async function runtimeCommand(home, args) {
+async function runtimeCommand(home, args, ctx) {
   const action = args.positional[1] || "list";
+  // 测试与脚本可以用 ctx.autoStart=false 关掉自动拉起
+  const allowAuto = !(ctx && ctx.autoStart === false);
 
   if (action === "list") {
-    const value = await callRouter(home, "/local/router/runtime/list", "GET");
+    const value = await callRouter(home, "/local/router/runtime/list", "GET", undefined, { autoStart: false });
     emit(args.options, value, (data) => {
       const lines = ["运行时  清单 pin 在 " + data.pinned + (data.inUse ? "，当前在用 " + data.inUse : "")];
       if (!data.runtimes.length) {
@@ -113,7 +162,7 @@ async function runtimeCommand(home, args) {
     const value = await callRouter(home, "/local/router/runtime/install", "POST", {
       version: version || undefined,
       force,
-    });
+    }, { autoStart: allowAuto });
     emit(args.options, value, (data) => {
       if (data.reused) return "✓ 运行时已存在（" + data.version + "），沿用 " + data.dir;
       return "✓ 运行时已安装（" + data.version + "）\n  " + data.dir + "\n  Node " + (data.nodeVersion || data.node);
@@ -122,7 +171,7 @@ async function runtimeCommand(home, args) {
   }
 
   if (action === "prune") {
-    const value = await callRouter(home, "/local/router/runtime/prune", "POST");
+    const value = await callRouter(home, "/local/router/runtime/prune", "POST", undefined, { autoStart: allowAuto });
     emit(args.options, value, (data) => {
       if (!data.removed.length) return "没有需要清理的旧版本（保留：" + data.kept.join(" / ") + "）";
       return "✓ 已删除旧版本：" + data.removed.join(" / ") + "\n  保留：" + data.kept.join(" / ");
@@ -138,8 +187,9 @@ async function runtimeCommand(home, args) {
 export async function routerCommand(ctx, args) {
   const sub = args.positional[0] || "status";
   const home = (ctx && ctx.home) || os.homedir();
+  const allowAuto = !(ctx && ctx.autoStart === false);
 
-  if (sub === "runtime") return runtimeCommand(home, args);
+  if (sub === "runtime") return runtimeCommand(home, args, ctx);
 
   if (sub === "setup") {
     const provider = one(args.options, "provider");
@@ -151,7 +201,7 @@ export async function routerCommand(ctx, args) {
         hint: 'mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...',
       });
     }
-    const value = await callRouter(home, "/local/router/setup", "POST", { provider, model, apiKey, test });
+    const value = await callRouter(home, "/local/router/setup", "POST", { provider, model, apiKey, test }, { autoStart: allowAuto });
     emit(args.options, value, (data) => {
       const lines = ["✓ 指挥台已配置"];
       lines.push("  模型    " + data.provider + " / " + data.model);
@@ -167,13 +217,13 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "reset") {
-    const value = await callRouter(home, "/local/router/reset", "POST");
+    const value = await callRouter(home, "/local/router/reset", "POST", undefined, { autoStart: allowAuto });
     emit(args.options, value, (data) => (data.removed ? "✓ 已删除 Router 的凭据" : "本来就没有凭据"));
     return 0;
   }
 
   if (sub === "start") {
-    const value = await callRouter(home, "/local/router/start", "POST");
+    const value = await callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto });
     emit(args.options, value, (data) => {
       if (data.attached) return "指挥台已在运行（pid " + data.pid + "），没有重复启动";
       const head = "✓ 指挥台已启动（pid " + data.pid + "）";
@@ -184,20 +234,20 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "stop") {
-    const value = await callRouter(home, "/local/router/stop", "POST");
+    const value = await callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false });
     emit(args.options, value, (data) => (data.stopped ? "✓ 指挥台已停止（pid " + data.pid + "）" : "指挥台本来就没在运行"));
     return 0;
   }
 
   if (sub === "status") {
-    const value = await callRouter(home, "/local/router/status", "GET");
+    const value = await callRouter(home, "/local/router/status", "GET", undefined, { autoStart: false });
     emit(args.options, value, describe);
     return value.running ? 0 : 1;
   }
 
   if (sub === "restart") {
-    await callRouter(home, "/local/router/stop", "POST").catch(() => null);
-    const value = await callRouter(home, "/local/router/start", "POST");
+    await callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false }).catch(() => null);
+    const value = await callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto });
     emit(args.options, value, (data) => "✓ 指挥台已重启（pid " + data.pid + "）");
     return 0;
   }
