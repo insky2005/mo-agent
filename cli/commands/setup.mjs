@@ -342,8 +342,19 @@ async function stepMemory(ctx) {
 
 async function stepWorker(ctx) {
   const current = defaultWorkerName({ home: ctx.home });
-  if (current) return skipped("默认执行者 = " + current);
+  if (current && ctx.choices.workerKeep) return skipped("默认执行者 = " + current);
   if (ctx.choices.workerSkipped) return skipped("已跳过默认执行者");
+  // 已配置：非交互保持幂等（不改），交互问一句要不要换——否则看起来像"这一步没了"
+  if (current) {
+    if (!ctx.interactive) return skipped("默认执行者 = " + current + "（要改：mo worker use <名>）");
+    promptGap(ctx);
+    const answer = (await ctx.prompter.ask("默认执行者已是 " + current + "，要换吗？(y/N) ")).toLowerCase();
+    ctx.asked = true;
+    if (answer !== "y" && answer !== "yes") {
+      ctx.choices.workerKeep = true;
+      return skipped("默认执行者 = " + current);
+    }
+  }
 
   const installed = listWorkers({ home: ctx.home }).filter((worker) => worker.source === "builtin" && worker.installed);
   if (!installed.length) {
@@ -378,8 +389,19 @@ async function stepWorker(ctx) {
 
 async function stepTerminal(ctx) {
   const current = currentTerminal({ home: ctx.home });
-  if (current) return skipped("默认终端 = " + current);
+  if (current && ctx.choices.terminalKeep) return skipped("默认终端 = " + current);
   if (ctx.choices.terminalSkipped) return skipped("已跳过默认终端");
+  // 同 stepWorker：交互时让"已经配过"也能改
+  if (current) {
+    if (!ctx.interactive) return skipped("默认终端 = " + current + "（要改：mo terminal use <名>）");
+    promptGap(ctx);
+    const answer = (await ctx.prompter.ask("默认终端已是 " + current + "，要换吗？(y/N) ")).toLowerCase();
+    ctx.asked = true;
+    if (answer !== "y" && answer !== "yes") {
+      ctx.choices.terminalKeep = true;
+      return skipped("默认终端 = " + current);
+    }
+  }
 
   const file = terminalsFile(ctx.home);
   const detected = detectTerminal();
