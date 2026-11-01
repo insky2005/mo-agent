@@ -31,6 +31,14 @@ test("host 没起来时命令给 E_DAEMON_DOWN，而不是未处理异常", asyn
   await assert.rejects(() => routerCommand(safe, { positional: ["runtime"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
 });
 
+test("裸 mo router 等同于 start（不用记两层子命令）", async () => {
+  const safe = { home: tempHome(), autoStart: false };
+  await assert.rejects(
+    () => routerCommand(safe, { positional: [], options: {} }),
+    (error) => error.code === "E_DAEMON_DOWN"
+  );
+});
+
 test("未知子命令给用法", async () => {
   await assert.rejects(
     () => routerCommand({ home: tempHome() }, { positional: ["bogus"], options: {} }),

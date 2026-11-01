@@ -21,6 +21,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 - **指挥台接入 `mo setup`**：新增「指挥台」步骤，一次配齐运行时安装 + provider/model/key，默认测通；交互时先问再装，非交互必须显式 `--router`（不会因为 `--yes` 就下载 150MB），`--dry-run` 只输出计划。新增 `--router-provider/--router-model/--router-key/` 与 `--no-test`。
 
+- **裸 `mo router` 等同于 `mo router start`**：打开指挥台不用记两层子命令，与 `mo upgrade` / `mo mcp` 的"默认子命令"一致。
 - **`mo router` 自动拉起 host**：需要 host 的动作（start / setup / reset / runtime install / prune）在连不上时先 `mo daemon start` 一次再重试，不用记两条命令；`status`/`stop`/`runtime list` 保持不自启。`MO_AGENT_NO_AUTOSTART=1` 或 `ctx.autoStart:false` 可关闭。host 是旧构建时（没有 `/local/router/*`）给 `E_ROUTER_HOST_OLD` 与明确指引，而不是裸 404。
 
 ### 变更

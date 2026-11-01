@@ -185,7 +185,8 @@ async function runtimeCommand(home, args, ctx) {
 }
 
 export async function routerCommand(ctx, args) {
-  const sub = args.positional[0] || "status";
+  // 裸 `mo router` = 启动：用户不该为了打开指挥台记两层子命令
+  const sub = args.positional[0] || "start";
   const home = (ctx && ctx.home) || os.homedir();
   const allowAuto = !(ctx && ctx.autoStart === false);
 

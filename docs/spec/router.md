@@ -117,6 +117,8 @@
 
 ### 4.2 引导入口：mo setup 与 mo router setup
 
+CLI 入口：**裸 `mo router` 就等同于 `mo router start`**（默认子命令，和 `mo upgrade` / `mo mcp` 一致），不必记两层。
+
 两条路都能完成「装运行时 + 配 provider/model/key」，共用同一套实现：
 
 | 入口 | 适用 | 行为 |
