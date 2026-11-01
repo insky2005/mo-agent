@@ -90,7 +90,7 @@ b, strong { font-weight: 650; }
 .sourceChip.claude .sourceDot { background: var(--amber); box-shadow: 0 0 8px rgba(245, 185, 66, 0.5); }
 .sourceChip.qoder .sourceDot { background: var(--green); box-shadow: 0 0 8px rgba(52, 211, 153, 0.5); }
 .sourceChip.workbuddy .sourceDot { background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
-.sourceChip.pi .sourceDot { background: linear-gradient(135deg, #f09082 0 33%, #4d9abf 33% 66%, #f1be58 66% 100%); box-shadow: 0 0 8px rgba(240, 144, 130, 0.45); }
+.sourceChip.pi .sourceDot { background: #F09082; box-shadow: 0 0 8px rgba(240, 144, 130, 0.5); }
 .sourceChip.variant { border-style: dashed; background: rgba(80, 111, 190, 0.06); }
 .sourceChip.bad { color: #ffb2ba; border-color: rgba(255, 96, 112, 0.42); background: rgba(255, 96, 112, 0.10); }
 .sourceChip.bad .sourceDot { background: var(--red); box-shadow: 0 0 8px rgba(255, 96, 112, 0.6); }
@@ -350,7 +350,7 @@ b, strong { font-weight: 650; }
 .agentTag.claude { color: #f2cf8a; border-color: rgba(245, 185, 66, 0.28); background: rgba(245, 185, 66, 0.09); }
 .agentTag.qoder { color: #8cebc6; border-color: rgba(52, 211, 153, 0.26); background: rgba(52, 211, 153, 0.08); }
 .agentTag.workbuddy { color: #8cd8f8; border-color: rgba(56, 189, 248, 0.26); background: rgba(56, 189, 248, 0.08); }
-.agentTag.pi { color: #f2a294; border-color: rgba(240, 144, 130, 0.28); background: rgba(240, 144, 130, 0.10); }
+.agentTag.pi { color: #F09082; border-color: rgba(240, 144, 130, 0.28); background: rgba(240, 144, 130, 0.10); }
 
 .tag {
   flex: none;
