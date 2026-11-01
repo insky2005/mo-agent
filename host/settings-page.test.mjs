@@ -120,7 +120,7 @@ test("Cookie 可以复用打开设置页", async () => {
 test("/settings?tab=agents 带 next 回跳字段", async () => {
   const { res } = await get("/settings?tab=agents", context());
   assert.equal(res.out.status, 200);
-  assert.match(res.out.body, /name='next' value='\/settings\?tab=agents'/);
+  assert.match(res.out.body, /name='next' value='\/settings\?tab=agents[^']*'/);
   assert.match(res.out.body, /一键配置/);
   assert.match(res.out.body, /切换设置分类|设置分类/);
 });

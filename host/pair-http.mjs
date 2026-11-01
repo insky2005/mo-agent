@@ -141,6 +141,16 @@ const STYLE = [
   ".panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:6px}",
   ".panel-head h2{font-size:15px;margin:0 0 6px}",
   ".panel-head p{color:#8b97bd;font-size:12.5px;line-height:1.6;margin:0;max-width:450px}",
+  ".agent-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:start;margin-top:10px}",
+  ".agent-nav{display:flex;flex-direction:column;gap:6px;background:#10162a;border:1px solid #263054;border-radius:12px;padding:8px}",
+  ".agent-nav-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:9px;color:#aab6dc;text-decoration:none;font-size:12.5px;border:1px solid transparent}",
+  ".agent-nav-item:hover{background:#141b32;color:#e7ecff}",
+  ".agent-nav-item.on{background:rgba(79,140,255,.14);border-color:rgba(79,140,255,.38);color:#e7ecff;font-weight:650}",
+  ".agent-nav-item .badge{font-size:10px;padding:2px 7px}",
+  ".agent-nav-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".agent-detail{min-width:0}",
+  ".agent-detail .agent{border-top:0;padding-top:0}",
+  "@media(max-width:720px){.agent-layout{grid-template-columns:1fr}.agent-nav{flex-direction:row;overflow-x:auto}.agent-nav-item{white-space:nowrap}.agent-detail .agent{flex-direction:column}}",
   ".agent-list{margin-top:6px}",
   ".agent{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:16px 0;",
   "border-top:1px solid #202a49;flex-wrap:wrap}",
@@ -477,7 +487,11 @@ function safeRenewNext(value) {
 
 /** hook 操作的 303 落点同样只允许两个固定页面。 */
 function safeHooksNext(value) {
-  return value === "/settings?tab=agents" ? value : "/agents";
+  const raw = String(value || "");
+  if (raw === "/agents" || raw === "/settings?tab=agents") return raw;
+  if (/^\/agents\?agent=[A-Za-z0-9._-]+$/.test(raw)) return raw;
+  if (/^\/settings\?tab=agents&agent=[A-Za-z0-9._-]+$/.test(raw)) return raw;
+  return "/agents";
 }
 
 function handleDingTalkRoutes(req, res, url, ctx) {
@@ -850,18 +864,31 @@ function renderAgentRow(item, canWrite, nextPath) {
   return "<div class='agent'><div class='agent-main'>" + title + detail + "</div>" + actions + "</div>";
 }
 
+function piBadge(status) {
+  if (!status) return { cls: "off", text: "控制扩展未安装" };
+  if (status.error) return { cls: "warn", text: "控制扩展不可用" };
+  if (status.installed && status.outdated) return { cls: "warn", text: "控制扩展待更新" };
+  if (status.installed) return { cls: "ok", text: "控制扩展已安装" };
+  return { cls: "off", text: "控制扩展未安装" };
+}
+
+function agentBadge(item, piStatus) {
+  if (!item) return { cls: "off", text: "—" };
+  if (item.kind === "pi-extension") return piBadge(piStatus || { error: "Pi 扩展管理不可用" });
+  if (!item.supported) return { cls: "off", text: item.kind === "native" ? "无需配置" : "暂不支持" };
+  return statusBadge(item);
+}
+
+function agentHref(base, id) {
+  return base + (base.includes("?") ? "&" : "?") + "agent=" + encodeURIComponent(id);
+}
+
 function renderPiExtensionRow(item, nextPath) {
   if (!item) return "";
   const files = Array.isArray(item.files) ? item.files : [];
   const missing = files.filter((file) => file.missingSource);
   const error = item.error || (missing.length ? "安装源文件缺失：" + missing.map((file) => file.name).join("、") : "");
-  const badge = error
-    ? { cls: "warn", text: "控制扩展不可用" }
-    : item.installed && item.outdated
-      ? { cls: "warn", text: "控制扩展待更新" }
-      : item.installed
-        ? { cls: "ok", text: "控制扩展已安装" }
-        : { cls: "off", text: "控制扩展未安装" };
+  const badge = piBadge(Object.assign({}, item, { error }));
   const dir = item.dir || "~/.pi/agent/extensions";
   const installLabel = item.installed ? (item.outdated ? "更新控制扩展" : "重新安装") : "安装控制扩展";
   const actions = error
@@ -904,7 +931,7 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
   const canWrite = true;
   const msg = url.searchParams.get("msg") || "";
   const bad = url.searchParams.get("bad") === "1";
-  const nextPath = mode === "settings" ? "/settings?tab=agents" : "/agents";
+  const basePath = mode === "settings" ? "/settings?tab=agents" : "/agents";
 
   let piStatus = null;
   if (ctx.piExtension && typeof ctx.piExtension.status === "function") {
@@ -914,18 +941,38 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
       piStatus = { error: (error && error.message) || String(error) };
     }
   }
-  const hasPiProfile = visible.some((item) => item.kind === "pi-extension");
-  // Pi 没有 hook；控制扩展状态就是它的 Agent 行，不另起一块。
-  const rows = visible.map((item) => {
-    if (item.kind === "pi-extension" && piStatus) return renderPiExtensionRow(piStatus, nextPath);
-    return renderAgentRow(item, canWrite, nextPath);
-  }).join("") + (!hasPiProfile && piStatus ? renderPiExtensionRow(piStatus, nextPath) : "");
+
+  // 第一层：Agent 列表。Pi 没有 hook，但仍然是列表里的一项。
+  const entries = visible.slice();
+  if (piStatus && !entries.some((item) => item.kind === "pi-extension")) {
+    entries.push({ id: "pi", label: "Pi", enabled: true, kind: "pi-extension", supported: false, events: [] });
+  }
+  const requested = url.searchParams.get("agent") || "";
+  const selected = entries.find((item) => item.id === requested) || entries[0] || null;
+  const selectedPath = selected ? agentHref(basePath, selected.id) : basePath;
+
+  const nav = entries.map((item) => {
+    const badge = agentBadge(item, piStatus);
+    const on = !!(selected && selected.id === item.id);
+    return "<a class='agent-nav-item" + (on ? " on" : "") + "' href='" + escapeHtml(agentHref(basePath, item.id)) + "'>"
+      + "<span class='agent-nav-label'>" + escapeHtml(item.label || item.id) + "</span>"
+      + "<span class='badge " + badge.cls + "'>" + escapeHtml(badge.text) + "</span>"
+      + "</a>";
+  }).join("");
+
+  // 第二层：选中 Agent 的具体配置。不同 Agent 的 detail 内容由各自渲染器决定。
+  let detail = "<div class='agent-events'>没有可显示的 Agent。</div>";
+  if (selected) {
+    detail = selected.kind === "pi-extension" && piStatus
+      ? renderPiExtensionRow(piStatus, selectedPath)
+      : renderAgentRow(selected, canWrite, selectedPath);
+  }
 
   const topAction = configurable.length
     ? "<form method='post' action='/setup/hooks/apply'>"
       + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
       + "<input type='hidden' name='agentId' value='all' />"
-      + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
+      + "<input type='hidden' name='next' value='" + escapeHtml(selectedPath) + "' />"
       + "<input type='hidden' name='action' value='install' />"
       + "<button class='btn' type='submit'>" + (ready.length === configurable.length ? "全部重新写入" : "一键配置全部") + "</button>"
       + "</form>"
@@ -938,7 +985,7 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
     ? ""
     : "<div class='banner bad'>配置管理不可用：host 没有加载 hooks manager。</div>";
   const progress = configurable.length
-    ? "进度：已配置 " + ready.length + " / " + configurable.length + "。"
+    ? "hook 配置进度：已配置 " + ready.length + " / " + configurable.length + "。"
     : "当前没有需要 hook 配置的 Agent。";
 
   const body = [
@@ -946,11 +993,14 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
     unavailable,
     "<div class='panel'>",
     "<div class='panel-head'><div><h2>Agent</h2>",
-    "<p>需要 hook 的 Agent 可以一键写入；Pi 控制扩展也在这里安装。写入前自动备份，"
-      + "只增删 mo-agent 自己的 hook，其它设置原样保留；Claude Code / Pi 需要重启后才会读取新配置。</p></div>",
+    "<p>先选 Agent，再配置它自己的接入方式。需要 hook 的 Agent 可以一键写入；Pi 控制扩展在 Pi 的详情里安装。"
+      + "写入前自动备份，只增删 mo-agent 自己的配置；Claude Code / Pi 需要重启后才会读取新配置。</p></div>",
     topAction,
     "</div>",
-    "<div class='agent-list'>" + (rows || "<div class='agent-events'>没有可显示的 Agent。</div>") + "</div>",
+    "<div class='agent-layout'>",
+    "<nav class='agent-nav' aria-label='Agent 列表'>" + (nav || "<div class='agent-events'>没有可显示的 Agent。</div>") + "</nav>",
+    "<div class='agent-detail'>" + detail + "</div>",
+    "</div>",
     "<div class='note'>" + progress
       + "设置文件损坏（不是合法 JSON）时会拒绝写入，不会覆盖你的原文件。</div>",
     "</div>",

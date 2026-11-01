@@ -246,7 +246,7 @@ test("单个列表：原生 Agent 只显示状态，不给按钮和配置说明"
   const ws = workspace();
   const manager = managerFor(ws, [profile(), nativeProfile(), disabledProfile()]);
   const ctx = context(ws, { hooksManager: manager });
-  const { res } = await get("/agents", ctx);
+  const { res } = await get("/agents?agent=dsh", ctx);
   const body = res.out.body;
   assert.match(body, /Claude Code/);
   assert.match(body, /DeepSeek Harness/);
@@ -254,7 +254,7 @@ test("单个列表：原生 Agent 只显示状态，不给按钮和配置说明"
   assert.match(body, /原生接入，不需要 hook 配置/);
   assert.doesNotMatch(body, /Codex CLI/, "未启用的档案不显示");
   assert.doesNotMatch(body, /name='agentId' value='dsh'/);
-  assert.equal((body.match(/将写入的配置/g) || []).length, 1, "只有 Claude 有配置说明");
+  assert.equal((body.match(/将写入的配置/g) || []).length, 0, "选中原生 Agent 时不显示 hook 配置说明");
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
 
@@ -478,7 +478,7 @@ test("/agents 显示 Pi 控制扩展安装入口", async () => {
   const ws = workspace();
   const piExtension = piExtensionMock();
   const ctx = context(ws, { piExtension });
-  const page = await get("/agents", ctx);
+  const page = await get("/agents?agent=pi", ctx);
   assert.equal(page.res.out.status, 200);
   assert.match(page.res.out.body, /Pi 控制扩展/);
   assert.match(page.res.out.body, /安装控制扩展/);
@@ -490,7 +490,7 @@ test("POST /setup/pi/apply：安装与卸载 Pi 控制扩展", async () => {
   const ws = workspace();
   const piExtension = piExtensionMock();
   const ctx = context(ws, { piExtension });
-  const page = await get("/agents", ctx);
+  const page = await get("/agents?agent=pi", ctx);
   const csrf = csrfOf(page.res.out.body);
   assert.ok(csrf);
 
@@ -508,7 +508,7 @@ test("POST /setup/pi/apply：安装与卸载 Pi 控制扩展", async () => {
   assert.match(messageOf(install.out.headers.location), /已安装 Pi 控制扩展/);
   assert.deepEqual(piExtension.calls, ["install"]);
 
-  const afterInstall = await get("/agents", ctx);
+  const afterInstall = await get("/agents?agent=pi", ctx);
   assert.match(afterInstall.res.out.body, /卸载/);
 
   const nextCsrf = csrfOf(afterInstall.res.out.body);
@@ -555,7 +555,7 @@ test("POST /setup/pi/apply：真实写入 ~/.pi/agent/extensions", async () => {
     uninstall: () => uninstallPiExtension({ root: repoRoot, home, env: {} }),
   };
   const ctx = context(ws, { piExtension });
-  const page = await get("/agents", ctx);
+  const page = await get("/agents?agent=pi", ctx);
   const csrf = csrfOf(page.res.out.body);
   const res = fakeResponse();
   await handlePairRoutes(
@@ -571,7 +571,7 @@ test("POST /setup/pi/apply：真实写入 ~/.pi/agent/extensions", async () => {
   assert.ok(fs.existsSync(loader));
   assert.match(fs.readFileSync(loader, "utf8"), /MO_AGENT_PI_CONTROL/);
 
-  const after = await get("/agents", ctx);
+  const after = await get("/agents?agent=pi", ctx);
   assert.match(after.res.out.body, /已安装/);
   assert.match(after.res.out.body, /卸载/);
 
