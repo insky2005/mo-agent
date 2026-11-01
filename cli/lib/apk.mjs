@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { createHash } from "node:crypto";
 
 const DEFAULT_REPO = "insky2005/mo-agent";
 
@@ -45,19 +47,61 @@ export async function fetchApk(options = {}) {
   log("下载 " + picked.asset.name + " …");
   const bin = await fetch(picked.asset.browser_download_url, { headers });
   if (!bin.ok) throw new Error("下载 APK 失败：" + bin.status);
-  const bytes = Buffer.from(await bin.arrayBuffer());
 
+  // 边下边写，顺带算 sha256：30MB 级的文件不该整个塞内存，也才有进度可看
+  const total = Number(bin.headers.get("content-length")) || Number(picked.asset.size) || 0;
+  const showProgress = options.progress !== false && Boolean(process.stderr.isTTY);
+  const mb = (n) => (n / 1048576).toFixed(1);
+  const paint = (received) => {
+    if (!showProgress) return;
+    const pct = total ? Math.min(100, Math.floor((received / total) * 100)) : null;
+    const text = pct === null
+      ? "  " + mb(received) + " MB"
+      : "  " + pct + "%（" + mb(received) + " / " + mb(total) + " MB）";
+    process.stderr.write("\r  下载 " + picked.asset.name + text + "   ");
+  };
+
+  if (!bin.body) throw new Error("下载 APK 失败：响应没有 body");
+
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = dest + ".part";
+  const hash = createHash("sha256");
+  let received = 0;
+  try {
+    const out = fs.createWriteStream(tmp, { mode: 0o644 });
+    for await (const chunk of Readable.fromWeb(bin.body)) {
+      received += chunk.length;
+      hash.update(chunk);
+      if (!out.write(chunk)) await new Promise((resolve) => out.once("drain", resolve));
+      paint(received);
+    }
+    await new Promise((resolve, reject) => {
+      out.end(() => resolve());
+      out.on("error", reject);
+    });
+  } catch (error) {
+    fs.rmSync(tmp, { force: true });
+    if (showProgress) process.stderr.write("\n");
+    throw error;
+  }
+  if (showProgress) {
+    process.stderr.write("\n");
+    log("  下载完成 " + mb(received) + " MB");
+  }
+
+  const actual = hash.digest("hex");
   if (picked.sha) {
     const shaRes = await fetch(picked.sha.browser_download_url, { headers });
     if (shaRes.ok) {
       const expected = (await shaRes.text()).trim().split(/\s+/)[0].toLowerCase();
-      const actual = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
-      if (expected !== actual) throw new Error("APK 校验和不匹配");
+      if (expected !== actual) {
+        fs.rmSync(tmp, { force: true });
+        throw new Error("APK 校验和不匹配");
+      }
       log("✓ 校验和通过");
     }
   }
 
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, bytes, { mode: 0o644 });
-  return { path: dest, downloaded: true };
+  fs.renameSync(tmp, dest);
+  return { path: dest, downloaded: true, bytes: received };
 }

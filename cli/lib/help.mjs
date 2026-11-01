@@ -113,7 +113,7 @@ export const GROUPS = [
     title: "常驻服务",
     blurb: "拉起 host（桌面 App 里那个服务），手机扫码配对、下载 APK",
     subs: [
-      ["start [--port N] [--foreground]", "后台启动 host；--foreground 前台跑，Ctrl+C 停", "顺手下载 APK 到 ~/.mo-agent/app.apk"],
+      ["start [--port N] [--foreground]", "后台启动 host；--foreground 前台跑，Ctrl+C 停", "顺手下载 APK 到 ~/.mo-agent/app.apk（--no-apk 跳过）"],
       ["open [app|dingtalk|agents|voice|system|monitor]", "打开设置页页签或监控屏（自动带令牌）", "默认 monitor；app=安装与配对，dingtalk=钉钉机器人绑定"],
       ["open [目标] [--browser]", "默认用 Chromium 的 --app 模式打开（无地址栏）", "--browser 用普通浏览器；没装 Chromium 系会自动退回"],
       ["open app", "安装与配对（扫码装 App、配对）", "托盘「设置 → App 安装与配对」"],

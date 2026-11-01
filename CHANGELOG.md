@@ -25,6 +25,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **裸 `mo router` 等同于 `mo router start`**：打开指挥台不用记两层子命令，与 `mo upgrade` / `mo mcp` 的"默认子命令"一致。
 - **`mo router` 自动拉起 host**：需要 host 的动作（start / setup / reset / runtime install / prune）在连不上时先 `mo daemon start` 一次再重试，不用记两条命令；`status`/`stop`/`runtime list` 保持不自启。`MO_AGENT_NO_AUTOSTART=1` 或 `ctx.autoStart:false` 可关闭。host 是旧构建时（没有 `/local/router/*`）给 `E_ROUTER_HOST_OLD` 与明确指引，而不是裸 404。
 
+- **APK 下载有进度了，且 `mo router` 不再顺手下载它**：`fetchApk` 改成流式落盘（顺带算 sha256），TTY 下在 stderr 显示百分比与 MB；`mo daemon start` 新增 `--no-apk`（或 `MO_AGENT_NO_APK=1`），`mo router` 拉起 host 时带上它——APK 只跟"手机装 App"有关，与指挥台无关。
+
 ### 变更
 
 - 新增 [ADR-0004](docs/adr/adr-0004-private-router-runtime.md)、[spec/router.md](docs/spec/router.md) 与 [实现计划](docs/plans/router-implementation.md)：确定 Router（指挥台）是 mo 私有安装、版本锁定、可替换的运行时，与 Worker 平面分开；能力面遵循“读由 runtime 给，写由 mo 给”；ADR-0001 补上“仅约束 Worker 平面”的范围说明。

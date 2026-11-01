@@ -60,15 +60,26 @@ Mo Agent 是 macOS 上的**常驻 Agent 监理**：观察本机各个 Agent 的�
 
 ## 5. 依赖方向
 
+三层：**core（纯逻辑）→ cli（应用内核，文件即状态，可自我闭环）→ host（服务外壳）**。
+
 | 允许 | 禁止 |
 |---|---|
-| `adapters → core` | `core → adapters`（core 不认识任何厂商） |
-| `host → core / adapters / approvals` | `core → host`（core 不做 IO） |
-| `approvals → core` | `adapters → host`（观测层不投递） |
-| `app/web → host (HTTP)` | `app/web → core`（前端不直连领域层） |
-| `desktop → host (子进程)` | `host → desktop` |
+| `cli → core` | `cli → host`（**CLI 必须能独立运行**，host 是它的上层） |
+| `host → cli / core / adapters / approvals` | `core → cli / host`（core 不做 IO） |
+| `adapters → core` | `adapters → host`（观测层不投递） |
+| `approvals → core` | `app/web → core`（前端不直连领域层） |
+| `app/web → host (HTTP)` | `host → desktop` |
+| `desktop → host (子进程)` | |
 
-守住这几条，功能可以随便加；破了任意一条，测试就会变成“全链路一起跑”。
+**host 只负责"长期在线 + 外部事件源 + UI 数据面"**：适配器观测、手机/钉钉/语音信道、推送、监控页。除此之外的一切——建卡、批准、派单、回执、账本、Router——都应该在 `cli/` 里闭环，不要求 host 在场。
+
+判定方法：**如果一条命令在没有 host 的情况下跑不通，先问"它真的需要长期在线或外部信道吗"**；不需要就是分层错了。
+
+已知的待还债务（本表是目标，不是现状）：
+
+| 位置 | 反向依赖 | 还法 |
+|---|---|---|
+| `cli/commands/setup.mjs`、`cli/commands/doctor.mjs` | 引了 `host/router/*` | Router 的实现（argv / 安装 / 凭据 / 生命周期）下移到 `cli/lib/router-*.mjs`，host 只保留 HTTP 薄壳与会话注入 |
 
 ## 6. 扩展一个 Agent
 

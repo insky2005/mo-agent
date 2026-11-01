@@ -215,6 +215,12 @@ async function start(ctx, args) {
   const opts = args.options || {};
   const foreground = Boolean(opts.foreground);
   const port = Number(opts.port) || readConfigPort(env, home);
+  // APK 只跟"手机装 App"有关；被别的命令顺带拉起时（如 mo router）没必要下 30MB
+  const skipApk = Boolean(opts["no-apk"]) || String(env.MO_AGENT_NO_APK || "") === "1";
+  const prefetchApk = async () => {
+    if (skipApk) return null;
+    return fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+  };
 
   const existing = readPid(home);
   // pid 文件过期（进程没了）就清掉，别影响后面的判断
@@ -234,7 +240,7 @@ async function start(ctx, args) {
     // 幂等：已经有一个 host 在跑，就把访问信息给出来，不再起第二个。
     // 顺手把 APK 备好，这样桌面 App 起的 host 也能扫码装。
     try {
-      await fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+      await prefetchApk();
     } catch {
       // 没有 APK Release 就算了，不影响信息输出
     }
@@ -255,7 +261,7 @@ async function start(ctx, args) {
   // 顺手把 APK 备好，这样手机扫码就能装（没有 Release 就跳过，不影响启动）
   let apk = null;
   try {
-    apk = await fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+    apk = await prefetchApk();
   } catch (error) {
     process.stderr.write("  （APK 未准备好：" + error.message + "，/app.apk 会提示去下载）\n");
   }

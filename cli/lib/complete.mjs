@@ -159,6 +159,7 @@ const ENUMS = {
 /** 没有子命令的组：自己的 flag */
 const NO_SUB_FLAGS = {
   doctor: ["--json"],
+  daemon: ["--port", "--foreground", "--no-apk", "--browser", "--show-token", "--json"],
   setup: [
     "--yes",
     "--dry-run",
@@ -334,6 +335,7 @@ const FLAG_DESC = {
   "--model": "指挥台的模型 id",
   "--key": "指挥台的 API key",
   "--force": "强制重装运行时",
+  "--no-apk": "跳过 APK 预下载",
 };
 
 function flagItems(flags, current) {

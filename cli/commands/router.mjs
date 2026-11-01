@@ -40,7 +40,8 @@ async function ensureHost(ctx) {
   try {
     const code = await daemonCommand(
       { cwd: (ctx && ctx.cwd) || process.cwd(), env: process.env },
-      { positional: ["start"], options: {} },
+      // 不要 APK：那是"手机装 App"的事，跟指挥台无关，30MB 白下
+      { positional: ["start"], options: { "no-apk": true } },
     );
     return code === 0;
   } catch (error) {
