@@ -1,17 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { credentialsFile, configDir, contractFile, routerFile, routerRoot, runtimeInstallDir, runtimeRoot, sessionsDir, workbenchDir } from "./paths.mjs";
+import os from "node:os";
+import path from "node:path";
+import {
+  configDir,
+  contractFile,
+  credentialsFile,
+  moDataDir,
+  routerFile,
+  routerRoot,
+  runtimeInstallDir,
+  runtimeRoot,
+  sessionsDir,
+  workbenchDir,
+} from "./paths.mjs";
 
 const HOME = "/Users/x";
+const DATA = "/Users/x/.mo-agent";
 
-test("Router 的用户数据都在 ~/.mo-agent/router 下", () => {
-  assert.equal(routerRoot(HOME), "/Users/x/.mo-agent/router");
-  assert.equal(routerFile(HOME), "/Users/x/.mo-agent/router/router.json");
-  assert.equal(credentialsFile(HOME), "/Users/x/.mo-agent/router/credentials.json");
-  assert.equal(configDir(HOME), "/Users/x/.mo-agent/router/config");
-  assert.equal(sessionsDir(HOME), "/Users/x/.mo-agent/router/sessions");
-  assert.equal(workbenchDir(HOME), "/Users/x/.mo-agent/router/workbench");
-  assert.equal(contractFile(HOME), "/Users/x/.mo-agent/router/workbench/ROUTER.md");
+test("Router 的用户数据都在数据目录下的 router/", () => {
+  assert.equal(routerRoot(DATA), "/Users/x/.mo-agent/router");
+  assert.equal(routerFile(DATA), "/Users/x/.mo-agent/router/router.json");
+  assert.equal(credentialsFile(DATA), "/Users/x/.mo-agent/router/credentials.json");
+  assert.equal(configDir(DATA), "/Users/x/.mo-agent/router/config");
+  assert.equal(sessionsDir(DATA), "/Users/x/.mo-agent/router/sessions");
+  assert.equal(workbenchDir(DATA), "/Users/x/.mo-agent/router/workbench");
+  assert.equal(contractFile(DATA), "/Users/x/.mo-agent/router/workbench/ROUTER.md");
+  // dataDir 与 osHome 不能混：拼错一次就会得到 ~/.mo-agent/.mo-agent/router
+  assert.ok(!routerRoot(DATA).includes(".mo-agent/.mo-agent"));
+});
+
+test("moDataDir 认 MO_AGENT_HOME，否则回落 ~/.mo-agent", () => {
+  assert.equal(moDataDir({ MO_AGENT_HOME: "/tmp/alt" }), "/tmp/alt");
+  assert.equal(moDataDir({}), path.join(os.homedir(), ".mo-agent"));
 });
 
 test("程序产物按平台落在 runtimeRoot 下，可用环境变量覆盖", () => {

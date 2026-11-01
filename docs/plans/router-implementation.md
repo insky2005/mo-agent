@@ -74,7 +74,7 @@
 | # | 任务 | 文件 | 验收 |
 |---|---|---|---|
 | P2.1 | 私有安装与版本化 | `host/router/install.mjs` | 下载 → sha256 → 临时目录 → 同目录 rename；`routers/<id>/<version>/`；保留上一版；失败不留半个安装 |
-| P2.2 | 版本 pin | `host/router/runtimes.json` | 不是 latest；`mo router runtime prune` 清旧版 |
+| P2.2 | 版本 pin | `host/router/runtimes.mjs` | 不是 latest；`mo router runtime prune` 清旧版。**必须是 JS 模块**：单文件二进制只内联 JS，读外部 JSON 会 ENOENT |
 | P2.3 | 凭据落盘 | `host/router/credentials.mjs` | `~/.mo-agent/router/credentials.json` `0600`（抄 `host/dingtalk-setup.mjs:65` 的 tmp+chmod+rename）；日志与界面只显后 4 位 |
 | P2.4 | 引导与测通 | 新增 `host/router/setup.mjs` | 状态机 R2–R4；**测通必做**（真实发一条短消息）；失败给原始错误 |
 | P2.5 | 设置页第 6 个 tab | `host/settings-page.mjs` | `{ id:"router", label:"指挥台", hint:"你的主 Agent：拆任务、派单、盯进度" }`；含「用本机已有的」但不静默复用 |

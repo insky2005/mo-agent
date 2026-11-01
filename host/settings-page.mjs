@@ -276,7 +276,7 @@ function renderRouterSection() {
   let installed = [];
   try {
     installed = fs
-      .readdirSync(path.join(runtimeRoot({ home, env: process.env }), "routers", "pi"))
+      .readdirSync(path.join(runtimeRoot({ home: os.homedir(), env: process.env }), "routers", "pi"))
       .filter((name) => !name.includes(".tmp-"));
   } catch {
     installed = [];

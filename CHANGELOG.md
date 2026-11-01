@@ -28,6 +28,9 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 修复
 
+- **`mo setup` 的指挥台步骤在单文件二进制里报 `E_ROUTER_RUNTIME_MISSING`**：运行时清单原本是 `runtimes.json`，靠 `fs` 在运行时读取，而 `bun --compile` 只内联 JS 模块，路径会变成不存在的 `/$bunfs/root/runtimes.json`。改成 `host/router/runtimes.mjs`，并加一条"不许再引用 runtimes.json"的回归测试。
+- **Router 凭据写到 `~/.mo-agent/.mo-agent/router/`**：`dataDir`（`~/.mo-agent`）与 `osHome`（`~`）两个语义混用，路径被重复拼了一次。`host/router/paths.mjs` 现在显式区分两者，`routerRoot(dataDir)` 不再内含 `.mo-agent`。
+
 ## [0.2.1] - 2026-10-31
 
 ### 修复

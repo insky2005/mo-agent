@@ -1,37 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { MoError } from "../../core/errors.mjs";
 import { ROUTER_ERROR } from "../../core/router.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
+import { RUNTIMES, runtimeManifest } from "./runtimes.mjs";
 import { resolveNode } from "./node.mjs";
 import { runtimeInstallDir, runtimeRoot } from "./paths.mjs";
 
 /**
  * Router 运行时的私有安装。
  *
- * 版本 pin 在 runtimes.json，**不是 latest**：运行时的 CLI 契约（--tools / mcp）
+ * 版本 pin 在 runtimes.mjs，**不是 latest**：运行时的 CLI 契约（--tools / mcp）
  * 会随版本漂移，Router 的行为不能变成"用户机器上 npm 装了什么"的函数。
  *
  * 安装是原子的：先装到 <target>.tmp-*，自检通过再 rename；失败不留半个安装。
  * npm 用私有 cache，避免用户 ~/.npm 损坏时把安装拖下水（实测踩过）。
  */
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-export function loadManifest(file) {
-  const target = file || path.join(HERE, "runtimes.json");
-  const value = readJsonSafe(target, null);
-  if (!value || typeof value !== "object") {
-    throw new MoError(ROUTER_ERROR.RUNTIME_MISSING, "运行时清单缺失或不是合法 JSON：" + target);
-  }
-  return value;
+/**
+ * 清单只从模块里来，不做任何文件读取——单文件二进制里没有 runtimes.json。
+ * 想换版本就改 runtimes.mjs，跟着 mo 的版本走。
+ */
+export function loadManifest() {
+  return RUNTIMES;
 }
 
-export function manifestFor(id, file) {
-  const manifest = loadManifest(file);
-  const entry = manifest[id || "pi"];
+export function manifestFor(id) {
+  const entry = runtimeManifest(id || "pi");
   if (!entry || !entry.package || !entry.version) {
     throw new MoError(ROUTER_ERROR.RUNTIME_MISSING, "清单里没有运行时：" + (id || "pi"));
   }

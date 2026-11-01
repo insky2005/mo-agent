@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
@@ -562,7 +563,8 @@ const ROUTER_DEFAULT_MODEL = { deepseek: "deepseek-v4-flash" };
 
 async function stepRouter(ctx) {
   const options = ctx.options || {};
-  const installed = listRuntimes({ home: ctx.home, env: process.env, platform: process.platform }).runtimes;
+  const osHome = os.homedir();
+  const installed = listRuntimes({ home: osHome, env: process.env, platform: process.platform }).runtimes;
   const hasRuntime = installed.some((item) => item.installed);
   const current = resolveCredentials(ctx.home, process.env);
 
@@ -636,7 +638,7 @@ async function stepRouter(ctx) {
   let runtimeVersion = hasRuntime ? installed[0].version : null;
   if (!hasRuntime) {
     process.stderr.write("安装运行时 " + manifestFor("pi").version + "…（约 40 秒 / 150MB）\n");
-    const result = await installRuntime({ home: ctx.home, env: process.env, platform: process.platform });
+    const result = await installRuntime({ home: osHome, env: process.env, platform: process.platform });
     runtimeVersion = result.version;
   }
 
@@ -644,7 +646,7 @@ async function stepRouter(ctx) {
   const probe = has(options, "no-test")
     ? { tested: false, reason: "已跳过测通（--no-test）" }
     : await probeModel({
-        bin: path.join(runtimeRoot({ home: ctx.home, env: process.env, platform: process.platform }), "routers", "pi", runtimeVersion, "bin", "pi"),
+        bin: path.join(runtimeRoot({ home: osHome, env: process.env, platform: process.platform }), "routers", "pi", runtimeVersion, "bin", "pi"),
         provider: written.provider,
         model: written.model,
         env: buildEnv(written.provider, apiKey),

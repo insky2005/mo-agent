@@ -23,8 +23,14 @@ function fakeRuntime() {
 }
 
 function make(options) {
-  const home = options.home;
-  return createRouterManager({ home, hub: options.hub, log: silentLog, env: options.env });
+  // dataDir 跟数据走、osHome 推程序产物路径；测试里两者都落在临时目录
+  return createRouterManager({
+    dataDir: options.home,
+    osHome: options.home,
+    hub: options.hub,
+    log: silentLog,
+    env: options.env,
+  });
 }
 
 test("空目录时 status 是未运行、未引导", () => {

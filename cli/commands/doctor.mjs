@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { emit, padDisplay } from "../lib/output.mjs";
 import { VERSION } from "../lib/version.mjs";
@@ -30,7 +31,7 @@ function routerCheck(home) {
   let versions = [];
   try {
     versions = fs
-      .readdirSync(path.join(runtimeRoot({ home, env: process.env }), "routers", "pi"))
+      .readdirSync(path.join(runtimeRoot({ home: os.homedir(), env: process.env }), "routers", "pi"))
       .filter((name) => !name.includes(".tmp-"));
   } catch {
     versions = [];

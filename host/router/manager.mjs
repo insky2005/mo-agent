@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { MoError } from "../../core/errors.mjs";
@@ -112,7 +113,6 @@ function waitForPid(file, timeoutMs, now) {
  */
 export function createRouterManager(options) {
   const opts = options || {};
-  const home = opts.home;
   const hub = opts.hub;
   const log = opts.log || { info() {}, warn() {}, error() {} };
   const env = opts.env || process.env;
@@ -122,23 +122,26 @@ export function createRouterManager(options) {
   const openTerminalImpl = opts.openTerminal || openTerminal;
   const probe = opts.probe || probeModel;
 
-  if (!home) throw new Error("createRouterManager 需要 home");
   if (!hub) throw new Error("createRouterManager 需要 hub");
 
+  // dataDir：mo 的数据目录（跟人走）；osHome：只用来推程序产物路径
+  const dataDir = opts.dataDir || P.moDataDir(env);
+  const osHome = opts.osHome || os.homedir();
+
   const files = {
-    root: P.routerRoot(home),
-    state: P.routerFile(home),
-    pid: P.routerPidFile(home),
-    log: P.routerLogFile(home),
-    script: P.startScriptFile(home),
-    credentials: P.credentialsFile(home),
-    config: P.configDir(home),
-    sessions: P.sessionsDir(home),
-    workbench: P.workbenchDir(home),
-    contract: P.contractFile(home),
-    readme: P.workbenchReadme(home),
-    extension: P.extensionFile(home),
-    mcp: P.mcpConfigFile(home),
+    root: P.routerRoot(dataDir),
+    state: P.routerFile(dataDir),
+    pid: P.routerPidFile(dataDir),
+    log: P.routerLogFile(dataDir),
+    script: P.startScriptFile(dataDir),
+    credentials: P.credentialsFile(dataDir),
+    config: P.configDir(dataDir),
+    sessions: P.sessionsDir(dataDir),
+    workbench: P.workbenchDir(dataDir),
+    contract: P.contractFile(dataDir),
+    readme: P.workbenchReadme(dataDir),
+    extension: P.extensionFile(dataDir),
+    mcp: P.mcpConfigFile(dataDir),
   };
 
   function readState() {
@@ -235,7 +238,7 @@ export function createRouterManager(options) {
       return { ...current, attached: true };
     }
 
-    const runtime = resolveRuntime({ home, env, platform });
+    const runtime = resolveRuntime({ home: osHome, env, platform });
     if (!runtime) {
       throw new MoError(ROUTER_ERROR.RUNTIME_MISSING, "找不到 Router 运行时", {
         hint: "先 mo router runtime install，或用 MO_ROUTER_RUNTIME_BIN 指向一个开发版本",
@@ -246,7 +249,7 @@ export function createRouterManager(options) {
       throw new MoError(ROUTER_ERROR.RUNTIME_UNSUPPORTED, admitted.reason, { code: admitted.code });
     }
 
-    const credentials = resolveCredentials(home, env);
+    const credentials = resolveCredentials(dataDir, env);
     if (!credentials.ok) {
       throw new MoError(credentials.code, credentials.reason, { provider: credentials.provider });
     }
@@ -368,9 +371,9 @@ export function createRouterManager(options) {
    */
   async function setup(input) {
     const value = input || {};
-    if (value.apiKey) writeCredentials(home, value);
+    if (value.apiKey) writeCredentials(dataDir, value);
 
-    const credentials = resolveCredentials(home, env);
+    const credentials = resolveCredentials(dataDir, env);
     if (!credentials.ok) {
       throw new MoError(credentials.code, credentials.reason + "（用 mo router setup --provider … --key … 配置）", {
         provider: credentials.provider,
@@ -379,7 +382,7 @@ export function createRouterManager(options) {
 
     let test = { tested: false, reason: "已跳过测通" };
     if (value.test !== false) {
-      const runtime = resolveRuntime({ home, env, platform });
+      const runtime = resolveRuntime({ home: osHome, env, platform });
       if (!runtime) {
         test = { tested: false, reason: "运行时还没安装，先 mo router runtime install 再测通" };
       } else {
@@ -424,7 +427,7 @@ export function createRouterManager(options) {
   }
 
   function reset() {
-    const removed = deleteCredentials(home);
+    const removed = deleteCredentials(dataDir);
     const state = readState();
     if (state) writeJsonPrivate(files.state, { ...state, onboarded: false });
     return { ok: true, removed };
@@ -434,7 +437,7 @@ export function createRouterManager(options) {
   function runtimeInstall(input) {
     const value = input || {};
     return installRuntime({
-      home,
+      home: osHome,
       env,
       log,
       platform,
@@ -450,7 +453,7 @@ export function createRouterManager(options) {
       ok: true,
       pinned: manifest.version,
       inUse: state.version || null,
-      ...listRuntimes({ home, env, platform }),
+      ...listRuntimes({ home: osHome, env, platform }),
     };
   }
 
@@ -458,7 +461,7 @@ export function createRouterManager(options) {
     const manifest = manifestFor("pi");
     const state = readState() || {};
     const keep = [manifest.version, state.version].filter(Boolean);
-    return { ok: true, ...pruneRuntimes({ home, env, platform, keep }) };
+    return { ok: true, ...pruneRuntimes({ home: osHome, env, platform, keep }) };
   }
 
   return { status, start, stop, setup, reset, runtimeInstall, runtimes, runtimePrune, files, resolveRuntime };

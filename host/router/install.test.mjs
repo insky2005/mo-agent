@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listRuntimes, loadManifest, manifestFor, pruneRuntimes, runtimeBinPath, writeShim } from "./install.mjs";
+import { RUNTIMES } from "./runtimes.mjs";
 import { runtimeRoot } from "./paths.mjs";
 
 function tempHome() {
@@ -16,6 +17,24 @@ function fakeInstall(home, version) {
   fs.writeFileSync(runtimeBinPath(dir), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   return dir;
 }
+
+test("清单来自模块，不读文件（单文件二进制里没有 runtimes.json）", () => {
+  assert.equal(loadManifest(), RUNTIMES);
+  assert.ok(Object.isFrozen(RUNTIMES));
+  // 回归护栏：router 目录里任何文件都不该再引用 runtimes.json
+  const dir = path.dirname(new URL(import.meta.url).pathname);
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(".mjs")) continue;
+    if (name.endsWith(".test.mjs")) continue;
+    const text = fs.readFileSync(path.join(dir, name), "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      // 注释里提一句是允许的；真正去读文件才拦
+      if (trimmed.startsWith("*") || trimmed.startsWith("//") || trimmed.startsWith("/*")) continue;
+      assert.ok(!line.includes("runtimes.json"), name + " 又去读 runtimes.json 了（打包后会 ENOENT）");
+    }
+  }
+});
 
 test("清单里 pin 了版本与 Node 下限", () => {
   const manifest = loadManifest();

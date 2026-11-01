@@ -348,7 +348,8 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 ## 11. 升级与回滚
 
-- 版本 pin 在代码里的 `host/router/runtimes.json`（随 mo 版本走），**不是 latest**；
+- 版本 pin 在代码里的 `host/router/runtimes.mjs`（随 mo 版本走），**不是 latest**；
+  **必须是 JS 模块而不是 JSON**：单文件二进制（`bun --compile`）只内联 JS 模块，运行时读外部 JSON 会拿到不存在的 `/$bunfs/...` 路径；
 - 安装方式：`npm install --prefix <staging>` 装进临时目录，用**私有 npm cache**（`<runtimeRoot>/npm-cache`），
   避免用户 `~/.npm` 损坏时把安装拖下水；自检通过后 `rename` 到最终目录，失败不留半个安装；
 - Node 下限来自运行时清单（Pi 1.3.0 要求 `>=22.19.0`），由安装器负责找并钉进 `bin/pi` 的 shim；
@@ -383,7 +384,7 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 - [ ] 手机/钉钉/语音能通过 `/api/prompt` 给 Router 发指令；
 - [ ] 第二个 `mo router start` 是 attach，不新起进程；
 - [ ] 删掉 `credentials.json` 后启动得到 `E_ROUTER_NO_CREDENTIAL`，不是静默失败；
-- [ ] 把 `runtimes.json` 指向一个 `toolRestriction: "none"` 的假 runtime，得到 `E_ROUTER_RUNTIME_UNSUPPORTED`；
+- [ ] 在 `runtimes.mjs` 里加一个 `toolRestriction: "none"` 的假 runtime，得到 `E_ROUTER_RUNTIME_UNSUPPORTED`；
 - [ ] `npm test`、`npm run check` 通过；Worker 平面行为零变化。
 
 ## 14. 不做

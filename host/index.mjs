@@ -601,7 +601,7 @@ async function runDictate() {
 }
 
 // Router（指挥台）：mo 自己的主 Agent；生命周期归 host，CLI 只发 HTTP 请求
-const routerManager = createRouterManager({ home: os.homedir(), hub, log });
+const routerManager = createRouterManager({ hub, log });
 
 const moHost = createMoAgentServer({
   config,

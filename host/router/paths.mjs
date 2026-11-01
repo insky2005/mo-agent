@@ -1,12 +1,26 @@
+import os from "node:os";
 import path from "node:path";
 
 /**
  * Router 的路径计算（纯函数，不碰文件系统）。
  * 目录约定见 docs/spec/router.md §3。
+ *
+ * 两个不同的 "home"，别混：
+ *  - dataDir  = mo 的数据目录（~/.mo-agent，或 MO_AGENT_HOME）
+ *  - osHome   = 操作系统用户目录（~），只用来推程序产物路径
+ * 这两者混过一次：CLI 传进来的是 dataDir，而这里又拼了一次 .mo-agent，
+ * 结果凭据写到了 ~/.mo-agent/.mo-agent/router/credentials.json。
  */
 
-export function routerRoot(home) {
-  return path.join(home, ".mo-agent", "router");
+/** mo 的数据目录（与 cli/lib/paths.mjs 的 moHome() 同义） */
+export function moDataDir(env) {
+  const source = env || process.env;
+  return path.resolve(source.MO_AGENT_HOME || path.join(os.homedir(), ".mo-agent"));
+}
+
+/** dataDir 下的 router 目录 */
+export function routerRoot(dataDir) {
+  return path.join(dataDir, "router");
 }
 
 export function routerFile(home) {
