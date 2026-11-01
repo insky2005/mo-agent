@@ -319,8 +319,10 @@ function renderSetupPage(res, ctx, url) {
 export async function handlePairRoutes(req, res, url, ctx) {
   const pathname = url.pathname;
   const applyPath = pathname === "/setup/hooks/apply";
+  const piApplyPath = pathname === "/setup/pi/apply";
   const dingtalkPath = pathname === "/setup/dingtalk" || pathname.startsWith("/setup/dingtalk/");
   const known = applyPath
+    || piApplyPath
     || dingtalkPath
     || pathname === "/pair"
     || pathname === "/setup"
@@ -374,6 +376,54 @@ export async function handlePairRoutes(req, res, url, ctx) {
     }
     const summary = summarize(results, action, thrown);
     const query = new URLSearchParams({ msg: summary.msg, bad: summary.bad ? "1" : "0" });
+    const base = safeHooksNext(form.next);
+    redirect(res, base + (base.includes("?") ? "&" : "?") + query.toString());
+    return true;
+  }
+
+  // ---- Pi 控制扩展安装（只允许电脑本机） ----
+  if (piApplyPath) {
+    if (req.method !== "POST") {
+      html(res, 405, "method not allowed");
+      return true;
+    }
+    if (ctx.isLoopback === false) {
+      html(res, 403, "该操作仅限电脑本机：请在电脑浏览器打开 http://127.0.0.1:" + ctx.port + "/settings?tab=agents");
+      return true;
+    }
+    if (!ctx.piExtension) {
+      html(res, 503, "Pi 扩展管理不可用（host 未加载 pi-extension）");
+      return true;
+    }
+    const form = await readForm(req);
+    if (form.csrf !== HOOKS_CSRF) {
+      html(res, 403, "页面已过期：请刷新设置页后重试");
+      return true;
+    }
+    const action = form.action === "uninstall" ? "uninstall" : "install";
+    let result = null;
+    let thrown = "";
+    try {
+      result = action === "uninstall" ? ctx.piExtension.uninstall() : ctx.piExtension.install();
+    } catch (error) {
+      thrown = (error && error.message) || String(error);
+    }
+    let msg = "";
+    let bad = false;
+    if (thrown) {
+      msg = "Pi 控制扩展操作失败：" + thrown;
+      bad = true;
+    } else if (!result || result.ok === false) {
+      msg = "Pi 控制扩展操作失败：" + ((result && result.error) || "未知错误");
+      bad = true;
+    } else if (action === "uninstall") {
+      msg = result.changed ? "已卸载 Pi 控制扩展；已在运行的 Pi 需重启后生效" : "没有需要卸载的 Pi 控制扩展";
+    } else {
+      msg = result.changed
+        ? "已安装 Pi 控制扩展；重启 Pi 后生效" + (result.backups && result.backups.length ? "（原文件已备份）" : "")
+        : "Pi 控制扩展已是最新";
+    }
+    const query = new URLSearchParams({ msg, bad: bad ? "1" : "0" });
     const base = safeHooksNext(form.next);
     redirect(res, base + (base.includes("?") ? "&" : "?") + query.toString());
     return true;
@@ -800,6 +850,48 @@ function renderAgentRow(item, canWrite, nextPath) {
   return "<div class='agent'><div class='agent-main'>" + title + detail + "</div>" + actions + "</div>";
 }
 
+function renderPiExtensionRow(item, nextPath) {
+  if (!item) return "";
+  const files = Array.isArray(item.files) ? item.files : [];
+  const missing = files.filter((file) => file.missingSource);
+  const error = item.error || (missing.length ? "安装源文件缺失：" + missing.map((file) => file.name).join("、") : "");
+  const badge = error
+    ? { cls: "warn", text: "不可用" }
+    : item.installed && item.outdated
+      ? { cls: "warn", text: "需要更新" }
+      : item.installed
+        ? { cls: "ok", text: "已安装" }
+        : { cls: "off", text: "未安装" };
+  const dir = item.dir || "~/.pi/agent/extensions";
+  const installLabel = item.installed ? (item.outdated ? "更新控制扩展" : "重新安装") : "安装控制扩展";
+  const actions = error
+    ? "<div class='agent-actions'><span class='badge warn'>" + escapeHtml(badge.text) + "</span></div>"
+    : "<div class='agent-actions'>"
+      + "<form method='post' action='/setup/pi/apply'>"
+      + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
+      + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
+      + "<input type='hidden' name='action' value='install' />"
+      + "<button class='btn" + (item.installed && !item.outdated ? " ghost" : "") + "' type='submit'>" + installLabel + "</button>"
+      + "</form>"
+      + (item.installed
+        ? "<form method='post' action='/setup/pi/apply' onsubmit=\"return confirm('确定要卸载 Pi 控制扩展吗？Pi 会回到只读观测。');\">"
+          + "<input type='hidden' name='csrf' value='" + HOOKS_CSRF + "' />"
+          + "<input type='hidden' name='next' value='" + escapeHtml(nextPath) + "' />"
+          + "<input type='hidden' name='action' value='uninstall' />"
+          + "<button class='btn danger' type='submit'>卸载</button>"
+          + "</form>"
+        : "")
+      + "</div>";
+  return "<div class='agent'><div class='agent-main'>"
+    + "<div class='agent-title'><strong>Pi 控制扩展</strong>"
+    + "<span class='badge " + badge.cls + "'>" + badge.text + "</span>"
+    + "<span class='agent-id'>pi</span></div>"
+    + "<div class='agent-path'>安装目录：<code>" + escapeHtml(dir) + "</code></div>"
+    + "<div class='agent-events'>只用于发送指令 / 中断，不拦截工具、不做审批。未安装时 Pi 仍可观测；安装后重启 Pi 生效。</div>"
+    + (error ? "<div class='agent-error'>" + escapeHtml(error) + "</div>" : "")
+    + "</div>" + actions + "</div>";
+}
+
 export function renderAgentsSection(ctx, url, mode = "standalone") {
   const agents = ctx.hooksManager ? ctx.hooksManager.status() : [];
   // 只列当前启用的 Agent；未启用的档案不算「目前支持」。
@@ -814,7 +906,15 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
   const bad = url.searchParams.get("bad") === "1";
   const nextPath = mode === "settings" ? "/settings?tab=agents" : "/agents";
 
-  const rows = visible.map((item) => renderAgentRow(item, canWrite, nextPath)).join("");
+  let piRow = "";
+  if (ctx.piExtension && typeof ctx.piExtension.status === "function") {
+    try {
+      piRow = renderPiExtensionRow(ctx.piExtension.status(), nextPath);
+    } catch (error) {
+      piRow = renderPiExtensionRow({ error: (error && error.message) || String(error) }, nextPath);
+    }
+  }
+  const rows = visible.map((item) => renderAgentRow(item, canWrite, nextPath)).join("") + piRow;
 
   const topAction = configurable.length
     ? "<form method='post' action='/setup/hooks/apply'>"
@@ -841,8 +941,8 @@ export function renderAgentsSection(ctx, url, mode = "standalone") {
     unavailable,
     "<div class='panel'>",
     "<div class='panel-head'><div><h2>Agent</h2>",
-    "<p>需要 hook 的 Agent 可以一键写入；原生接入的只显示当前方式。写入前自动备份，"
-      + "只增删 mo-agent 自己的 hook，其它设置原样保留；Claude Code 需要重启后才会读取新配置。</p></div>",
+    "<p>需要 hook 的 Agent 可以一键写入；Pi 控制扩展也在这里安装。写入前自动备份，"
+      + "只增删 mo-agent 自己的 hook，其它设置原样保留；Claude Code / Pi 需要重启后才会读取新配置。</p></div>",
     topAction,
     "</div>",
     "<div class='agent-list'>" + (rows || "<div class='agent-events'>没有可显示的 Agent。</div>") + "</div>",

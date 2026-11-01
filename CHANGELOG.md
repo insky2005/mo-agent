@@ -9,7 +9,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 新增
 
-- **Pi 接入**：观测 `~/.pi/agent/sessions` 的 JSONL 树；可选控制扩展支持手机发送指令 / 中断（`npm run pi:install`），不做工具审批。
+- **Pi 接入**：观测 `~/.pi/agent/sessions` 的 JSONL 树；设置页可一键安装控制扩展，支持手机发送指令 / 中断（不做工具审批）。
 - `mo upgrade`：检查最新 CLI Release 并原地升级。默认「检查 → 下载 → sha256 校验 → 原子替换自己的二进制」，
   支持 `--check` / `--dry-run` / `--json` / `--version <标签|版本>` / `--force`；替换前先在临时文件上跑
   `--version` 验证产物，源码运行与不可写目录会明确拒绝。`mo doctor` 用本地缓存提示「有新版」，不额外联网。

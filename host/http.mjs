@@ -84,6 +84,7 @@ export function createMoAgentServer(options) {
   const broker = options.broker;
   const dsh = options.dsh;
   const piControl = options.piControl || null;
+  const piExtension = options.piExtension || null;
   const processes = options.processes;
   const dshMonitor = options.monitor;
   const runtime = options.runtime;
@@ -250,6 +251,7 @@ export function createMoAgentServer(options) {
           apkVersionCode: apkInfo.versionCode || 0,
           renewPairing,
           hooksManager,
+          piExtension,
           dingtalk: getDingTalk(),
           dingtalkSetup,
           onDingTalkReset,
@@ -274,6 +276,7 @@ export function createMoAgentServer(options) {
           apkVersionCode: apkInfo.versionCode || 0,
           renewPairing,
           hooksManager,
+          piExtension,
           dingtalk: getDingTalk(),
           dingtalkSetup,
           onDingTalkReset,

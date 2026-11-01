@@ -16,6 +16,7 @@ import { createPushTokenStore } from "./push-tokens.mjs";
 import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createPiControl } from "../adapters/pi-control.mjs";
+import { installPiExtension, piExtensionStatus, uninstallPiExtension } from "./pi-extension.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
 import { createDecisionRouter } from "./decisions.mjs";
@@ -365,6 +366,12 @@ const dsh = dshEnabled ? new DshClient({ home: config.dshHome, baseUrl: config.d
 // Pi 用户自开的会话靠进程内扩展主动连 host；这里只保存控制通道状态。
 const piEnabled = profiles.some((p) => p.id === "pi" && p.enabled !== false);
 const piControl = piEnabled ? createPiControl({ hub, log }) : null;
+// 桌面 App 用：设置页直接安装 Pi 控制扩展，不依赖源码 checkout。
+const piExtension = piEnabled ? {
+  status: () => piExtensionStatus({ root, home: os.homedir() }),
+  install: () => installPiExtension({ root, home: os.homedir() }),
+  uninstall: () => uninstallPiExtension({ root, home: os.homedir() }),
+} : null;
 const created = await createAdapters({
   hub,
   log,
@@ -599,6 +606,7 @@ const moHost = createMoAgentServer({
   decide: routeDecision,
   dsh,
   piControl,
+  piExtension,
   processes,
   runtime,
   log,

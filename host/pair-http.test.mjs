@@ -7,6 +7,8 @@ import { Readable } from "node:stream";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
 import { adminCookieValue } from "./admin-auth.mjs";
+import { fileURLToPath } from "node:url";
+import { installPiExtension, piExtensionStatus, uninstallPiExtension } from "./pi-extension.mjs";
 
 const quiet = { info() {}, warn() {} };
 
@@ -440,5 +442,148 @@ test("卸载：从 /agents 移除后配置还原", async () => {
   assert.equal(remove.out.status, 303);
   assert.match(messageOf(remove.out.headers.location), /已移除 Claude Code/);
   assert.deepEqual(JSON.parse(fs.readFileSync(ws.settings, "utf8")), {});
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+function piExtensionMock() {
+  let installed = false;
+  const calls = [];
+  return {
+    calls,
+    status() {
+      return {
+        dir: "~/.pi/agent/extensions",
+        installed,
+        outdated: false,
+        files: [
+          { name: "mo-agent-control.js", exists: installed, marker: installed, missingSource: false },
+          { name: "mo-agent-control-impl.js", exists: installed, marker: installed, missingSource: false },
+        ],
+      };
+    },
+    install() {
+      installed = true;
+      calls.push("install");
+      return { ok: true, changed: true, backups: [] };
+    },
+    uninstall() {
+      installed = false;
+      calls.push("uninstall");
+      return { ok: true, changed: true };
+    },
+  };
+}
+
+test("/agents 显示 Pi 控制扩展安装入口", async () => {
+  const ws = workspace();
+  const piExtension = piExtensionMock();
+  const ctx = context(ws, { piExtension });
+  const page = await get("/agents", ctx);
+  assert.equal(page.res.out.status, 200);
+  assert.match(page.res.out.body, /Pi 控制扩展/);
+  assert.match(page.res.out.body, /安装控制扩展/);
+  assert.match(page.res.out.body, /不拦截工具/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("POST /setup/pi/apply：安装与卸载 Pi 控制扩展", async () => {
+  const ws = workspace();
+  const piExtension = piExtensionMock();
+  const ctx = context(ws, { piExtension });
+  const page = await get("/agents", ctx);
+  const csrf = csrfOf(page.res.out.body);
+  assert.ok(csrf);
+
+  const install = fakeResponse();
+  const handledInstall = await handlePairRoutes(
+    request("POST", "csrf=" + csrf + "&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    install,
+    new URL("http://x/setup/pi/apply"),
+    ctx
+  );
+  assert.equal(handledInstall, true);
+  assert.equal(install.out.status, 303);
+  assert.match(messageOf(install.out.headers.location), /已安装 Pi 控制扩展/);
+  assert.deepEqual(piExtension.calls, ["install"]);
+
+  const afterInstall = await get("/agents", ctx);
+  assert.match(afterInstall.res.out.body, /卸载/);
+
+  const nextCsrf = csrfOf(afterInstall.res.out.body);
+  const uninstall = fakeResponse();
+  const handledUninstall = await handlePairRoutes(
+    request("POST", "csrf=" + nextCsrf + "&action=uninstall", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    uninstall,
+    new URL("http://x/setup/pi/apply"),
+    ctx
+  );
+  assert.equal(handledUninstall, true);
+  assert.equal(uninstall.out.status, 303);
+  assert.match(messageOf(uninstall.out.headers.location), /已卸载 Pi 控制扩展/);
+  assert.deepEqual(piExtension.calls, ["install", "uninstall"]);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("POST /setup/pi/apply：Pi 扩展管理不可用时返回 503", async () => {
+  const ws = workspace();
+  const ctx = context(ws);
+  const res = fakeResponse();
+  const handled = await handlePairRoutes(
+    request("POST", "csrf=anything&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    res,
+    new URL("http://x/setup/pi/apply"),
+    ctx
+  );
+  assert.equal(handled, true);
+  assert.equal(res.out.status, 503);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
+
+test("POST /setup/pi/apply：真实写入 ~/.pi/agent/extensions", async () => {
+  const ws = workspace();
+  const home = path.join(ws.dir, "pi-home");
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const piExtension = {
+    status: () => piExtensionStatus({ root: repoRoot, home, env: {} }),
+    install: () => installPiExtension({ root: repoRoot, home, env: {} }),
+    uninstall: () => uninstallPiExtension({ root: repoRoot, home, env: {} }),
+  };
+  const ctx = context(ws, { piExtension });
+  const page = await get("/agents", ctx);
+  const csrf = csrfOf(page.res.out.body);
+  const res = fakeResponse();
+  await handlePairRoutes(
+    request("POST", "csrf=" + csrf + "&action=install", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    res,
+    new URL("http://x/setup/pi/apply"),
+    ctx
+  );
+  assert.equal(res.out.status, 303);
+  const loader = path.join(home, ".pi", "agent", "extensions", "mo-agent-control.js");
+  assert.ok(fs.existsSync(loader));
+  assert.match(fs.readFileSync(loader, "utf8"), /MO_AGENT_PI_CONTROL/);
+
+  const after = await get("/agents", ctx);
+  assert.match(after.res.out.body, /已安装/);
+  assert.match(after.res.out.body, /卸载/);
+
+  const uninstall = fakeResponse();
+  await handlePairRoutes(
+    request("POST", "csrf=" + csrfOf(after.res.out.body) + "&action=uninstall", {
+      headers: { "x-mo-agent-local": ctx.localToken },
+    }),
+    uninstall,
+    new URL("http://x/setup/pi/apply"),
+    ctx
+  );
+  assert.equal(fs.existsSync(loader), false);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });

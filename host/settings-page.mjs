@@ -24,7 +24,7 @@ import { LOGS_STYLE, renderLogViewer } from "./logs-http.mjs";
 const TABS = [
   { id: "app", label: "App 安装与配对", hint: "手机扫两下就能用" },
   { id: "dingtalk", label: "钉钉机器人", hint: "不装 App，也能在钉钉里接收审批" },
-  { id: "agents", label: "Agent 配置", hint: "给需要 hook 的 Agent 一键写入配置" },
+  { id: "agents", label: "Agent 配置", hint: "配置 Agent hook 与 Pi 控制扩展" },
   { id: "voice", label: "语音", hint: "语音命令、口述、测试和浮层" },
   { id: "system", label: "重启与日志", hint: "重启本地服务，并直接查看日志" },
 ];

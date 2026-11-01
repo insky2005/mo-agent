@@ -29,7 +29,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | **Claude Code** | CLI | `~/.claude/projects/*/*.jsonl` | explicit | `PermissionRequest` | ✅ | ✅ | — | ✅ 已接入 | L2 |
 | **DeepSeek Harness** | 桌面 / CLI | 原生 API | inferred | 原生事件 | ✅ | — | prompt / cancel | ✅ 已接入 | L2 |
-| **Pi** | CLI | `~/.pi/agent/sessions/*/*.jsonl` | explicit | 无原生工具审批 | ❌ | 社区 `pi-acp` 不支持 `request_permission` | prompt / cancel（需装控制扩展） | ✅ 观测已接入；控制需扩展 | L2 观测 / L2 控制 |
+| **Pi** | CLI | `~/.pi/agent/sessions/*/*.jsonl` | explicit | 无原生工具审批 | ❌ | 社区 `pi-acp` 不支持 `request_permission` | prompt / cancel（设置页安装控制扩展） | ✅ 观测已接入；控制需扩展 | L2 观测 / L2 控制 |
 | **Qoder CN** | 桌面 + IDE | `~/.qoder-cn/projects/*/*.jsonl` | explicit | `PermissionRequest` / `Notification` / `Stop` | ✅ | ✅ | — | ✅ 已接入 | L2 观测 / L1 放行 |
 | **WorkBuddy** | 桌面 | `~/.workbuddy/projects/*/*.jsonl`（genie） | inferred | `PermissionRequest` / `Notification` | ✅ | ✅ | — | 🟡 已实现，待真机验证 | L2 观测（测试）/ L1 放行 |
 | **CodeBuddy CLI** | CLI | 待确认 | 待确认 | `PreToolUse` / `PermissionRequest` | ✅ 预计 | ✅ | — | 🟠 待实测 | L1 |

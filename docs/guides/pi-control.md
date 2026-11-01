@@ -9,6 +9,14 @@ Pi 默认不弹工具授权框，也没有外部控制 socket。Mo Agent 对「�
 
 ## 安装
 
+### 桌面 App
+
+设置 → **Agent 配置** → **Pi 控制扩展** → **安装控制扩展**。
+
+host 会从运行时目录（`MO_AGENT_ROOT/integrations/pi`）读取扩展源文件，写入 `~/.pi/agent/extensions/`。桌面 App 用户不需要源码、不需要 npm。安装后重启 Pi 生效。
+
+### 源码 / CLI
+
 ```bash
 npm run pi:install
 npm run pi:status
@@ -70,7 +78,8 @@ POST /local/pi/event
 
 - `MO_PI_DISABLE=1 pi`：临时禁用控制扩展（扩展仍会被加载，但工厂直接返回）。
 - `pi -ne`：完全不加载扩展。
-- `npm run pi:uninstall`：卸载。
+- 桌面：设置 → Agent 配置 → Pi 控制扩展 → 卸载。
+- 源码 / CLI：`npm run pi:uninstall`。
 - 如果扩展加载失败导致 `pi` 起不来，用 `pi -ne` 启动后卸载。
 
 ## 文件
