@@ -15,6 +15,7 @@ import { createDingTalkSetup } from "./dingtalk-setup.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
 import { ensureNotifyConfig } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
+import { createPiControl } from "../adapters/pi-control.mjs";
 import { createAdapters, loadProfiles } from "../adapters/registry.mjs";
 import { ApprovalBroker } from "../approvals/broker.mjs";
 import { createDecisionRouter } from "./decisions.mjs";
@@ -361,6 +362,9 @@ async function runVoiceCommand() {
 // 数据源
 const dshEnabled = profiles.some((p) => p.id === "dsh" && p.enabled !== false);
 const dsh = dshEnabled ? new DshClient({ home: config.dshHome, baseUrl: config.dshBaseUrl || null, log }) : null;
+// Pi 用户自开的会话靠进程内扩展主动连 host；这里只保存控制通道状态。
+const piEnabled = profiles.some((p) => p.id === "pi" && p.enabled !== false);
+const piControl = piEnabled ? createPiControl({ hub, log }) : null;
 const created = await createAdapters({
   hub,
   log,
@@ -368,8 +372,11 @@ const created = await createAdapters({
   profiles,
   profilesDir: path.join(root, "adapters", "profiles"),
   dsh,
+  piControl,
 });
 const monitor = created.adapters.find((a) => a.name === "dsh") || null;
+const piAdapter = created.adapters.find((a) => a.name === "pi") || null;
+if (piControl && piAdapter) piControl.onChange = (id) => piAdapter.refreshControl(id);
 decisionRouter = createDecisionRouter({ broker, monitor, dsh, log });
 for (const adapter of created.adapters) hub.register(adapter);
 
@@ -591,6 +598,7 @@ const moHost = createMoAgentServer({
   broker,
   decide: routeDecision,
   dsh,
+  piControl,
   processes,
   runtime,
   log,

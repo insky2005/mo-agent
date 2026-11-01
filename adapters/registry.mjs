@@ -73,6 +73,7 @@ export async function createAdapters(options) {
       profile,
       config,
       dsh: opts.dsh,
+      control: opts.piControl,
       pollMs: isTranscript ? config.transcriptPollMs : config.pollMs,
       activeWindowMs: isTranscript ? (config.transcriptWindowMs || 72 * 3600 * 1000) : config.activeWindowMs,
       maxSessions: config.maxSessions,

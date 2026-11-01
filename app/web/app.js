@@ -64,7 +64,7 @@
     idle: { label: "空闲", cls: "idle" }
   };
 
-  var AGENT_LABELS = { dsh: "DeepSeek Harness", "claude-code": "Claude Code", "qoder-cn": "Qoder CN", workbuddy: "WorkBuddy" };
+  var AGENT_LABELS = { dsh: "DeepSeek Harness", "claude-code": "Claude Code", "qoder-cn": "Qoder CN", workbuddy: "WorkBuddy", pi: "Pi" };
 
   function agentName(session) {
     if (!session) return "Agent";
@@ -77,6 +77,7 @@
     if (session.agent === "dsh") return "dsh";
     if (session.agent === "qoder-cn") return "qoder";
     if (session.agent === "workbuddy") return "workbuddy";
+    if (session.agent === "pi") return "pi";
     return "other";
   }
 

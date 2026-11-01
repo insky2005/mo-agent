@@ -13,8 +13,8 @@ const profiles = loadProfiles(profilesDir);
 const quiet = { info() {}, warn() {}, error() {}, debug() {} };
 
 const RUN_END = new Set(["explicit", "inferred", "none"]);
-const OBSERVE = new Set(["process", "transcript", "native-api", "acp", "log"]);
-const ATTENTION = new Set(["hook", "native", "derived", "none"]);
+const OBSERVE = new Set(["process", "transcript", "native-api", "acp", "extension", "log"]);
+const ATTENTION = new Set(["hook", "native", "derived", "extension", "none"]);
 const APPROVAL = new Set(["allow", "deny", "none"]);
 
 test("profile 能力声明合法", () => {
@@ -59,5 +59,5 @@ test("registry 按 profile 动态加载 adapter", async () => {
     dsh,
   });
   const names = created.adapters.map((item) => item.name).sort();
-  assert.deepEqual(names, ["claude-code", "dsh", "qoder-cn", "workbuddy"]);
+  assert.deepEqual(names, ["claude-code", "dsh", "pi", "qoder-cn", "workbuddy"]);
 });
