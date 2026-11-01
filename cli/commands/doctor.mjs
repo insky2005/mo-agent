@@ -9,6 +9,7 @@ import { readEvents } from "../lib/store.mjs";
 import { memoryDir } from "../lib/knowledge.mjs";
 import { cachedUpdate } from "../lib/upgrade.mjs";
 import { credentialsFile, routerFile, runtimeRoot } from "../../host/router/paths.mjs";
+import { findHost } from "./daemon.mjs";
 import { readJsonSafe } from "../../host/router/fsx.mjs";
 
 /**
@@ -20,6 +21,32 @@ export function insideProject(cwd, projects) {
   return (projects || []).some((project) =>
     (project.paths || []).some((root) => cwd === root || cwd.startsWith(root + "/") || cwd.startsWith(root + "\\")),
   );
+}
+
+/**
+ * host：只装 CLI 的人会没有它，而手机批准/监控/钉钉全都要它。
+ * 不是必需项——纯 CLI 用工作台不需要 host——但缺了要明说怎么补。
+ */
+function hostCheck(home) {
+  const found = findHost({ env: process.env, home, cwd: process.cwd() });
+  if (!found) {
+    return {
+      name: "host",
+      label: "host",
+      required: false,
+      ok: false,
+      value: "没有可用的 host 运行时：mo daemon install（或装桌面版）",
+    };
+  }
+  const entry = found.kind === "source" ? found.command[1] : found.command[0];
+  let when = "";
+  try {
+    when = "（" + fs.statSync(entry).mtime.toISOString().slice(0, 10) + "）";
+  } catch {
+    when = "";
+  }
+  const label = found.kind === "env" ? "MO_AGENT_ROOT" : found.kind === "desktop" ? "桌面运行时" : "源码";
+  return { name: "host", label: "host", required: false, ok: true, value: label + " · " + entry + when };
 }
 
 /**
@@ -78,6 +105,7 @@ export function doctorReport(cwd, options = {}) {
       ok: inProject,
       value: cwd + (inProject ? "（属于已登记项目）" : "（未登记为项目）"),
     },
+    hostCheck(home),
     routerCheck(home),
   ];
 

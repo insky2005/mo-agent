@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { MoError } from "../../core/errors.mjs";
 import { readGlobalConfig } from "../lib/config.mjs";
 import { fetchApk, apkDest } from "../lib/apk.mjs";
+import { installHost } from "../lib/host-install.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PID_FILE = (home) => path.join(home, ".mo-agent", "daemon.pid");
@@ -259,7 +260,7 @@ async function start(ctx, args) {
   if (!host) {
     throw new MoError("E_NO_HOST", "找不到可运行的 host", {
       hint: isCompiledBinary()
-        ? "单文件 CLI 不含 host。装桌面版（installer 里的 get-desktop）或设置 MO_AGENT_ROOT 指向源码/运行时"
+        ? "单文件 CLI 不含 host。先 mo daemon install 补齐 host 运行时；或装桌面版；或设置 MO_AGENT_ROOT 指向源码"
         : "在仓库根目录执行，或设置 MO_AGENT_ROOT",
     });
   }
@@ -381,7 +382,12 @@ async function status() {
 
   if (!body) {
     process.stdout.write("daemon  未运行" + (managed ? "（pid " + info.pid + " 没响应）" : "") + "\n");
-    process.stdout.write("  启动    mo daemon start\n");
+    const origin = describeHostOrigin({ env: process.env, home, cwd: process.cwd() });
+    if (!origin) {
+      process.stdout.write("  host    没有可用的 host 运行时：mo daemon install（或装桌面版）\n");
+    } else {
+      process.stdout.write("  启动    mo daemon start\n");
+    }
     return 1;
   }
 
@@ -493,9 +499,35 @@ async function open(ctx, args) {
   return 0;
 }
 
+async function install(ctx, args) {
+  const opts = (args && args.options) || {};
+  const env = (ctx && ctx.env) || process.env;
+  process.stderr.write("安装 host 运行时会下载约 20–30MB…\n");
+  try {
+    const result = await installHost({
+      home: os.homedir(),
+      env,
+      force: Boolean(opts.force),
+      log: (line) => process.stdout.write("  " + line + "\n"),
+    });
+    if (result.reused) {
+      process.stdout.write("✓ host 运行时已存在（" + result.dir + "）\n");
+    } else {
+      process.stdout.write("✓ host 运行时已安装" + (result.version ? "（" + result.version + "）" : "") + "\n  " + result.dir + "\n");
+    }
+    process.stdout.write("  启动    mo daemon start\n");
+    return 0;
+  } catch (error) {
+    throw new MoError("E_HOST_INSTALL_FAILED", (error && error.message) || "安装 host 运行时失败", {
+      hint: "也可以装桌面版；或设置 MO_AGENT_HOST_URL 指向本地 runtime.tar.gz",
+    });
+  }
+}
+
 export async function daemonCommand(ctx, args) {
   const sub = (args.positional || [])[0];
   if (!sub || sub === "status") return status();
+  if (sub === "install") return install(ctx, args);
   if (sub === "start") return start(ctx, args);
   if (sub === "stop") return stop();
   if (sub === "open") return open(ctx, args);

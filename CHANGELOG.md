@@ -9,6 +9,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 新增
 
+- **`mo daemon install`：只装 CLI 也能补齐 host**。此前 host 只随桌面 App 分发，而 `get-cli.sh` 只装一个 `mo` 二进制——只装 CLI 的用户没有 host，手机批准、监控、钉钉全都用不了。现在按 `mo-agent-runtime-<os>-<arch>.tar.gz` 从 Release 下载（可 `MO_AGENT_HOST_URL` 覆盖）→ 校验 sha256 → 解到 findHost 早已预留的 `~/.mo-agent/runtime`。`mo doctor` 增加 host 行，`mo daemon status` 在没有 host 时直接给出 `mo daemon install`。
+- `fetchApk` 与 host 运行时安装共用 `cli/lib/download.mjs`（流式下载 + 边算 sha256 + 失败不留半个文件）。
 - **Router P0（结构地基）**：会话新增 `role`（`router` / `worker` / `unknown`），`hub.list` 支持按角色过滤；`core/router.mjs` 定下能力面策略（只读四个 + mo 的 MCP、运行时准入 fail-closed）；`host/router/argv.mjs` 把启动参数构造成纯函数，工具面收窄落在命令行上；契约新增 `router` 格式（指挥台版，不含 shell 示例）。
 - **Pi 接入**：观测 `~/.pi/agent/sessions` 的 JSONL 树；设置页可一键安装控制扩展，支持手机发送指令 / 中断（不做工具审批）。
 - `mo upgrade`：检查最新 CLI Release 并原地升级。默认「检查 → 下载 → sha256 校验 → 原子替换自己的二进制」，

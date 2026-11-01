@@ -133,6 +133,7 @@ const SPEC = {
     subs: {
       start: { flags: ["--port", "--foreground"] },
       open: { flags: ["--browser", "--show-token"], positional: "daemonTarget" },
+      install: { flags: ["--force"] },
       stop: { flags: [] },
       status: { flags: [] },
     },

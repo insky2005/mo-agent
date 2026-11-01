@@ -118,6 +118,7 @@ export const GROUPS = [
       ["open [目标] [--browser]", "默认用 Chromium 的 --app 模式打开（无地址栏）", "--browser 用普通浏览器；没装 Chromium 系会自动退回"],
       ["open app", "安装与配对（扫码装 App、配对）", "托盘「设置 → App 安装与配对」"],
       ["open dingtalk", "钉钉机器人绑定", "托盘「设置 → 钉钉机器人绑定」"],
+      ["install [--force]", "下载 host 运行时到 ~/.mo-agent/runtime", "只装 CLI 时用它补齐"],
       ["stop", "停止 daemon", ""],
       ["status", "是否在跑、健康检查、APK 是否就绪", "默认子命令"],
     ],
