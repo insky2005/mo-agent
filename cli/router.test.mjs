@@ -13,6 +13,16 @@ test("readHostSession：没有 session.json 时返回 null", () => {
   assert.equal(readHostSession(tempHome()), null);
 });
 
+test("readHostSession：只有 url 也要认（真实 session.json 就是这种）", () => {
+  const home = tempHome();
+  fs.mkdirSync(path.join(home, ".mo-agent"), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, ".mo-agent", "session.json"),
+    JSON.stringify({ url: "http://127.0.0.1:7788", token: "t0k", pid: 1234 })
+  );
+  assert.deepEqual(readHostSession(home), { port: 7788, token: "t0k" });
+});
+
 test("readHostSession：读端口与令牌；端口缺失视为不可用", () => {
   const home = tempHome();
   fs.mkdirSync(path.join(home, ".mo-agent"), { recursive: true });

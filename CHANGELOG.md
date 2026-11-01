@@ -34,6 +34,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 修复
 
+- **`mo router` 明明 host 在跑却报 `E_DAEMON_DOWN`**：`readHostSession` 只读 `session.json` 的 `port` 字段，而 host 实际写的是 `url`（只有 `url` 没有 `port`），于是永远判定"没在运行"。现在两种都认，并补了只带 `url` 的用例。
+- **被 `mo router` 拉起 host 时刷一屏访问信息**：`mo daemon start` 新增 `--quiet`（内部用），嵌套调用只留一行"host 已在运行 / 已启动"。
 - **运行时启动器被钉在裸 `node` 上**：`resolveNode` 从 PATH 命中时返回的是字符串 `"node"`，直接写进了 shim，等于没钉 Node（GUI 启动的终端、nvm 切换都会换版本甚至找不到）。现在解析成绝对路径；已装的运行时在 `mo router start` 或 `mo router runtime install` 时自动修复 shim。
 - **`mo setup` 的「默认执行者 / 默认终端」在已配置时看起来像"步骤没了"**：两步都是幂等短路（配过就不问），非交互下这是对的，交互下则让人以为漏了步骤。现在交互模式会问一句"已是 X，要换吗？（y/N）"，回车保持；非交互的跳过文案补上 `mo worker use` / `mo terminal use` 的改法。
 - **`mo setup` 的指挥台步骤在单文件二进制里报 `E_ROUTER_RUNTIME_MISSING`**：运行时清单原本是 `runtimes.json`，靠 `fs` 在运行时读取，而 `bun --compile` 只内联 JS 模块，路径会变成不存在的 `/$bunfs/root/runtimes.json`。改成 `host/router/runtimes.mjs`，并加一条"不许再引用 runtimes.json"的回归测试。

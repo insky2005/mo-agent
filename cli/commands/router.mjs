@@ -19,12 +19,24 @@ function sessionFile(home) {
   return path.join(home, ".mo-agent", "session.json");
 }
 
-/** host 每次启动都会写 session.json（端口 + 本机令牌） */
+/**
+ * host 每次启动都会写 session.json（本机令牌 + 地址）。
+ *
+ * 注意它有 url 也可能有 port，两种都得认——只读 port 会导致"host 明明在跑却报
+ * E_DAEMON_DOWN"（踩过：session.json 里只有 url）。
+ */
 export function readHostSession(home) {
   try {
     const info = JSON.parse(fs.readFileSync(sessionFile(home), "utf8"));
-    const port = Number(info.port) || null;
     const token = typeof info.token === "string" ? info.token : null;
+    let port = Number(info.port) || null;
+    if (!port && typeof info.url === "string") {
+      try {
+        port = Number(new URL(info.url).port) || null;
+      } catch {
+        port = null;
+      }
+    }
     if (!port) return null;
     return { port, token };
   } catch {
@@ -40,8 +52,8 @@ async function ensureHost(ctx) {
   try {
     const code = await daemonCommand(
       { cwd: (ctx && ctx.cwd) || process.cwd(), env: process.env },
-      // 不要 APK：那是"手机装 App"的事，跟指挥台无关，30MB 白下
-      { positional: ["start"], options: { "no-apk": true } },
+      // 不要 APK（那是手机装 App 的事）、也不要一屏访问信息
+      { positional: ["start"], options: { "no-apk": true, quiet: true } },
     );
     return code === 0;
   } catch (error) {

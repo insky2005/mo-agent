@@ -217,6 +217,8 @@ async function start(ctx, args) {
   const port = Number(opts.port) || readConfigPort(env, home);
   // APK 只跟"手机装 App"有关；被别的命令顺带拉起时（如 mo router）没必要下 30MB
   const skipApk = Boolean(opts["no-apk"]) || String(env.MO_AGENT_NO_APK || "") === "1";
+  // 被别的命令顺带拉起时不要刷一整屏访问信息（本机/监控/设置/配对/安装…）
+  const quiet = Boolean(opts.quiet);
   const prefetchApk = async () => {
     if (skipApk) return null;
     return fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
@@ -244,8 +246,12 @@ async function start(ctx, args) {
     } catch {
       // 没有 APK Release 就算了，不影响信息输出
     }
-    await printInfo(occupiedPort, home, existing);
-    printNext();
+    if (quiet) {
+      process.stderr.write("✓ host 已在运行（pid " + ((existing && existing.pid) || "?") + "，端口 " + occupiedPort + "）\n");
+    } else {
+      await printInfo(occupiedPort, home, existing);
+      printNext();
+    }
     return 0;
   }
 
@@ -316,8 +322,10 @@ async function start(ctx, args) {
 
   await waitForToken(home);
   process.stdout.write("✓ daemon 已启动（pid " + child.pid + "，端口 " + port + "）\n");
-  printAccess(port, home);
-  printNext();
+  if (!quiet) {
+    printAccess(port, home);
+    printNext();
+  }
   return 0;
 }
 
