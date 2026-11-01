@@ -895,7 +895,8 @@ function renderPiExtensionRow(item, nextPath) {
 export function renderAgentsSection(ctx, url, mode = "standalone") {
   const agents = ctx.hooksManager ? ctx.hooksManager.status() : [];
   // 只列当前启用的 Agent；未启用的档案不算「目前支持」。
-  const visible = agents.filter((item) => item.enabled !== false);
+  // Pi 没有 hook，控制扩展由下面的独立卡片管理，避免同一条 Agent 出现两次。
+  const visible = agents.filter((item) => item.enabled !== false && item.kind !== "pi-extension");
   // 可配置的排在前面，原生接入的排在后面；不分组、不加标题。
   visible.sort((a, b) => Number(!!b.supported) - Number(!!a.supported));
   const configurable = visible.filter((item) => item.supported);

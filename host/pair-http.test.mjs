@@ -587,3 +587,17 @@ test("POST /setup/pi/apply：真实写入 ~/.pi/agent/extensions", async () => {
   assert.equal(fs.existsSync(loader), false);
   fs.rmSync(ws.dir, { recursive: true, force: true });
 });
+
+test("/agents 不再把 Pi 显示成不支持的 hook Agent", async () => {
+  const ws = workspace();
+  const piExtension = piExtensionMock();
+  const piProfile = { id: "pi", label: "Pi", enabled: true, hooks: { kind: "pi-extension" } };
+  const ctx = context(ws, {
+    piExtension,
+    hooksManager: managerFor(ws, [profile(), piProfile]),
+  });
+  const page = await get("/agents", ctx);
+  assert.match(page.res.out.body, /Pi 控制扩展/);
+  assert.doesNotMatch(page.res.out.body, /暂不支持一键配置/);
+  fs.rmSync(ws.dir, { recursive: true, force: true });
+});
