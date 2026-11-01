@@ -19,6 +19,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 - **Router P2（产品化）**：`mo router runtime install|list|prune` —— 按 `host/router/runtimes.json` 的版本 pin 把运行时私有安装到 `<runtimeRoot>/routers/pi/<版本>`（npm 装进 staging → 自检 → rename，私有 cache，失败不留半个安装，Node 下限取自运行时清单）；`mo router setup|reset` —— 凭据落 `0600`、可测通（`--no-test` 跳过）、模型以 `--provider/--model` 显式传入而不依赖运行时配置；控制扩展与 `mcp.json` 一并写进私有配置目录；设置页新增「指挥台」tab（只读状态）；`mo doctor` 增加指挥台检查项。
 
+- **指挥台接入 `mo setup`**：新增「指挥台」步骤，一次配齐运行时安装 + provider/model/key，默认测通；交互时先问再装，非交互必须显式 `--router`（不会因为 `--yes` 就下载 150MB），`--dry-run` 只输出计划。新增 `--router-provider/--router-model/--router-key/` 与 `--no-test`。
+
 ### 变更
 
 - 新增 [ADR-0004](docs/adr/adr-0004-private-router-runtime.md)、[spec/router.md](docs/spec/router.md) 与 [实现计划](docs/plans/router-implementation.md)：确定 Router（指挥台）是 mo 私有安装、版本锁定、可替换的运行时，与 Worker 平面分开；能力面遵循“读由 runtime 给，写由 mo 给”；ADR-0001 补上“仅约束 Worker 平面”的范围说明。

@@ -264,6 +264,11 @@ const OPTIONS = {
     ["--only memory,mcp", "只跑这些步骤"],
     ["--skip skill", "跳过这些步骤"],
     ["--json", "机器可读：每步 status / doctor / remaining"],
+    ["--router", "也配置指挥台：装运行时 + 配模型凭据", "非交互时必须显式加；会下载约 150MB"],
+    ["--router-provider deepseek", "指挥台的 provider", "deepseek / anthropic / openai"],
+    ["--router-model <id>", "指挥台的模型", "缺省 deepseek-v4-flash"],
+    ["--router-key <key>", "指挥台凭据；也可用环境变量", "落 credentials.json（0600）"],
+    ["--no-test", "跳过测通", ""],
   ],
 };
 
