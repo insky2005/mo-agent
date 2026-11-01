@@ -6,6 +6,7 @@
     "claude-code": "Claude Code",
     "qoder-cn": "Qoder CN",
     workbuddy: "WorkBuddy",
+    pi: "Pi",
   };
   var STATUS = {
     submitted: { label: "已提交", cls: "running" },
@@ -188,6 +189,7 @@
     if (session.agent === "claude-code") return "claude";
     if (session.agent === "qoder-cn") return "qoder";
     if (session.agent === "workbuddy") return "workbuddy";
+    if (session.agent === "pi") return "pi";
     return "";
   }
 
@@ -308,6 +310,7 @@
     if (agent === "claude-code") return "claude";
     if (agent === "qoder-cn") return "qoder";
     if (agent === "workbuddy") return "workbuddy";
+    if (agent === "pi") return "pi";
     return "";
   }
 
