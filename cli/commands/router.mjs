@@ -1,0 +1,121 @@
+import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
+import { MoError } from "../../core/errors.mjs";
+import { ROUTER_ERROR } from "../../core/router.mjs";
+import { one } from "../lib/args.mjs";
+import { emit } from "../lib/output.mjs";
+
+/**
+ * mo router —— 指挥台（Router）的开关与状态。
+ *
+ * 生命周期归 host（实现计划 §6 R2）：这里只发本机 HTTP 请求，不自己 spawn 进程，
+ * 否则 CLI 与桌面 App 会各起一个，pid 文件互相覆盖。
+ */
+
+const USAGE = "mo router start|stop|status|restart";
+
+function sessionFile(home) {
+  return path.join(home, ".mo-agent", "session.json");
+}
+
+/** host 每次启动都会写 session.json（端口 + 本机令牌） */
+export function readHostSession(home) {
+  try {
+    const info = JSON.parse(fs.readFileSync(sessionFile(home), "utf8"));
+    const port = Number(info.port) || null;
+    const token = typeof info.token === "string" ? info.token : null;
+    if (!port) return null;
+    return { port, token };
+  } catch {
+    return null;
+  }
+}
+
+async function callRouter(home, pathname, method) {
+  const session = readHostSession(home);
+  if (!session) {
+    throw new MoError("E_DAEMON_DOWN", "mo daemon 没在运行（没有 session.json）", {
+      hint: "先 mo daemon start，或打开桌面 App",
+    });
+  }
+  const url = "http://127.0.0.1:" + session.port + pathname;
+  const headers = {};
+  if (session.token) headers["x-mo-agent-token"] = session.token;
+  let response;
+  try {
+    response = await fetch(url, { method: method || "GET", headers });
+  } catch (error) {
+    throw new MoError("E_DAEMON_DOWN", "连不上 host：" + (error && error.message ? error.message : error), {
+      hint: "mo daemon status 看看",
+    });
+  }
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (!response.ok || (body && body.ok === false)) {
+    const code = (body && body.code) || "E_ROUTER_START_FAILED";
+    const message = (body && body.error) || "host 返回 " + response.status;
+    throw new MoError(code, message, body && body.hint ? { hint: body.hint } : undefined);
+  }
+  return body || {};
+}
+
+function describe(status) {
+  if (!status.running) {
+    const lines = ["指挥台  未运行"];
+    lines.push("  启动    mo router start");
+    if (!status.onboarded) lines.push("  说明    第一次启动需要先配置模型与凭据");
+    return lines.join("\n");
+  }
+  const lines = ["指挥台  运行中（pid " + status.pid + "）"];
+  if (status.model) lines.push("  模型    " + status.provider + " / " + status.model);
+  if (status.runtime) lines.push("  运行时  " + status.runtime + " " + status.version);
+  lines.push("  工作台  " + status.cwd);
+  lines.push("  停止    mo router stop");
+  return lines.join("\n");
+}
+
+export async function routerCommand(ctx, args) {
+  const sub = args.positional[0] || "status";
+  const home = (ctx && ctx.home) || os.homedir();
+
+  if (sub === "start") {
+    const value = await callRouter(home, "/local/router/start", "POST");
+    emit(args.options, value, (data) => {
+      if (data.attached) return "指挥台已在运行（pid " + data.pid + "），没有重复启动";
+      const head = "✓ 指挥台已启动（pid " + data.pid + "）";
+      const warnings = Array.isArray(data.warnings) && data.warnings.length
+        ? "\n  " + data.warnings.join("\n  ")
+        : "";
+      return head + warnings + "\n  工作台  " + data.cwd + "\n  打开终端窗口后即可对话";
+    });
+    return 0;
+  }
+
+  if (sub === "stop") {
+    const value = await callRouter(home, "/local/router/stop", "POST");
+    emit(args.options, value, (data) => (data.stopped ? "✓ 指挥台已停止（pid " + data.pid + "）" : "指挥台本来就没在运行"));
+    return 0;
+  }
+
+  if (sub === "status") {
+    const value = await callRouter(home, "/local/router/status", "GET");
+    emit(args.options, value, describe);
+    return value.running ? 0 : 1;
+  }
+
+  if (sub === "restart") {
+    await callRouter(home, "/local/router/stop", "POST").catch(() => null);
+    const value = await callRouter(home, "/local/router/start", "POST");
+    emit(args.options, value, (data) => "✓ 指挥台已重启（pid " + data.pid + "）");
+    return 0;
+  }
+
+  throw new MoError("E_USAGE", "未知子命令：router " + sub + "（" + USAGE + "）", {
+    hint: USAGE,
+  });
+}

@@ -30,6 +30,7 @@ import { createDictationRunner } from "./voice/dictate.mjs";
 import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
+import { createRouterManager } from "./router/manager.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { handleSettingsRoutes } from "./settings-page.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
@@ -599,6 +600,9 @@ async function runDictate() {
   return result;
 }
 
+// Router（指挥台）：mo 自己的主 Agent；生命周期归 host，CLI 只发 HTTP 请求
+const routerManager = createRouterManager({ home: os.homedir(), hub, log });
+
 const moHost = createMoAgentServer({
   config,
   hub,
@@ -609,6 +613,7 @@ const moHost = createMoAgentServer({
   piExtension,
   processes,
   runtime,
+  router: routerManager,
   log,
   webDir,
   localToken,

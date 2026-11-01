@@ -151,6 +151,17 @@ export const GROUPS = [
     subs: [["", "检查并升级（已是最新就什么都不做）", "默认子命令"]],
   },
   {
+    name: "router",
+    title: "指挥台",
+    blurb: "mo 自己的主 Agent：常驻、只做分派，不碰项目工作区",
+    subs: [
+      ["start", "启动指挥台（生命周期归 host）", "首次需要先配置凭据"],
+      ["stop", "停止", ""],
+      ["status", "看状态：跑没跑、用哪个模型、工作台在哪", "未运行退出码 1"],
+      ["restart", "重启", ""],
+    ],
+  },
+  {
     name: "watchdog",
     title: "看门狗",
     blurb: "把超时没回执的卡转成 blocked(timeout)，并落收件箱",

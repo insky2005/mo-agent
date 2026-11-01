@@ -102,6 +102,7 @@ export function createMoAgentServer(options) {
     ? options.getDingTalk
     : () => options.dingtalk || null;
   const dingtalkSetup = options.dingtalkSetup || null;
+  const router = options.router || null;
   const onDingTalkReset = typeof options.onDingTalkReset === "function" ? options.onDingTalkReset : null;
 
   const deviceTokens = new Set();
@@ -489,6 +490,34 @@ export function createMoAgentServer(options) {
           notificationType: body.notificationType || null,
         });
         return json(res, 200, { ok: true });
+      }
+
+      // ---- Router（指挥台）----
+      if (pathname === "/local/router/status" && req.method === "GET") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.status());
+      }
+
+      if (pathname === "/local/router/start" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        try {
+          return json(res, 200, await router.start());
+        } catch (error) {
+          return json(res, error && error.code === "E_ROUTER_RUNTIME_MISSING" ? 409 : 500, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "启动失败",
+            hint: (error && error.details && error.details.hint) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/stop" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.stop());
       }
 
       // ---- 需设备令牌 ----

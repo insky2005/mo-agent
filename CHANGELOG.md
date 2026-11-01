@@ -15,6 +15,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
   支持 `--check` / `--dry-run` / `--json` / `--version <标签|版本>` / `--force`；替换前先在临时文件上跑
   `--version` 验证产物，源码运行与不可写目录会明确拒绝。`mo doctor` 用本地缓存提示「有新版」，不额外联网。
 
+- **Router P1（垂直切片）**：`mo router start|stop|status|restart`，生命周期归 host（`/local/router/*` 本机接口），CLI 只发请求；私有配置目录 + workbench + ROUTER.md 自动生成；启动脚本 0600/0700，凭据通过环境变量注入且不写进 `router.json`；Pi 以 `--tools read,grep,find,ls,mcp__mo__*` 启动，会话以 `role: "router"` 注入 hub。
+
 ### 变更
 
 - 新增 [ADR-0004](docs/adr/adr-0004-private-router-runtime.md)、[spec/router.md](docs/spec/router.md) 与 [实现计划](docs/plans/router-implementation.md)：确定 Router（指挥台）是 mo 私有安装、版本锁定、可替换的运行时，与 Worker 平面分开；能力面遵循“读由 runtime 给，写由 mo 给”；ADR-0001 补上“仅约束 Worker 平面”的范围说明。

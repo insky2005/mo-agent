@@ -24,6 +24,7 @@ import { watchdogCommand } from "./commands/watchdog.mjs";
 import { configCommand } from "./commands/config.mjs";
 import { setupCommand } from "./commands/setup.mjs";
 import { daemonCommand } from "./commands/daemon.mjs";
+import { routerCommand } from "./commands/router.mjs";
 import { upgradeCommand } from "./commands/upgrade.mjs";
 import { VERSION } from "./lib/version.mjs";
 import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
@@ -60,6 +61,7 @@ const ROUTES = {
   config: configCommand,
   setup: setupCommand,
   daemon: daemonCommand,
+  router: routerCommand,
   upgrade: upgradeCommand,
 };
 
