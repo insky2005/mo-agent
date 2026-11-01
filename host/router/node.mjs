@@ -58,6 +58,32 @@ export function nodeCandidates(env) {
   return list;
 }
 
+/**
+ * 把裸 "node" 解析成绝对路径。
+ *
+ * shim 的职责是"把运行时钉在某个 Node 上、不受 PATH 影响"，写死一句 exec "node"
+ * 等于没钉——GUI 启动的终端、nvm 切换、PATH 被改，都会让 Router 换一个 Node 甚至找不到。
+ */
+export function resolveBareNode() {
+  try {
+    const result = spawnSync("node", ["-e", "process.stdout.write(process.execPath)"], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    const value = String(result.stdout || "").trim();
+    if (result.status === 0 && value) return value;
+  } catch {
+    // 落到 PATH 扫描
+  }
+  const sep = process.platform === "win32" ? ";" : ":";
+  for (const dir of String(process.env.PATH || "").split(sep)) {
+    if (!dir) continue;
+    const file = path.join(dir, process.platform === "win32" ? "node.exe" : "node");
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
+
 function versionOf(candidate) {
   if (candidate.path === process.execPath) return { ok: true, version: process.versions.node };
   try {
@@ -81,15 +107,24 @@ export function resolveNode(options) {
   const found = [];
 
   for (const candidate of nodeCandidates(env)) {
-    if (candidate.path !== "node" && !fs.existsSync(candidate.path)) continue;
-    const info = versionOf(candidate);
+    let target = candidate.path;
+    if (target === "node") {
+      target = resolveBareNode();
+      if (!target) {
+        found.push(candidate.source + "（PATH 里找不到）");
+        continue;
+      }
+    } else if (!fs.existsSync(target)) {
+      continue;
+    }
+    const info = versionOf({ path: target });
     if (!info.ok) {
       found.push(candidate.source + "（不可用）");
       continue;
     }
-    found.push(candidate.source + " " + info.version);
+    found.push(candidate.source + " " + info.version + " → " + target);
     if (satisfies(info.version, required)) {
-      return { ok: true, path: candidate.path, version: info.version, source: candidate.source };
+      return { ok: true, path: target, version: info.version, source: candidate.source };
     }
   }
   return { ok: false, required, found };

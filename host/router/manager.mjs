@@ -15,7 +15,7 @@ import {
 import { buildPiArgv } from "./argv.mjs";
 import { deleteCredentials, redactSecret, resolveCredentials, writeCredentials } from "./credentials.mjs";
 import { probeModel } from "./probe.mjs";
-import { installRuntime, listRuntimes, manifestFor, pruneRuntimes } from "./install.mjs";
+import { installRuntime, listRuntimes, manifestFor, pruneRuntimes, repairShim } from "./install.mjs";
 import { openTerminal } from "./terminal.mjs";
 import { renderRouterScript } from "./script.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
@@ -244,6 +244,17 @@ export function createRouterManager(options) {
         hint: "先 mo router runtime install，或用 MO_ROUTER_RUNTIME_BIN 指向一个开发版本",
       });
     }
+    // 启动前顺手修一次启动器：旧版本可能把裸 "node" 写进 shim（等于没钉 Node）
+    if (runtime.source === "private") {
+      const installed = path.dirname(path.dirname(runtime.bin));
+      try {
+        const repair = repairShim({ target: installed, env, manifest: manifestFor("pi") });
+        if (repair.changed) log.info("已修复运行时启动器（Node 固定为 " + repair.node + "）");
+      } catch (error) {
+        log.warn("修启动器失败（不影响启动）: " + (error && error.message ? error.message : error));
+      }
+    }
+
     const admitted = admitRuntime(runtime.capabilities);
     if (!admitted.ok) {
       throw new MoError(ROUTER_ERROR.RUNTIME_UNSUPPORTED, admitted.reason, { code: admitted.code });

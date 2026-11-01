@@ -119,6 +119,45 @@ export async function verifyRuntime(options) {
   return { ok: true, version: text.split("\n")[0] };
 }
 
+/**
+ * 修一个装好但启动器不对的运行时：
+ * 旧版本可能把裸 "node" 写进 shim（等于没钉 Node），这里按 install.json 重写，
+ * 找不到绝对路径的 Node 就保持原样（宁可不动，也不要写坏）。
+ */
+export function repairShim(options) {
+  const opts = options || {};
+  const target = opts.target;
+  const record = readJsonSafe(path.join(target, "install.json"), null) || {};
+  const manifest = opts.manifest;
+  const cli = record.cli && fs.existsSync(record.cli)
+    ? record.cli
+    : path.join(target, "node_modules", manifest.package, manifest.bin);
+  if (!fs.existsSync(cli)) return { changed: false, reason: "运行时文件缺失" };
+
+  let nodePath = record.node && path.isAbsolute(record.node) && fs.existsSync(record.node) ? record.node : null;
+  if (!nodePath) {
+    const resolved = resolveNode({ env: opts.env || process.env, required: manifest.engines && manifest.engines.node });
+    nodePath = resolved.ok ? resolved.path : null;
+  }
+  if (!nodePath) return { changed: false, reason: "找不到可用的 Node" };
+
+  const bin = runtimeBinPath(target);
+  const current = fs.existsSync(bin) ? fs.readFileSync(bin, "utf8") : "";
+  if (current.includes('exec "' + nodePath + '"')) return { changed: false, node: nodePath };
+
+  writeShim(target, nodePath, cli);
+  writeJsonPrivate(path.join(target, "install.json"), {
+    ...record,
+    v: 1,
+    package: manifest.package,
+    version: record.version || manifest.version,
+    cli,
+    node: nodePath,
+    repairedAt: new Date().toISOString(),
+  });
+  return { changed: true, node: nodePath };
+}
+
 export function writeShim(installDir, nodePath, cliPath) {
   const binDir = path.join(installDir, "bin");
   fs.mkdirSync(binDir, { recursive: true });
@@ -149,7 +188,18 @@ export async function installRuntime(options) {
   const target = runtimeInstallDir({ home, env, platform, id, version });
   const existingBin = runtimeBinPath(target);
   if (!opts.force && fs.existsSync(existingBin)) {
-    return { installed: false, reused: true, version, dir: target, bin: existingBin, node: null };
+    // 已装：顺手修一遍启动器（旧版本可能把裸 "node" 写进 shim）
+    const repair = repairShim({ target, env, manifest });
+    if (repair.changed) log.info("已修复运行时启动器（Node 固定为 " + repair.node + "）");
+    return {
+      installed: false,
+      reused: true,
+      version,
+      dir: target,
+      bin: existingBin,
+      node: repair.node || null,
+      repaired: Boolean(repair.changed),
+    };
   }
 
   const node = resolveNode({ env, required: manifest.engines && manifest.engines.node });
