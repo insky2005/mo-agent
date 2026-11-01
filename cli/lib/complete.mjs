@@ -17,7 +17,8 @@ const PROJECT = ["--project"];
 const taskIds = { positional: "task" };
 const candidateIds = { positional: "candidate" };
 const configKeys = { positional: "configKey" };
-const SETUP_STEPS = ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"];
+const SETUP_STEPS = ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp", "router"];
+const ROUTER_RUNTIME_ACTIONS = ["install", "list", "prune"];
 
 const SPEC = {
   task: {
@@ -108,6 +109,18 @@ const SPEC = {
       uninstall: { flags: ["--target"] },
     },
   },
+  router: {
+    subs: {
+      start: { flags: [] },
+      stop: { flags: [] },
+      status: { flags: [] },
+      restart: { flags: [] },
+      setup: { flags: ["--provider", "--model", "--key", "--no-test"] },
+      reset: { flags: [] },
+      runtime: { flags: [], positional: "routerRuntimeAction" },
+      help: { flags: [] },
+    },
+  },
   config: {
     subs: {
       list: { flags: [] },
@@ -134,21 +147,34 @@ const SPEC = {
 /** 取值型 flag：补全时给候选而不是空 */
 const VALUE_FLAGS = new Set([
   "--project", "--task", "--worker", "--scope", "--mode", "--target", "--file", "--mcp", "--type", "--id", "--only", "--skip",
+  "--provider", "--router-provider",
 ]);
 
 const ENUMS = {
   "--scope": ["preferences", "pitfalls", "decisions"],
+  "--router-provider": ["deepseek", "anthropic", "openai"],
   "--mode": ["auto", "skill", "ref", "inline"],
 };
 
 /** 没有子命令的组：自己的 flag */
 const NO_SUB_FLAGS = {
   doctor: ["--json"],
-  setup: ["--yes", "--dry-run", "--only", "--skip", "--json"],
+  setup: [
+    "--yes",
+    "--dry-run",
+    "--only",
+    "--skip",
+    "--json",
+    "--router",
+    "--router-provider",
+    "--router-model",
+    "--router-key",
+    "--no-test",
+  ],
   upgrade: ["--check", "--dry-run", "--version", "--force", "--json"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "upgrade", "watchdog", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "router", "config", "setup", "upgrade", "watchdog", "completion", "version", "help"];
 
 function item(value, description) {
   return { value, description };
@@ -184,6 +210,9 @@ function valuesFor(flag, cwd) {
   if (flag === "--project") return projectItems();
   if (flag === "--task") return taskItems(cwd);
   if (flag === "--worker") return listAgents().map((agent) => item(agent.name, agent.description));
+  if (flag === "--router-provider" || flag === "--provider") {
+    return (ENUMS["--router-provider"] || []).map((value) => item(value, ""));
+  }
   if (flag === "--scope") return ENUMS["--scope"].map((value) => item(value, ""));
   if (flag === "--mode") return ENUMS["--mode"].map((value) => item(value, ""));
   if (flag === "--id") return candidateItems();
@@ -201,6 +230,13 @@ function positionalFor(kind, cwd) {
   if (kind === "task") return taskItems(cwd);
   if (kind === "candidate") return candidateItems();
   if (kind === "configKey") return CONFIG_KEYS.map((spec) => item(spec.key, spec.range));
+  if (kind === "routerRuntimeAction") {
+    return [
+      item("install", "安装私有运行时（约 150MB）"),
+      item("list", "已装的版本与清单 pin"),
+      item("prune", "清理旧版本"),
+    ];
+  }
   if (kind === "daemonTarget") {
     return [
       item("app", "安装与配对"),
@@ -289,6 +325,15 @@ const FLAG_DESC = {
   "--dry-run": "只预演，不落盘",
   "--only": "只跑指定步骤",
   "--skip": "跳过指定步骤",
+  "--router": "也配置指挥台（装运行时 + 配模型凭据）",
+  "--router-provider": "指挥台的 provider",
+  "--router-model": "指挥台的模型 id",
+  "--router-key": "指挥台的 API key（落 credentials.json，0600）",
+  "--no-test": "跳过测通",
+  "--provider": "指挥台的 provider",
+  "--model": "指挥台的模型 id",
+  "--key": "指挥台的 API key",
+  "--force": "强制重装运行时",
 };
 
 function flagItems(flags, current) {
