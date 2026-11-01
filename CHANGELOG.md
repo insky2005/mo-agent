@@ -9,6 +9,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 新增
 
+- **Router P0（结构地基）**：会话新增 `role`（`router` / `worker` / `unknown`），`hub.list` 支持按角色过滤；`core/router.mjs` 定下能力面策略（只读四个 + mo 的 MCP、运行时准入 fail-closed）；`host/router/argv.mjs` 把启动参数构造成纯函数，工具面收窄落在命令行上；契约新增 `router` 格式（指挥台版，不含 shell 示例）。
 - **Pi 接入**：观测 `~/.pi/agent/sessions` 的 JSONL 树；设置页可一键安装控制扩展，支持手机发送指令 / 中断（不做工具审批）。
 - `mo upgrade`：检查最新 CLI Release 并原地升级。默认「检查 → 下载 → sha256 校验 → 原子替换自己的二进制」，
   支持 `--check` / `--dry-run` / `--json` / `--version <标签|版本>` / `--force`；替换前先在临时文件上跑

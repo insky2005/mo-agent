@@ -53,6 +53,22 @@ export const EVENT_META = Object.freeze({
   [EVENT.NOTIFY]: { category: "derived", replay: false, required: ["severity", "kind", "title"] },
 });
 
+/**
+ * 会话身份。role 回答"这个会话在系统里是谁"，与 agent（哪家厂商）正交：
+ * Router 是 mo 自己的主 Agent，Worker 是用户的 Agent。见 ADR-0004。
+ */
+export const SESSION_ROLE = Object.freeze({
+  ROUTER: "router",
+  WORKER: "worker",
+  UNKNOWN: "unknown",
+});
+
+/** 只接受已知的两个角色；其余一律 unknown，避免上游笔误污染过滤逻辑。 */
+export function normalizeSessionRole(value) {
+  if (value === SESSION_ROLE.ROUTER || value === SESSION_ROLE.WORKER) return value;
+  return SESSION_ROLE.UNKNOWN;
+}
+
 /** 明确不会产生通知的事件；与 NOTIFY_POLICY 互补，测试会检查完整性。 */
 export const SILENT_EVENTS = Object.freeze(new Set([
   EVENT.SESSION_UPSERT,
