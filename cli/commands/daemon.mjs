@@ -357,6 +357,21 @@ async function stop() {
   return 0;
 }
 
+/** status 里显示"host 到底会从哪儿来、什么时候编的"——旧构建的困惑大多来自这里 */
+export function describeHostOrigin(options) {
+  const found = findHost(options || {});
+  if (!found) return null;
+  const entry = found.kind === "source" ? found.command[1] : found.command[0];
+  let when = null;
+  try {
+    when = fs.statSync(entry).mtime.toISOString().slice(0, 16).replace("T", " ");
+  } catch {
+    when = null;
+  }
+  const label = found.kind === "env" ? "MO_AGENT_ROOT" : found.kind === "desktop" ? "桌面运行时" : "源码";
+  return { kind: found.kind, entry, when, label };
+}
+
 async function status() {
   const home = os.homedir();
   const info = readPid(home);
@@ -372,6 +387,10 @@ async function status() {
 
   process.stdout.write("daemon  运行中（" + where(port, managed ? info : null, home) + "）\n");
   process.stdout.write("  健康    ✓\n");
+  const origin = describeHostOrigin({ env: process.env, home, cwd: process.cwd() });
+  if (origin) {
+    process.stdout.write("  host    " + origin.label + " · " + origin.entry + (origin.when ? "（" + origin.when + "）" : "") + "\n");
+  }
   printAccess(port, home);
   printActions();
   return 0;

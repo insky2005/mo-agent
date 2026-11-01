@@ -27,6 +27,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 - **APK 下载有进度了，且 `mo router` 不再顺手下载它**：`fetchApk` 改成流式落盘（顺带算 sha256），TTY 下在 stderr 显示百分比与 MB；`mo daemon start` 新增 `--no-apk`（或 `MO_AGENT_NO_APK=1`），`mo router` 拉起 host 时带上它——APK 只跟"手机装 App"有关，与指挥台无关。
 
+- **能看见 host 到底用的是哪一份**：`mo daemon status` 新增 `host` 行（来源 · 路径 · 编译时间）；`E_ROUTER_HOST_OLD` 会把当前 host 的来源与时间打出来，并给出"源码 host / 桌面 host"两条具体命令。
+
 ### 变更
 
 - 新增 [ADR-0004](docs/adr/adr-0004-private-router-runtime.md)、[spec/router.md](docs/spec/router.md) 与 [实现计划](docs/plans/router-implementation.md)：确定 Router（指挥台）是 mo 私有安装、版本锁定、可替换的运行时，与 Worker 平面分开；能力面遵循“读由 runtime 给，写由 mo 给”；ADR-0001 补上“仅约束 Worker 平面”的范围说明。

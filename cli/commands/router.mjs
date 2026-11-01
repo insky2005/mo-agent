@@ -4,7 +4,7 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
-import { daemonCommand } from "./daemon.mjs";
+import { daemonCommand, describeHostOrigin } from "./daemon.mjs";
 
 /**
  * mo router —— 指挥台（Router）的开关、配置与运行时安装。
@@ -110,8 +110,15 @@ async function callRouter(home, pathname, method, body, options) {
 
   // 旧构建的 host 没有 /local/router/* 路由，别让人去猜 404 是什么意思
   if (response && response.status === 404 && pathname.startsWith("/local/router/")) {
+    const origin = describeHostOrigin({ env: process.env, home: os.homedir(), cwd: process.cwd() });
+    const which = origin
+      ? origin.label + " · " + origin.entry + (origin.when ? "（" + origin.when + "）" : "")
+      : "找不到 host 可执行文件";
     throw new MoError("E_ROUTER_HOST_OLD", "host 是旧构建，还没有指挥台接口", {
-      hint: "在仓库里用 MO_AGENT_ROOT=\"$PWD\" node host/index.mjs 起 host，或跑 ./scripts/build-desktop.sh 重建桌面运行时",
+      hint:
+        "当前用的 host：" + which + "\n" +
+        "要源码 host：MO_AGENT_ROOT=\"$PWD\" node host/index.mjs --port 7788（先 mo daemon stop）\n" +
+        "要桌面 host：./scripts/build-desktop.sh && ./scripts/install-desktop.sh",
     });
   }
   let payload = null;
