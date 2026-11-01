@@ -91,6 +91,11 @@ test("headless 启动：写状态、注入 hub、可 attach、可停止", async 
     assert.ok(fs.readFileSync(P.contractFile(home), "utf8").includes("指挥台"));
     assert.ok(fs.readFileSync(P.workbenchReadme(home), "utf8").includes("不是项目"));
 
+    // mo 的 MCP 只注册进私有配置目录（格式与 pi mcp add 一致，已实测）
+    const mcp = JSON.parse(fs.readFileSync(P.mcpConfigFile(home), "utf8"));
+    assert.equal(mcp.mcpServers.mo.command, "mo");
+    assert.deepEqual(mcp.mcpServers.mo.args, ["mcp"]);
+
     // hub 里的会话带 router 角色
     const session = hub.get("mo-router");
     assert.ok(session, "hub 里没有 Router 会话");

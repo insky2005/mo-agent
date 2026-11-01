@@ -54,6 +54,11 @@ export function extensionFile(home) {
   return path.join(configDir(home), "extensions", "mo-agent-control.js");
 }
 
+/** Pi 的 MCP 配置：写在私有配置目录里，不碰用户全局 ~/.pi/agent/mcp.json */
+export function mcpConfigFile(home) {
+  return path.join(configDir(home), "mcp.json");
+}
+
 /**
  * 程序产物根目录。与桌面运行时同源，见 docs/plans/desktop-cross-platform.md。
  * MO_AGENT_RUNTIME_ROOT 可覆盖（测试与非常规安装用）。

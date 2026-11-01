@@ -135,6 +135,7 @@ export function createRouterManager(options) {
     contract: P.contractFile(home),
     readme: P.workbenchReadme(home),
     extension: P.extensionFile(home),
+    mcp: P.mcpConfigFile(home),
   };
 
   function readState() {
@@ -181,12 +182,23 @@ export function createRouterManager(options) {
     };
   }
 
+  /**
+   * mo 的 MCP 服务只注册进 Router 的私有配置目录。
+   * 格式与 `pi mcp add` 一致（已实测）：{"mcpServers":{"mo":{"command","args"}}}。
+   * 工具名在 Pi 侧是 mcp__mo__<tool>，正是白名单里的 mcp__mo__*。
+   */
+  function writeMcpConfig() {
+    const command = String(env.MO_ROUTER_MO_BIN || "mo");
+    writeJsonPrivate(files.mcp, { mcpServers: { mo: { command, args: ["mcp"] } } }, 0o600);
+  }
+
   function ensureAssets(runtime) {
     fs.mkdirSync(files.config, { recursive: true });
     fs.mkdirSync(files.sessions, { recursive: true });
     fs.mkdirSync(files.workbench, { recursive: true });
     writeFilePrivate(files.contract, renderRouterContract(), 0o600);
     writeFilePrivate(files.readme, WORKBENCH_README, 0o644);
+    writeMcpConfig();
     return runtime;
   }
 
