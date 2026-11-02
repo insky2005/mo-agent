@@ -50,15 +50,48 @@ export function readHostSession(home) {
       }
     }
     if (!port) return null;
-    return { port, token };
+    return { port, token, pid: Number(info.pid) || null };
   } catch {
     return null;
   }
 }
 
+/**
+ * session.json 只能证明"曾经起过"——host 停了文件还在（踩过：
+ * 旧 session 让 --start-daemon 以为 host 在跑，于是跳过了启动，接着 open 失败）。
+ * 所以要看 pid 还活着没。
+ */
+export function hostAliveSync(session) {
+  if (!session) return false;
+  if (session.pid) {
+    try {
+      process.kill(session.pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** 真要确认能服务，还得探一下健康检查 */
+async function hostHealthy(session) {
+  if (!session) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 800);
+  try {
+    const res = await fetch("http://127.0.0.1:" + session.port + "/api/health", { signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 没有 host 就没有远程能力：说清楚，别让人以为手机连不上是坏了 */
 function remoteHint(home) {
-  if (readHostSession(home)) return "";
+  if (hostAliveSync(readHostSession(home))) return "";
   return "\n  远程    现在没有 host：手机 / 钉钉 / 监控页都连不上。要这些能力就另开终端跑 mo daemon start";
 }
 
@@ -69,7 +102,8 @@ function remoteHint(home) {
  */
 async function ensureDaemon(ctx, home, args) {
   const quiet = !has(args.options, "verbose");
-  if (!readHostSession(home)) {
+  const session = readHostSession(home);
+  if (!(await hostHealthy(session))) {
     process.stderr.write("启动 host…\n");
     try {
       await daemonCommand(
@@ -84,6 +118,13 @@ async function ensureDaemon(ctx, home, args) {
     }
   } else if (!quiet) {
     process.stderr.write("host 已在运行\n");
+  }
+
+  // 起来之后再确认一次，别拿旧 session 去开页面
+  const ready = readHostSession(home);
+  if (!(await hostHealthy(ready))) {
+    process.stderr.write("host 没有响应，跳过打开监控屏\n");
+    return { started: false };
   }
 
   if (!has(args.options, "no-open")) {
