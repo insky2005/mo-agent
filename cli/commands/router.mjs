@@ -278,7 +278,12 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "start") {
-    const foreground = has(args.options, "foreground") || has(args.options, "f");
+    // 默认就地跑：在终端里敲 mo router，本来就是"我要在这儿用它"。
+    // 要后台/开窗口用 --window；非 TTY（脚本、CI）仍走窗口/后台，否则会挂住调用方。
+    const wantsWindow = has(args.options, "window") || has(args.options, "detach");
+    const wantsForeground = has(args.options, "foreground") || has(args.options, "f");
+    const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    const foreground = !wantsWindow && (wantsForeground || tty);
     if (foreground) {
       // 前台只对"当前终端"有意义：直接本地跑，不经过 host
       process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止\n");

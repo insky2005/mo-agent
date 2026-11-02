@@ -36,7 +36,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **cli / host 分层归位（P0 + P1）**：Router 的 10 个实现模块从 `host/router/*` 下移到 `cli/lib/router-*.mjs`（argv / script / terminal / node / runtimes / install / credentials / probe / paths / manager），`fsx` 并入 `cli/lib/fsx.mjs`；host 只保留 `router-session.mjs`——启动时 `adopt()` 扫 `router.json` + pid，发现活着的 Router 就注入 hub 接管控制面。`cli → host` 从 6 处降到 **0**，`KNOWN_DEBT` 清空。
 - **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
-- **`mo router start --foreground`**：在当前终端里跑 Router（Ctrl-C 停），不再强制开新窗口；这条路径不经过 host。
+- **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
+- **技能里加了角色判定**：开场先分辨"主 Agent（派单）"与"执行者（按卡干活）"。执行者**不需要**加载技能——它要的一切都在任务卡信封里（交付物、验收、回执路径与 JSON 模板）；AGENTS.md 的指针也注明了"仅主 Agent"，并补一句执行者该怎么做。
 - **启动脚本里不再有 API key**：`start.sh` 改为 0644 且只含 pid/cd/exec，凭据投影到单独的 `secrets.sh`（0600），**只在运行期间存在**，`stop` 或前台退出即删除；`credentials.json` 仍是唯一事实源。
 - **`mo router` 不再依赖 host 存在**：`start` / `stop` / `status` 在 host 缺席（或旧构建）时退回 `cli/lib/router-manager` 本地执行，`E_DAEMON_DOWN` 从这条路径消失；host 起来后 `adopt()` 接管控制面。
 - 新增 [cli/ 分层重构清单](docs/plans/cli-layer-split.md)：把 cli/ 按"应用层 / 接口层 / 工具层"盘点，列出 5 个混住的具体症状（S1–S5）与 P0–P2 分阶段清单、逐文件搬迁表与验收。

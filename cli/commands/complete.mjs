@@ -111,7 +111,7 @@ const SPEC = {
   },
   router: {
     subs: {
-      start: { flags: ["--foreground"] },
+      start: { flags: ["--window", "--foreground"] },
       stop: { flags: [] },
       status: { flags: [] },
       restart: { flags: [] },
@@ -337,6 +337,8 @@ const FLAG_DESC = {
   "--key": "指挥台的 API key",
   "--force": "强制重装运行时",
   "--no-apk": "跳过 APK 预下载",
+  "--window": "开新终端窗口跑（默认在当前终端）",
+  "--foreground": "在当前终端跑（TTY 下默认）",
 };
 
 function flagItems(flags, current) {
