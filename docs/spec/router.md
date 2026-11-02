@@ -350,6 +350,8 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 - 默认：`mo router start` 在**当前终端**跑（TTY 下），`--window` 才开新窗口；
 - `--start-daemon`：先把 host 起来 → 自动打开监控屏 → 再进 TUI。host 起不来不阻断指挥台（只是丢远程能力），`--no-open` 可跳过开页面；
+  - host 已经在跑时**不重复启动**（先探 `/api/health`，再加 `mo daemon start` 自身的幂等判断）；
+  - host 是独立进程，**不会跟着指挥台退出**；Ctrl-C 之后会提示它还在跑以及怎么停；
 - `mo router start --foreground`：**在当前终端里跑**，Ctrl-C 即停。这条不经过 host（前台只对当前终端有意义）；
 - `--mode rpc` 的无窗口形态留到下一期。
 

@@ -103,7 +103,8 @@ function remoteHint(home) {
 async function ensureDaemon(ctx, home, args) {
   const quiet = !has(args.options, "verbose");
   const session = readHostSession(home);
-  if (!(await hostHealthy(session))) {
+  const alreadyRunning = await hostHealthy(session);
+  if (!alreadyRunning) {
     process.stderr.write("启动 host…\n");
     try {
       await daemonCommand(
@@ -114,17 +115,17 @@ async function ensureDaemon(ctx, home, args) {
       const message = error && error.message ? error.message : String(error);
       process.stderr.write("host 没起来：" + message + "\n");
       process.stderr.write("  指挥台仍可本地运行，但手机 / 钉钉 / 监控页连不上\n");
-      return { started: false };
+      return { started: false, alreadyRunning: false, ready: false };
     }
   } else if (!quiet) {
-    process.stderr.write("host 已在运行\n");
+    process.stderr.write("host 已在运行（不重复启动）\n");
   }
 
   // 起来之后再确认一次，别拿旧 session 去开页面
   const ready = readHostSession(home);
   if (!(await hostHealthy(ready))) {
     process.stderr.write("host 没有响应，跳过打开监控屏\n");
-    return { started: false };
+    return { started: false, alreadyRunning, ready: false };
   }
 
   if (!has(args.options, "no-open")) {
@@ -137,7 +138,17 @@ async function ensureDaemon(ctx, home, args) {
       process.stderr.write("打开监控屏失败：" + (error && error.message ? error.message : error) + "\n");
     }
   }
-  return { started: true };
+  return { started: !alreadyRunning, alreadyRunning, ready: true };
+}
+
+/** 退出时提醒：host 是独立进程，不会跟着指挥台一起退 */
+function daemonExitHint(home, daemonState) {
+  if (!daemonState || !daemonState.ready) return "";
+  if (!hostAliveSync(readHostSession(home))) return "";
+  const line = daemonState.started
+    ? "  host    还在跑（刚才是这条命令起的）：mo daemon stop 可停；留着它手机 / 监控仍可用"
+    : "  host    还在跑：mo daemon stop 可停；留着它手机 / 监控仍可用";
+  return "\n" + line;
 }
 
 function describe(status) {
@@ -246,14 +257,18 @@ export async function routerCommand(ctx, args) {
     const foreground = !wantsWindow && (wantsForeground || tty);
 
     // 先 host（+ 监控屏），再进 TUI：这样界面一起就能在网页上看到它
+    let daemonState = null;
     if (has(args.options, "start-daemon") || has(args.options, "with-daemon")) {
-      await ensureDaemon(ctx, home, args);
+      daemonState = await ensureDaemon(ctx, home, args);
     }
 
     if (foreground) {
-      process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止" + (readHostSession(home) ? "" : "（没有 host：远程控制暂不可用）") + "\n");
+      process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止" + (hostAliveSync(readHostSession(home)) ? "" : "（没有 host：远程控制暂不可用）") + "\n");
       const value = await manager.start({ foreground: true });
-      emit(args.options, value, (data) => "指挥台已退出（退出码 " + (data.exitCode === undefined ? "?" : data.exitCode) + "）");
+      emit(args.options, value, (data) => {
+        const head = "指挥台已退出（退出码 " + (data.exitCode === undefined ? "?" : data.exitCode) + "）";
+        return head + daemonExitHint(home, daemonState);
+      });
       return 0;
     }
 
