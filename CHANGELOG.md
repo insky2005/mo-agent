@@ -33,6 +33,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ### 变更
 
+- 新增 [cli/ 分层重构清单](docs/plans/cli-layer-split.md)：把 cli/ 按"应用层 / 接口层 / 工具层"盘点，列出 5 个混住的具体症状（S1–S5）与 P0–P2 分阶段清单、逐文件搬迁表与验收。
 - **依赖方向有了守卫测试**：`scripts/architecture.test.mjs` 扫描真实 import 边，未登记的白名单外依赖直接失败；已知违规（`cli → host` 6 处）写进 `KNOWN_DEBT`，只许减少不许新增，并额外断言 `core` 无对外依赖、前端与壳不 import 后端。
 - **重写 [架构总览](docs/architecture.md)**：按实测 import 矩阵重画分层（core → cli → host → 用户面，adapters/approvals 为旁支），补齐 `cli` / `app` / `desktop` / `hooks` / `integrations` 的职责与边界、四个运行体的依赖关系，并把唯一一处反向依赖（`cli → host/router/*`）登记为待还债务。
 - 新增 [ADR-0004](docs/adr/adr-0004-private-router-runtime.md)、[spec/router.md](docs/spec/router.md) 与 [实现计划](docs/plans/router-implementation.md)：确定 Router（指挥台）是 mo 私有安装、版本锁定、可替换的运行时，与 Worker 平面分开；能力面遵循“读由 runtime 给，写由 mo 给”；ADR-0001 补上“仅约束 Worker 平面”的范围说明。

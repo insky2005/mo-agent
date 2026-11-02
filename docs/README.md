@@ -81,6 +81,7 @@ docs/
 | [setup-config-prompt.md](plans/setup-config-prompt.md) | 已实现（`mo config` / `mo setup`，见 spec §12.8） |
 | [cli-cross-platform-verify.md](plans/cli-cross-platform-verify.md) | 验收备忘：Linux Docker / Windows 验证步骤 |
 | [router-implementation.md](plans/router-implementation.md) | ⏳ 待执行：Router 分四阶段实现，含优先级、验收与风险 |
+| [cli-layer-split.md](plans/cli-layer-split.md) | ⏳ 待执行：把 cli/ 拆成应用层 / 接口层 / 工具层，含 P0–P2 清单 |
 
 ### research/ — 预研
 
