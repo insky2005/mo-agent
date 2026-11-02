@@ -344,7 +344,13 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 历史上曾让 host 独占生命周期，理由是"否则 CLI 与桌面 App 会各起一个"。现在用"pid 由启动者写、host 只读 + 可发 SIGTERM"解决同一个问题，不必把所有权交给服务。
 
-**v1 形态：终端窗口**（见 [实现计划](../plans/router-implementation.md) §6 R1）。TUI 需要 tty，detached 进程没有终端可画，所以 v1 由 `mo router start` 开一个终端窗口跑 Router，复用 `cli/lib/terminals.mjs` + `session-launch.mjs`。代价是关窗口即停；`--mode rpc` 的无窗口形态留到下一期。
+**两种形态，默认开窗口，`--foreground` 就地跑。** TUI 需要 tty，detached 进程没有终端可画，所以：
+
+- 默认：`mo router start` 开一个终端窗口（复用 `cli/lib/router-terminal`）；
+- `mo router start --foreground`：**在当前终端里跑**，Ctrl-C 即停。这条不经过 host（前台只对当前终端有意义）；
+- `--mode rpc` 的无窗口形态留到下一期。
+
+**密钥不写进启动脚本。** `start.sh` 是 0644 且只负责 pid/cd/exec，凭据放在单独的 `secrets.sh`（0600），**只在运行期间存在**，`stop` 与前台退出都会删掉。`credentials.json` 仍是唯一事实源。
 
 其余照抄 `cli/commands/daemon.mjs` 的既有模式，**不要发明第二套**：
 

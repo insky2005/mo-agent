@@ -278,6 +278,14 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "start") {
+    const foreground = has(args.options, "foreground") || has(args.options, "f");
+    if (foreground) {
+      // 前台只对"当前终端"有意义：直接本地跑，不经过 host
+      process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止\n");
+      const value = await localRouter(ctx && ctx.dataDir).start({ foreground: true });
+      emit(args.options, value, (data) => "指挥台已退出（退出码 " + (data.exitCode === undefined ? "?" : data.exitCode) + "）");
+      return 0;
+    }
     const value = await withLocalFallback(
       ctx,
       () => callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto }),

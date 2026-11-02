@@ -9,13 +9,28 @@ export function shellQuote(value) {
 }
 
 /**
- * 渲染 Router 的启动脚本。
+ * 渲染密钥文件（0600）：只放环境变量。
+ *
+ * 这些 export 原本直接写进 start.sh，等于把 API key 复制到第二个地方。
+ * 现在拆开：credentials.json 是唯一事实源，这里只是"启动器需要的投影"，
+ * 并且只在 Router 运行期间存在（stop 时删掉）。
+ */
+export function renderRouterSecrets(options) {
+  const opts = options || {};
+  const lines = ["# 由 mo router 生成，Router 停止时删除。别提交、别复制。"];
+  for (const [name, value] of Object.entries(opts.env || {})) {
+    if (value === undefined || value === null || value === "") continue;
+    lines.push("export " + name + "=" + shellQuote(value));
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * 渲染 Router 的启动脚本（**不含任何密钥**）。
  *
  * 为什么用脚本而不是直接 spawn：终端窗口只能执行一个文件，而 Router 需要
  * cwd + 一组环境变量 + 一条很长的参数，塞进命令行会到处是引号。脚本也让
- * pid 的取得变简单（\`echo $$\` 就是最终 exec 的那个进程）。
- *
- * 注意：脚本里含凭据环境变量，因此必须 0600/0700，且不进任何仓库。
+ * pid 的取得变简单（echo $$ 就是最终 exec 的那个进程）。
  */
 export function renderRouterScript(options) {
   const opts = options || {};
@@ -26,13 +41,11 @@ export function renderRouterScript(options) {
   const lines = [
     "#!/bin/sh",
     "# 由 mo router 生成，不要手改：每次启动都会覆盖。",
+    "# 密钥不在这里：见同目录 secrets.sh（0600，仅运行期间存在）。",
     "echo $$ > " + shellQuote(opts.pidFile),
   ];
+  if (opts.secretsFile) lines.push(". " + shellQuote(opts.secretsFile) + " || exit 1");
   if (opts.cwd) lines.push("cd " + shellQuote(opts.cwd) + " || exit 1");
-  for (const [name, value] of Object.entries(opts.env || {})) {
-    if (value === undefined || value === null || value === "") continue;
-    lines.push("export " + name + "=" + shellQuote(value));
-  }
   const command = [shellQuote(opts.bin), ...args.map(shellQuote)].join(" ");
   if (opts.logFile) {
     lines.push("exec " + command + " >> " + shellQuote(opts.logFile) + " 2>&1");

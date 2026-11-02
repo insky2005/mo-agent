@@ -43,7 +43,8 @@ test("host 没起来、且关掉本地兜底时给 E_DAEMON_DOWN，而不是未�
 
 test("host 不在时 status 退回本地实现，不再报 E_DAEMON_DOWN", async () => {
   const home = tempHome();
-  const code = await routerCommand({ home, autoStart: false }, { positional: ["status"], options: { json: [] } });
+  // dataDir 指到临时目录：否则读的是本机真实状态，测试会随机器漂
+  const code = await routerCommand({ home, dataDir: home, autoStart: false }, { positional: ["status"], options: { json: [] } });
   assert.equal(code, 1, "未运行时退出码 1");
 });
 

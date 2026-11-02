@@ -36,6 +36,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **cli / host 分层归位（P0 + P1）**：Router 的 10 个实现模块从 `host/router/*` 下移到 `cli/lib/router-*.mjs`（argv / script / terminal / node / runtimes / install / credentials / probe / paths / manager），`fsx` 并入 `cli/lib/fsx.mjs`；host 只保留 `router-session.mjs`——启动时 `adopt()` 扫 `router.json` + pid，发现活着的 Router 就注入 hub 接管控制面。`cli → host` 从 6 处降到 **0**，`KNOWN_DEBT` 清空。
 - **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
+- **`mo router start --foreground`**：在当前终端里跑 Router（Ctrl-C 停），不再强制开新窗口；这条路径不经过 host。
+- **启动脚本里不再有 API key**：`start.sh` 改为 0644 且只含 pid/cd/exec，凭据投影到单独的 `secrets.sh`（0600），**只在运行期间存在**，`stop` 或前台退出即删除；`credentials.json` 仍是唯一事实源。
 - **`mo router` 不再依赖 host 存在**：`start` / `stop` / `status` 在 host 缺席（或旧构建）时退回 `cli/lib/router-manager` 本地执行，`E_DAEMON_DOWN` 从这条路径消失；host 起来后 `adopt()` 接管控制面。
 - 新增 [cli/ 分层重构清单](docs/plans/cli-layer-split.md)：把 cli/ 按"应用层 / 接口层 / 工具层"盘点，列出 5 个混住的具体症状（S1–S5）与 P0–P2 分阶段清单、逐文件搬迁表与验收。
 - **依赖方向有了守卫测试**：`scripts/architecture.test.mjs` 扫描真实 import 边，未登记的白名单外依赖直接失败；已知违规（`cli → host` 6 处）写进 `KNOWN_DEBT`，只许减少不许新增，并额外断言 `core` 无对外依赖、前端与壳不 import 后端。

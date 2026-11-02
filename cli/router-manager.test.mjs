@@ -89,9 +89,15 @@ test("headless 启动：写状态、注入 hub、可 attach、可停止", async 
     assert.equal(state.sessionId, "mo-router");
     assert.equal(state.pid, started.pid);
 
-    // 启动脚本：私密
+    // 启动脚本不含密钥（0644）；密钥单独一份 0600
     const scriptStat = fs.statSync(P.startScriptFile(home));
-    assert.equal(scriptStat.mode & 0o777, 0o700);
+    assert.equal(scriptStat.mode & 0o777, 0o644);
+    const scriptText = fs.readFileSync(P.startScriptFile(home), "utf8");
+    assert.ok(!scriptText.includes("sk-router-test-1234"), "启动脚本里不该有 key");
+    assert.ok(scriptText.includes("secrets.sh"), "启动脚本要 source 密钥文件");
+    const secretsStat = fs.statSync(P.secretsFile(home));
+    assert.equal(secretsStat.mode & 0o777, 0o600);
+    assert.ok(fs.readFileSync(P.secretsFile(home), "utf8").includes("sk-router-test-1234"));
 
     // 契约与 README 落盘
     assert.ok(fs.readFileSync(P.contractFile(home), "utf8").includes("指挥台"));
@@ -119,6 +125,8 @@ test("headless 启动：写状态、注入 hub、可 attach、可停止", async 
   } finally {
     const stopped = manager.stop();
     assert.equal(stopped.stopped, true);
+    // 停止后密钥投影必须消失：它只在运行期间存在
+    assert.equal(fs.existsSync(P.secretsFile(home)), false, "stop 之后不该留下 secrets.sh");
   }
 
   const after = manager.status();

@@ -39,6 +39,11 @@ export function startScriptFile(home) {
   return path.join(routerRoot(home), "start.sh");
 }
 
+/** 密钥投影：只在 Router 运行期间存在（0600），stop 时删除 */
+export function secretsFile(home) {
+  return path.join(routerRoot(home), "secrets.sh");
+}
+
 export function credentialsFile(home) {
   return path.join(routerRoot(home), "credentials.json");
 }

@@ -111,7 +111,7 @@ const SPEC = {
   },
   router: {
     subs: {
-      start: { flags: [] },
+      start: { flags: ["--foreground"] },
       stop: { flags: [] },
       status: { flags: [] },
       restart: { flags: [] },

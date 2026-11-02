@@ -17,7 +17,7 @@ import { deleteCredentials, redactSecret, resolveCredentials, writeCredentials }
 import { probeModel } from "./router-probe.mjs";
 import { installRuntime, listRuntimes, manifestFor, pruneRuntimes, repairShim } from "./router-install.mjs";
 import { openTerminal } from "./router-terminal.mjs";
-import { renderRouterScript } from "./router-script.mjs";
+import { renderRouterScript, renderRouterSecrets } from "./router-script.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
 import * as P from "./router-paths.mjs";
 
@@ -151,6 +151,7 @@ export function createRouterManager(options) {
     pid: P.routerPidFile(dataDir),
     log: P.routerLogFile(dataDir),
     script: P.startScriptFile(dataDir),
+    secrets: P.secretsFile(dataDir),
     credentials: P.credentialsFile(dataDir),
     config: P.configDir(dataDir),
     sessions: P.sessionsDir(dataDir),
@@ -244,7 +245,8 @@ export function createRouterManager(options) {
     return runtime;
   }
 
-  async function start() {
+  async function start(startOptions) {
+    const runOpts = startOptions || {};
     const current = status();
     if (current.running) {
       log.info("Router 已在运行（pid " + current.pid + "），attach");
@@ -294,15 +296,23 @@ export function createRouterManager(options) {
     });
 
     const headless = String(env.MO_ROUTER_HEADLESS || "") === "1";
+    const foreground = Boolean(runOpts.foreground || opts.foreground);
+
+    // 密钥单独一个文件（0600），启动脚本本身不再含任何凭据
+    writeFilePrivate(
+      files.secrets,
+      renderRouterSecrets({ env: { ...argv.env, ...credentials.env } }),
+      0o600,
+    );
     const script = renderRouterScript({
       bin: argv.command,
       args: argv.args,
       cwd: argv.cwd,
-      env: { ...argv.env, ...credentials.env },
+      secretsFile: files.secrets,
       pidFile: files.pid,
       logFile: headless ? files.log : null,
     });
-    writeFilePrivate(files.script, script, 0o700);
+    writeFilePrivate(files.script, script, 0o644);
     try {
       fs.rmSync(files.pid, { force: true });
     } catch {
@@ -311,10 +321,15 @@ export function createRouterManager(options) {
 
     const warnings = [];
     let launched = null;
+    let foregroundChild = null;
     if (headless) {
       const child = spawnImpl("/bin/sh", [files.script], { detached: true, stdio: "ignore", env: process.env });
       if (child && typeof child.unref === "function") child.unref();
       launched = { launched: true, kind: "headless", command: "/bin/sh" };
+    } else if (foreground) {
+      // 就地跑：继承当前终端，Ctrl-C 即停，不再开新窗口
+      foregroundChild = spawnImpl("/bin/sh", [files.script], { stdio: "inherit", env: process.env });
+      launched = { launched: true, kind: "foreground", command: "/bin/sh" };
     } else {
       launched = openTerminalImpl({ scriptPath: files.script, platform });
       if (!launched.launched) {
@@ -349,7 +364,32 @@ export function createRouterManager(options) {
 
     emitSession({ pid });
     log.info("Router 已启动（pid " + pid + "，runtime " + runtime.id + " " + runtime.version + "）");
+
+    // 前台模式：等它退出（Ctrl-C），退出后按"已停止"收尾
+    if (foregroundChild) {
+      const exitCode = await new Promise((resolve) => {
+        foregroundChild.on("close", (code) => resolve(code === null ? 0 : code));
+        foregroundChild.on("error", () => resolve(1));
+      });
+      cleanupAfterExit();
+      return { ...status(), attached: false, launched, warnings, script: files.script, foreground: true, exitCode };
+    }
+
     return { ...status(), attached: false, launched, warnings, script: files.script };
+  }
+
+  /** 进程退出后的收尾：删 pid 与密钥投影，通知会话消失 */
+  function cleanupAfterExit() {
+    for (const file of [files.pid, files.secrets]) {
+      try {
+        fs.rmSync(file, { force: true });
+      } catch {
+        // 删不掉不影响退出
+      }
+    }
+    const state = readState();
+    if (state) writeJsonPrivate(files.state, { ...state, pid: null, stoppedAt: new Date(now()).toISOString() });
+    notifySession("removed", { sessionId: ROUTER_SESSION_ID, id: ROUTER_SESSION_ID });
   }
 
   function stop() {
@@ -378,10 +418,13 @@ export function createRouterManager(options) {
         }
       }
     }
-    try {
-      fs.rmSync(files.pid, { force: true });
-    } catch {
-      // 忽略
+    // pid 与密钥投影都清掉：密钥文件只在运行期间存在
+    for (const file of [files.pid, files.secrets]) {
+      try {
+        fs.rmSync(file, { force: true });
+      } catch {
+        // 忽略
+      }
     }
     const state = readState();
     if (state) writeJsonPrivate(files.state, { ...state, pid: null, stoppedAt: new Date(now()).toISOString() });
