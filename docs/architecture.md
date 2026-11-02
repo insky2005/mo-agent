@@ -1,47 +1,63 @@
 # 架构总览
 
-状态：与当前代码（0.2.0）一致　日期：2026-10-23　关联：[ADR-0001](adr/adr-0001-observational-first.md)、[ADR-0003](adr/adr-0003-event-contract.md)、[事件契约](spec/event-contract.md)
+状态：与当前代码（0.3.0 + Router）一致　日期：2026-11-01
+关联：[ADR-0001 观察优先](adr/adr-0001-observational-first.md)、[ADR-0003 事件契约](adr/adr-0003-event-contract.md)、[ADR-0004 私有 Router 运行时](adr/adr-0004-private-router-runtime.md)、[事件契约](spec/event-contract.md)
 
 ## 1. 这是什么
 
-Mo Agent 是 macOS 上的**常驻 Agent 监理**：观察本机各个 Agent 的会话，归一成一套领域事件，在你真正需要决定的那一刻（授权、提问、完成、失败）把消息递到你面前，并支持远程批准与指令。
+Mo Agent 有两个面：
 
-它**不托管 Agent、不改变 Agent 的运行方式**。这一条决定了整个架构：观测优先，接入靠 adapter，而不是靠改造对方。
+- **监理**（观察优先）：观察本机各个 Agent 的会话，归一成一套领域事件，在你真正需要决定的那一刻（授权、提问、完成、失败）把消息递到你面前，并支持远程批准与指令。它**不托管用户的 Agent、不改变其运行方式**（ADR-0001）。
+- **工作台 + 指挥台**（应用内核）：任务卡、批准、派单、回执、账本，以及 mo 自己的主 Agent（Router）。这一面**以文件为状态，可以完全脱离常驻服务运行**（ADR-0004）。
+
+这两条决定了整个架构：观测靠 adapter（不改造对方），流程靠 CLI（不依赖服务）。
 
 ## 2. 分层
 
+四层，加两类旁挂：
+
 ```
-   厂商原始输入                     用户面
-   transcript / RPC / 进程表 / hook     手机 · 菜单栏 · 管理页 · 耳机
-            │                                   ▲
-            ▼                                   │
-   ┌─────────────────┐   ┌──────────┐   ┌──────────────┐
-   │    adapters     │──▶│   core   │──▶│     host     │
-   │  翻译成领域事件  │   │ 归约·分发 │   │ HTTP/推送/进程 │
-   └─────────────────┘   └──────────┘   └──────────────┘
-            ▲                  ▲                │
-            │                  │                ▼
-   ┌─────────────────┐         │        ┌──────────────┐
-   │   approvals     │─────────┘        │ app/web      │
-   │ hook → 决策 broker │                │ desktop 壳   │
-   └─────────────────┘                  └──────────────┘
+                   用户面（不写业务逻辑）
+   app/web · app/android        desktop 菜单栏      手机 · 钉钉 · 耳机
+          │ HTTP/SSE                  │ 子进程 / 推送        │
+          ▼                           ▼                     ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │                          host                            │ 常驻进程
+   │  适配器调度 · HTTP/SSE · 配对 · 批准页 · 钉钉 · 推送 · 语音  │ 观测 + 信道
+   └────────▲──────────────────────────────▲──────────────────┘
+            │ import                       │ import
+   ┌────────┴─────────┐          ┌─────────┴──────────┐
+   │    adapters      │          │        cli         │ 应用内核
+   │ 厂商信号→领域事件 │          │ 卡/批准/派单/回执/账本 │ 可独立运行
+   └────────┬─────────┘          └─────────┬──────────┘
+            │                              │
+            └──────────────┬───────────────┘
+                           ▼
+                   ┌───────────────┐
+                   │     core      │ 纯逻辑：事件契约·状态机·通知策略·Router 策略
+                   └───────────────┘
+
+   旁挂：approvals（hook 入口，只依赖 core）· hooks（配置模板，无代码）
+        integrations（Pi 扩展，注入运行时）· scripts（构建/安装）· desktop（壳）
 ```
 
-数据自上而下单向流动，只有 `approvals` 是一条反向通道（Agent 卡住时回调进来）。
+**一句话判据**：`core` 不认识任何人；`cli` 只认识 `core`；`host` 认识下面三层；`app/desktop` 只跟 `host` 说话（HTTP 或子进程）。
 
 ## 3. 目录职责
 
-| 目录 | 职责 | 边界 |
-|---|---|---|
-| `adapters/` | **观测层**。把每家 Agent 的原始状态翻译成统一事件；`profiles/*.json` 声明能力（观测方式、runEnd、批准、控制、hooks） | 只陈述事实，不决定通知文案 |
-| `core/` | **领域核心，纯逻辑**。事件词汇表、状态归约、Hub 分发、通知策略、内存存储 | **不碰文件、不发网络、不起进程** |
-| `host/` | **服务与进程宿主**。HTTP、SSE、鉴权、配对、决策、hooks 写入、钉钉、推送、语音 | 唯一的 IO 层 |
-| `approvals/` | **审批挂接点**。被 Agent 调用的 hook CLI、决策 broker、厂商事件名映射 | 不直接推送 |
-| `app/web/` | 管理页、监控页、审批页、PWA | 只通过 host 的 HTTP 访问 |
-| `app/android/` | Capacitor 原生工程 | 复用 web 资源 |
-| `desktop/` | ElectroBun 桌面壳：菜单栏、单实例、拉起 host、打包 | 不含业务逻辑 |
-| `scripts/` | 构建、安装、生成、e2e | — |
-| `hooks/` | 三家 Agent 的 `settings.snippet.json` 模板 | 只是模板，由 host 写入真实配置 |
+| 目录 | 职责 | 边界 | 实测代码量 |
+|---|---|---|---|
+| `core/` | **领域核心，纯逻辑**。事件词汇表、Hub 归约、通知策略、任务卡状态机、记忆打分、Router 能力面策略 | **不碰文件、不发网络、不起进程** | 2.2k |
+| `cli/` | **应用内核 + 命令行**。项目注册、建卡、批准、派单、回执、账本、记忆、MCP stdio、Router 生命周期 | 不 import `host/`；退出即止 | 9.5k |
+| `host/` | **常驻服务**。HTTP/SSE、鉴权、配对、适配器调度、钉钉 Stream、推送、语音、hooks 写入、批准页 | 唯一的常驻 IO 层 | 11.1k |
+| `adapters/` | **观测层**。把每家 Agent 的原始状态翻译成统一事件；`profiles/*.json` 声明能力 | 只陈述事实，不决定通知文案；不投递 | 2.9k |
+| `approvals/` | **审批挂接点**。被 Agent 调用的 hook CLI、决策 broker、厂商事件名映射 | 不直接推送 | 0.5k |
+| `app/web/` | 监控页、管理页、审批页、语音浮层、PWA | **只通过 host 的 HTTP/SSE 访问**，不 import 任何后端模块 | 5.0k |
+| `app/android/` | Capacitor 原生工程（WebView 包 web 资源） | 同上 | — |
+| `desktop/` | ElectroBun 桌面壳：菜单栏、单实例、拉起 host、打包。**`desktop/runtime/` 是 host 运行时的打包副本**（不是源码） | 不含业务逻辑；只做进程与托盘 | 2.1k（壳本体） |
+| `hooks/` | 三家 Agent 的 `settings.snippet.json` 模板 | 只是模板，由 host 写入真实配置 | 0 行代码 |
+| `integrations/` | Pi 控制扩展（注入到 Pi 进程内） | 只跟 host 的 `/local/pi/*` 说话 | 0.2k |
+| `scripts/` | 构建、安装、生成、e2e、发版 | 可以调任何层，但只做工具 | — |
 
 ## 4. 一次事件的生命周期
 
@@ -60,26 +76,36 @@ Mo Agent 是 macOS 上的**常驻 Agent 监理**：观察本机各个 Agent 的�
 
 ## 5. 依赖方向
 
-三层：**core（纯逻辑）→ cli（应用内核，文件即状态，可自我闭环）→ host（服务外壳）**。
+**core → cli → host → 用户面**，加上适配器旁支。实测矩阵（扫全部 `.mjs`，不含测试）：
+
+| 从 \ 到 | core | cli | host | adapters | approvals |
+|---|---|---|---|---|---|
+| **core** | — | — | — | — | — |
+| **cli** | ✅ 52 | — | ❌ 6（待还） | — | — |
+| **host** | ✅ 18 | ✅ 4 | — | ✅ 4 | ✅ 4 |
+| **adapters** | ✅ 8 | — | — | — | — |
+| **approvals** | ✅ 2 | — | — | — | — |
+| **app/web** | — | — | HTTP/SSE | — | — |
+| **desktop** | — | — | 子进程 | — | — |
 
 | 允许 | 禁止 |
 |---|---|
 | `cli → core` | `cli → host`（**CLI 必须能独立运行**，host 是它的上层） |
 | `host → cli / core / adapters / approvals` | `core → cli / host`（core 不做 IO） |
 | `adapters → core` | `adapters → host`（观测层不投递） |
-| `approvals → core` | `app/web → core`（前端不直连领域层） |
-| `app/web → host (HTTP)` | `host → desktop` |
-| `desktop → host (子进程)` | |
+| `approvals → core` | `app/web → core / cli`（前端不直连领域层） |
+| `app/web → host (HTTP/SSE)` | `host → desktop`（单向：壳拉 host） |
+| `desktop → host (子进程)` | `integrations → host`（走 HTTP，不 import） |
 
 **host 只负责"长期在线 + 外部事件源 + UI 数据面"**：适配器观测、手机/钉钉/语音信道、推送、监控页。除此之外的一切——建卡、批准、派单、回执、账本、Router——都应该在 `cli/` 里闭环，不要求 host 在场。
 
 判定方法：**如果一条命令在没有 host 的情况下跑不通，先问"它真的需要长期在线或外部信道吗"**；不需要就是分层错了。
 
-已知的待还债务（本表是目标，不是现状）：
+### 待还的债（本表是目标，现状只有这一处违规）
 
 | 位置 | 反向依赖 | 还法 |
 |---|---|---|
-| `cli/commands/setup.mjs`、`cli/commands/doctor.mjs` | 引了 `host/router/*` | Router 的实现（argv / 安装 / 凭据 / 生命周期）下移到 `cli/lib/router-*.mjs`，host 只保留 HTTP 薄壳与会话注入 |
+| `cli/commands/setup.mjs`（4 处）、`cli/commands/doctor.mjs`（2 处） | 引了 `host/router/*` | Router 实现（argv / 安装 / 凭据 / 生命周期）下移到 `cli/lib/router-*.mjs`，host 只留 HTTP 薄壳与会话注入。顺带让 `mo router` 不再要求 host 在场 |
 
 ## 6. 扩展一个 Agent
 
@@ -94,33 +120,50 @@ Mo Agent 是 macOS 上的**常驻 Agent 监理**：观察本机各个 Agent 的�
 
 ## 7. 运行时形态
 
+四个运行体，**解耦的边界在于"谁能不需要谁"**：
+
+| 运行体 | 生命周期 | 依赖谁 | 没有它会怎样 |
+|---|---|---|---|
+| **CLI**（`mo`） | 一次性进程，命令结束即退 | 只需要磁盘（`~/.mo-agent/`） | 什么都没有 |
+| **host**（`mo-agent-host`） | 常驻，直到 stop / 桌面 App 退出 | CLI（复用工作台逻辑）+ adapters | 观测、远程批准、手机/钉钉/语音消失；CLI 仍可用 |
+| **desktop**（`Mo Agent.app`） | 常驻（菜单栏） | 拉起 host 子进程 | 没有菜单栏与托盘，host 仍可单独跑 |
+| **客户端**（web / Android / 钉钉 / 耳机） | 会话级 | host 的 HTTP + 令牌 | 只能在终端里用 |
+
 ```
-桌面端：Mo Agent.app → 菜单栏 → 拉起 host/index.mjs（常驻，无窗口）
-纯 CLI：node host/index.mjs（或 launchd）
-手机：经本机 HTTP + 配对令牌访问，不暴露到局域网
+Mo Agent.app ──拉起──▶ host（常驻，无窗口）◀──HTTP+令牌── 手机 / 浏览器 / 钉钉
+                          │
+                          └── 调度 adapters（只读）· 注入 hooks · 推送
+
+mo（CLI）── 独立工作：项目 · 卡 · 批准 · 派单 · 账本 · 指挥台
 ```
 
-单实例由 `~/.mo-agent/desktop.lock` 保证。用户数据在 `~/.mo-agent/`，程序产物在 `~/Library/Application Support/mo-agent/runtime/`。
+单实例由 `~/.mo-agent/desktop.lock` 保证。用户数据在 `~/.mo-agent/`，程序产物在 `~/Library/Application Support/mo-agent/`（桌面运行时）与 `~/.mo-agent/runtime/`（`mo daemon install` 装的 host 运行时）。
 
 ## 8. 构建与验证
 
 ```bash
-npm test                      # core / host / adapters / approvals 单测
-npm run check                 # 语法检查 + 能力表时效
+npm test                      # core / cli / host / adapters / approvals 单测
+npm run check                 # 语法检查 + 能力表时效 + 版本一致
 npm run docs:capabilities     # 重新生成 docs/reference/capabilities.md
-bash scripts/build-desktop.sh # 打桌面端
+bash scripts/build-cli.sh     # 打 CLI 单文件二进制（不含 host）
+bash scripts/build-desktop.sh # 打桌面端 + host 运行时（runtime.tar.gz）
 ```
+
+**CLI 不含 host 是刻意的**：单文件二进制塞不进 host 的外部资产（`app/web`、`adapters/profiles`、`integrations/pi`）。只装 CLI 的用户用 `mo daemon install` 补齐 host 运行时。
 
 ## 9. 新增代码该放哪
 
 | 你要加的东西 | 放哪 | 判定 |
 |---|---|---|
+| 纯策略 / 状态机 / 打分 / 命名规则 | `core/` | 不碰 IO，能被单测直接跑 |
+| 一条新命令、一个工作台动作 | `cli/` | 文件即状态，不需要常驻 |
+| 新的 HTTP 接口 / 推送通道 / 子进程 / 长连接 | `host/` | 需要"一直有人在那儿听" |
 | 解析某家 Agent 的日志 | `adapters/` | 只读外部数据 |
-| 新的通知/审批规则 | `core/` | 纯决策 |
-| 新的 HTTP 接口 / 推送通道 / 子进程 | `host/` | 有 IO |
 | 被 Agent 回调的入口 | `approvals/` | 由外部进程触发 |
-| 界面 | `app/web/` | 只能走 HTTP |
-| 打包/安装 | `scripts/`、`desktop/` | — |
+| 界面 | `app/web/` | 只能走 HTTP/SSE |
+| 菜单栏、托盘、单实例 | `desktop/` | 只做进程与壳 |
+| Agent 配置模板 | `hooks/` | 只是 JSON 模板 |
+| 打包/安装/发版 | `scripts/`、`installer/` | — |
 
 ### workbench（P0 已实现，P1+ 规划中）
 
