@@ -33,16 +33,32 @@ test("readHostSession：读端口与令牌；端口缺失视为不可用", () =>
   assert.equal(readHostSession(home), null);
 });
 
-test("host 没起来时命令给 E_DAEMON_DOWN，而不是未处理异常", async () => {
+test("host 没起来、且关掉本地兜底时给 E_DAEMON_DOWN，而不是未处理异常", async () => {
   const home = tempHome();
-  const safe = { home, autoStart: false };
+  const safe = { home, autoStart: false, disableLocalFallback: true };
   await assert.rejects(() => routerCommand(safe, { positional: ["status"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
   await assert.rejects(() => routerCommand(safe, { positional: ["start"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
   await assert.rejects(() => routerCommand(safe, { positional: ["runtime"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
 });
 
+test("host 不在时 status 退回本地实现，不再报 E_DAEMON_DOWN", async () => {
+  const home = tempHome();
+  const code = await routerCommand({ home, autoStart: false }, { positional: ["status"], options: { json: [] } });
+  assert.equal(code, 1, "未运行时退出码 1");
+});
+
+test("host 不在时 start 用本地实现：报的是配置缺失，不是 E_DAEMON_DOWN", async () => {
+  const home = tempHome();
+  await assert.rejects(
+    () => routerCommand({ home, dataDir: home, autoStart: false }, { positional: ["start"], options: {} }),
+    // 环境相关：没装运行时 → RUNTIME_MISSING；装了但这份 dataDir 没凭据 → NO_CREDENTIAL。
+    // 关键是它不再是"host 没在运行"。
+    (error) => ["E_ROUTER_RUNTIME_MISSING", "E_ROUTER_NO_CREDENTIAL"].includes(error.code)
+  );
+});
+
 test("裸 mo router 等同于 start（不用记两层子命令）", async () => {
-  const safe = { home: tempHome(), autoStart: false };
+  const safe = { home: tempHome(), autoStart: false, disableLocalFallback: true };
   await assert.rejects(
     () => routerCommand(safe, { positional: [], options: {} }),
     (error) => error.code === "E_DAEMON_DOWN"

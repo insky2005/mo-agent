@@ -336,7 +336,13 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 ## 10. 生命周期与单实例
 
-**生命周期归 host，不归 CLI。** `mo router start` 只是 `POST /local/router/start`；pid 由 host 持有。理由：host 才是常驻的（桌面 App 重启后能把 Router 拉回来）、会话注入 hub 是 host 的职责、否则 CLI 与桌面 App 会各起一个并互相覆盖 pid 文件（`daemon.mjs` 已经踩过这个坑）。
+**pid 归"启动它的那个进程"，host 只做接管。** 这条在 [cli 分层重构](../plans/cli-layer-split.md) 后落地：
+
+- `mo router start` 先试 host 的 `/local/router/start`；host 不在（或还是旧构建）就**退回本地实现**（`cli/lib/router-manager`），不再抛 `E_DAEMON_DOWN`；
+- host 启动时调 `adoptRouterSession()`：读 `router.json` + `router.pid`，发现 Router 活着就注入 hub、接上控制面，**不重启它**；
+- 于是"只装 CLI 也能用指挥台"，手机/监控等远程能力在 host 起来后自动补上。
+
+历史上曾让 host 独占生命周期，理由是"否则 CLI 与桌面 App 会各起一个"。现在用"pid 由启动者写、host 只读 + 可发 SIGTERM"解决同一个问题，不必把所有权交给服务。
 
 **v1 形态：终端窗口**（见 [实现计划](../plans/router-implementation.md) §6 R1）。TUI 需要 tty，detached 进程没有终端可画，所以 v1 由 `mo router start` 开一个终端窗口跑 Router，复用 `cli/lib/terminals.mjs` + `session-launch.mjs`。代价是关窗口即停；`--mode rpc` 的无窗口形态留到下一期。
 

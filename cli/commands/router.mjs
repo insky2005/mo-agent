@@ -5,6 +5,25 @@ import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
 import { daemonCommand, describeHostOrigin } from "./daemon.mjs";
+import { createRouterManager } from "../lib/router-manager.mjs";
+
+/**
+ * host 不在时直接本地干活。
+ *
+ * Router 的实现已经在应用层（cli/lib/router-*），不需要服务也能起停；
+ * host 起来之后会通过 adopt() 接管控制面。这样 E_DAEMON_DOWN 不会再挡路。
+ */
+const localManagers = new Map();
+function localRouter(dataDir) {
+  const key = String(dataDir || "");
+  if (!localManagers.has(key)) {
+    localManagers.set(
+      key,
+      createRouterManager({ dataDir: dataDir || undefined, log: { info() {}, warn() {}, error() {} } }),
+    );
+  }
+  return localManagers.get(key);
+}
 
 /**
  * mo router —— 指挥台（Router）的开关、配置与运行时安装。
@@ -138,6 +157,21 @@ async function callRouter(home, pathname, method, body, options) {
   return payload || {};
 }
 
+/**
+ * 先走 host；host 不在（或还是旧构建）就退回本地实现。
+ * ctx.disableLocalFallback 给测试用。
+ */
+async function withLocalFallback(ctx, runRemote, runLocal) {
+  try {
+    return await runRemote();
+  } catch (error) {
+    const hostless = error && (error.code === "E_DAEMON_DOWN" || error.code === "E_ROUTER_HOST_OLD");
+    if (!hostless || (ctx && ctx.disableLocalFallback)) throw error;
+    const value = await runLocal();
+    return { ...value, hostless: true };
+  }
+}
+
 function describe(status) {
   if (!status.running) {
     const lines = ["指挥台  未运行"];
@@ -244,24 +278,37 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "start") {
-    const value = await callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto });
+    const value = await withLocalFallback(
+      ctx,
+      () => callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto }),
+      () => localRouter(ctx && ctx.dataDir).start(),
+    );
     emit(args.options, value, (data) => {
       if (data.attached) return "指挥台已在运行（pid " + data.pid + "），没有重复启动";
       const head = "✓ 指挥台已启动（pid " + data.pid + "）";
       const warnings = Array.isArray(data.warnings) && data.warnings.length ? "\n  " + data.warnings.join("\n  ") : "";
-      return head + warnings + "\n  工作台  " + data.cwd + "\n  打开终端窗口后即可对话";
+      const where = data.hostless ? "\n  注意    host 未运行，已在本地拉起；host 起来后会自动接管" : "";
+      return head + warnings + "\n  工作台  " + data.cwd + "\n  打开终端窗口后即可对话" + where;
     });
     return 0;
   }
 
   if (sub === "stop") {
-    const value = await callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false });
+    const value = await withLocalFallback(
+      ctx,
+      () => callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false }),
+      () => localRouter(ctx && ctx.dataDir).stop(),
+    );
     emit(args.options, value, (data) => (data.stopped ? "✓ 指挥台已停止（pid " + data.pid + "）" : "指挥台本来就没在运行"));
     return 0;
   }
 
   if (sub === "status") {
-    const value = await callRouter(home, "/local/router/status", "GET", undefined, { autoStart: false });
+    const value = await withLocalFallback(
+      ctx,
+      () => callRouter(home, "/local/router/status", "GET", undefined, { autoStart: false }),
+      () => localRouter(ctx && ctx.dataDir).status(),
+    );
     emit(args.options, value, describe);
     return value.running ? 0 : 1;
   }
