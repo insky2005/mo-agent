@@ -180,10 +180,34 @@ export function createRouterManager(options) {
     );
   }
 
+  /**
+   * 进程已经没了、但 pid / 密钥文件还留着（被 kill -9、关窗口、崩溃）：
+   * 顺手清掉。密钥投影不该在指挥台不运行时还躺在磁盘上。
+   */
+  /** 只清密钥投影（并发冲突时别动别人的 pid） */
+  function cleanStaleSecretsOnly() {
+    try {
+      fs.rmSync(files.secrets, { force: true });
+    } catch {
+      // 忽略
+    }
+  }
+
+  function cleanStaleFiles() {
+    for (const file of [files.pid, files.secrets]) {
+      try {
+        fs.rmSync(file, { force: true });
+      } catch {
+        // 删不掉不影响状态判断
+      }
+    }
+  }
+
   function status() {
     const state = readState() || {};
     const pid = readPidFile(files.pid) || (state.pid ? Number(state.pid) : null);
     const running = isAlive(pid);
+    if (!running && pid) cleanStaleFiles();
     const session = hub ? hub.get(ROUTER_SESSION_ID) : null;
     return {
       ok: true,
@@ -322,8 +346,10 @@ export function createRouterManager(options) {
     const warnings = [];
     let launched = null;
     let foregroundChild = null;
+    let detachedChild = null;
     if (headless) {
       const child = spawnImpl("/bin/sh", [files.script], { detached: true, stdio: "ignore", env: process.env });
+      detachedChild = child;
       if (child && typeof child.unref === "function") child.unref();
       launched = { launched: true, kind: "headless", command: "/bin/sh" };
     } else if (foreground) {
@@ -335,6 +361,7 @@ export function createRouterManager(options) {
       if (!launched.launched) {
         warnings.push("没有打开终端窗口（" + (launched.reason || "未知原因") + "），回落为后台启动");
         const child = spawnImpl("/bin/sh", [files.script], { detached: true, stdio: "ignore", env: process.env });
+        detachedChild = child;
         if (child && typeof child.unref === "function") child.unref();
       }
     }
@@ -345,6 +372,21 @@ export function createRouterManager(options) {
       throw new MoError(ROUTER_ERROR.START_FAILED, "Router 没有按预期启动（没拿到 pid）", {
         hint: "看 " + files.script + (headless ? " 与 " + files.log : ""),
       });
+    }
+
+    // 并发保护：两个 mo 同时 start 时，后写 pid 的赢。
+    // 我们起的是 sh，它第一行就写自己的 pid，所以 pid 应当等于我们的子进程；
+    // 对不上说明另一个实例抢先登记了 —— 把自己起的收掉，转为 attach，别留孤儿进程。
+    const mine = (foregroundChild && foregroundChild.pid) || (detachedChild && detachedChild.pid) || null;
+    if (mine && pid !== mine) {
+      try {
+        process.kill(mine, "SIGTERM");
+      } catch {
+        // 已经退出
+      }
+      cleanStaleSecretsOnly();
+      const current = status();
+      return { ...current, attached: true, conflict: true };
     }
 
     const state = {

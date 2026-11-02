@@ -265,6 +265,17 @@ export async function routerCommand(ctx, args) {
     if (foreground) {
       process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止" + (hostAliveSync(readHostSession(home)) ? "" : "（没有 host：远程控制暂不可用）") + "\n");
       const value = await manager.start({ foreground: true });
+      if (value && value.attached) {
+        // 已经有一个在跑（可能在别的终端/窗口）：单实例，不抢也不重复起
+        emit(
+          args.options,
+          value,
+          (data) =>
+            "指挥台已经在运行（pid " + data.pid + "），当前终端不接管。\n" +
+            "  想在这个终端跑：先 mo router stop，再 mo router",
+        );
+        return 0;
+      }
       emit(args.options, value, (data) => {
         const head = "指挥台已退出（退出码 " + (data.exitCode === undefined ? "?" : data.exitCode) + "）";
         return head + daemonExitHint(home, daemonState);

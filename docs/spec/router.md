@@ -359,7 +359,10 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 其余照抄 `cli/commands/daemon.mjs` 的既有模式，**不要发明第二套**：
 
-- pid 文件：`~/.mo-agent/router/router.pid`；
+- pid 文件：`~/.mo-agent/router/router.pid`；**单实例**靠它：start 先看 pid 是否活着，活着就 attach，不起第二个；
+  - 前后脚启动：第二次 attach，并明确告知"已在运行（pid X），当前终端不接管"；
+  - **真正同时**启动有竞态：两个都会 spawn，但 sh 第一行写 pid，后写者赢；先写者发现 `pid ≠ 自己的子进程` 就把自己收掉、转成 attach，不留孤儿；
+  - 进程被 `kill -9` / 关窗口时不会清理，所以 `status` 发现 pid 已死会自动删掉残留的 pid 与 `secrets.sh`；
 - 健康检查：`/local/router/status` 或（进程存活 + session 在 hub 里）；
 - 日志：`~/.mo-agent/router/router.log`（终端窗口里的输出另有一份，两者不互斥）；
 - 崩溃：**不自动无限重启**。重启 3 次仍失败则停在 `E_ROUTER_UNHEALTHY` 并在监控页告警——否则会在错误的凭据上反复烧钱。

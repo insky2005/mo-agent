@@ -38,6 +38,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
 - **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
 - **指挥台契约承诺了不存在的工具**：`ROUTER.md` 里让 Router 用 `note_write`，但该工具还没实现（P3）。在落地前改成"派单，不要自己写"，避免 Router 调一个不存在的工具。
+- **重复启动 `mo router`**：前台启动时如果已有实例在跑，现在会明确说"已在运行（pid X），当前终端不接管"（之前会误报"指挥台已退出（退出码 ?）"）。并发保护也补了：后写 pid 的赢，先起的那个发现自己没登记上就收掉自己、转成 attach，不留孤儿进程。进程被强杀留下的 stale pid 与 `secrets.sh` 会在下次 `status` 时自动清掉。
 - **`mo router --start-daemon` 的退出与重复启动**：Ctrl-C 只退指挥台，host 不会跟着退——现在退出时会提示它还在跑、怎么停；host 已在运行时不会重复启动（先探 health，再靠 `mo daemon start` 自身的幂等）。
 - **补全：`mo router --<TAB>` 看不到 `--window` / `--start-daemon`**：裸 `mo router` 等同 `start`，但补全表里这一层没登记 flag，只给全局项。补上后两层都能补全。
 - **`--start-daemon` 会被旧 `session.json` 骗过**：host 停了文件还在，代码以为它活着就跳过了启动，接着"打开监控屏"失败。现在先用 pid 判活、再用 `/api/health` 确认，两者都过才去开页面。
