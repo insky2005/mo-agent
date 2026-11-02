@@ -348,7 +348,8 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 **两种形态，默认开窗口，`--foreground` 就地跑。** TUI 需要 tty，detached 进程没有终端可画，所以：
 
-- 默认：`mo router start` 开一个终端窗口（复用 `cli/lib/router-terminal`）；
+- 默认：`mo router start` 在**当前终端**跑（TTY 下），`--window` 才开新窗口；
+- `--start-daemon`：先把 host 起来 → 自动打开监控屏 → 再进 TUI。host 起不来不阻断指挥台（只是丢远程能力），`--no-open` 可跳过开页面；
 - `mo router start --foreground`：**在当前终端里跑**，Ctrl-C 即停。这条不经过 host（前台只对当前终端有意义）；
 - `--mode rpc` 的无窗口形态留到下一期。
 

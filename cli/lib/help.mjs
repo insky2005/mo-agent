@@ -157,7 +157,7 @@ export const GROUPS = [
     blurb: "mo 自己的主 Agent：常驻、只做分派，不碰项目工作区",
     subs: [
       ["", "启动指挥台（等同 start）", "默认子命令"],
-      ["start [--window]", "启动指挥台：默认就在当前终端跑", "--window 开新终端窗口；非 TTY 自动走窗口"],
+      ["start [--window] [--start-daemon]", "启动指挥台：默认就在当前终端跑", "--start-daemon 先起 host 并打开监控屏；--window 开新窗口"],
       ["stop", "停止", ""],
       ["status", "看状态：跑没跑、用哪个模型、工作台在哪", "未运行退出码 1"],
       ["restart", "重启", ""],

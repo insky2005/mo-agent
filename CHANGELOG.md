@@ -37,6 +37,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
 - **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
+- **`mo router --start-daemon`**：一条命令走完"起 host → 打开监控屏 → 进 TUI"。host 起不来只警告不阻断（指挥台仍可本地运行），`--no-open` 跳过开页面。
 - **`mo router` 全动作本地化**：start / stop / status / setup / runtime 不再走 host 的 HTTP（也不再顺手拉起 daemon），`E_DAEMON_DOWN` 与 `E_ROUTER_HOST_OLD` 从这条路径彻底消失；没 host 时输出会提示"远程控制暂不可用"。
 - **Pi 控制扩展改为等待 host 而不是退出**：之前拿不到 `session.json` 就直接结束循环，导致"先起指挥台、后起 host"永远接不上；现在退避重试，启动顺序不再重要。
 - **Router 运行时加 `--no-skills`**：它的契约是 `ROUTER.md`；通用 `mo` 技能里全是 shell 命令示例，而 Router 没有 shell，技能发现又是全局的（含 `~/.agents/skills`），不显式关掉就会读到。

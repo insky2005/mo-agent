@@ -111,7 +111,7 @@ const SPEC = {
   },
   router: {
     subs: {
-      start: { flags: ["--window", "--foreground"] },
+      start: { flags: ["--window", "--foreground", "--start-daemon", "--no-open"] },
       stop: { flags: [] },
       status: { flags: [] },
       restart: { flags: [] },
@@ -338,6 +338,8 @@ const FLAG_DESC = {
   "--force": "强制重装运行时",
   "--no-apk": "跳过 APK 预下载",
   "--window": "开新终端窗口跑（默认在当前终端）",
+  "--start-daemon": "先把 host 起来并打开监控屏，再进指挥台",
+  "--no-open": "配合 --start-daemon：不自动打开监控屏",
   "--foreground": "在当前终端跑（TTY 下默认）",
 };
 

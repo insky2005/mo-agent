@@ -4,6 +4,7 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
+import { daemonCommand } from "./daemon.mjs";
 import { createRouterManager } from "../lib/router-manager.mjs";
 
 /**
@@ -59,6 +60,43 @@ export function readHostSession(home) {
 function remoteHint(home) {
   if (readHostSession(home)) return "";
   return "\n  远程    现在没有 host：手机 / 钉钉 / 监控页都连不上。要这些能力就另开终端跑 mo daemon start";
+}
+
+/**
+ * --start-daemon：先把 host 起来，再打开监控屏，然后才进 TUI。
+ *
+ * host 失败不阻断指挥台（它本地能跑），只丢远程能力——所以这里只提示，不抛错。
+ */
+async function ensureDaemon(ctx, home, args) {
+  const quiet = !has(args.options, "verbose");
+  if (!readHostSession(home)) {
+    process.stderr.write("启动 host…\n");
+    try {
+      await daemonCommand(
+        { cwd: (ctx && ctx.cwd) || process.cwd(), env: (ctx && ctx.env) || process.env },
+        { positional: ["start"], options: { "no-apk": true, quiet: true } },
+      );
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      process.stderr.write("host 没起来：" + message + "\n");
+      process.stderr.write("  指挥台仍可本地运行，但手机 / 钉钉 / 监控页连不上\n");
+      return { started: false };
+    }
+  } else if (!quiet) {
+    process.stderr.write("host 已在运行\n");
+  }
+
+  if (!has(args.options, "no-open")) {
+    try {
+      await daemonCommand(
+        { cwd: (ctx && ctx.cwd) || process.cwd(), env: (ctx && ctx.env) || process.env },
+        { positional: ["open", "monitor"], options: {} },
+      );
+    } catch (error) {
+      process.stderr.write("打开监控屏失败：" + (error && error.message ? error.message : error) + "\n");
+    }
+  }
+  return { started: true };
 }
 
 function describe(status) {
@@ -165,6 +203,11 @@ export async function routerCommand(ctx, args) {
     const wantsForeground = has(args.options, "foreground") || has(args.options, "f");
     const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
     const foreground = !wantsWindow && (wantsForeground || tty);
+
+    // 先 host（+ 监控屏），再进 TUI：这样界面一起就能在网页上看到它
+    if (has(args.options, "start-daemon") || has(args.options, "with-daemon")) {
+      await ensureDaemon(ctx, home, args);
+    }
 
     if (foreground) {
       process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止" + (readHostSession(home) ? "" : "（没有 host：远程控制暂不可用）") + "\n");
