@@ -185,3 +185,11 @@ test("router：子命令、runtime 动作、provider 取值", () => {
   const steps = values(complete({ cwd: ws.project, words: ["setup", "--only", ""] }));
   assert.ok(steps.includes("router"), "mo setup --only 里应该有 router");
 });
+
+test("router：裸命令层也要能补 start 的 flag（裸 mo router 等同 start）", () => {
+  const ws = workspace();
+  const flags = values(complete({ cwd: ws.project, words: ["router", "--"] }));
+  for (const flag of ["--window", "--foreground", "--start-daemon", "--no-open"]) {
+    assert.ok(flags.includes(flag), "mo router -- 下缺少 " + flag);
+  }
+});

@@ -161,6 +161,8 @@ const ENUMS = {
 const NO_SUB_FLAGS = {
   doctor: ["--json"],
   daemon: ["--port", "--foreground", "--no-apk", "--browser", "--show-token", "--json"],
+  // 裸 mo router 等同于 start，所以 start 的 flag 在这一层也要能补出来
+  router: ["--window", "--foreground", "--start-daemon", "--no-open"],
   setup: [
     "--yes",
     "--dry-run",

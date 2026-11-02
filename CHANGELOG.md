@@ -37,6 +37,7 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
 - **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
+- **补全：`mo router --<TAB>` 看不到 `--window` / `--start-daemon`**：裸 `mo router` 等同 `start`，但补全表里这一层没登记 flag，只给全局项。补上后两层都能补全。
 - **`--start-daemon` 会被旧 `session.json` 骗过**：host 停了文件还在，代码以为它活着就跳过了启动，接着"打开监控屏"失败。现在先用 pid 判活、再用 `/api/health` 确认，两者都过才去开页面。
 - **`mo router --start-daemon`**：一条命令走完"起 host → 打开监控屏 → 进 TUI"。host 起不来只警告不阻断（指挥台仍可本地运行），`--no-open` 跳过开页面。
 - **`mo router` 全动作本地化**：start / stop / status / setup / runtime 不再走 host 的 HTTP（也不再顺手拉起 daemon），`E_DAEMON_DOWN` 与 `E_ROUTER_HOST_OLD` 从这条路径彻底消失；没 host 时输出会提示"远程控制暂不可用"。
