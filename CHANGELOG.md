@@ -37,6 +37,8 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
 - 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
 - **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
+- **`mo router` 全动作本地化**：start / stop / status / setup / runtime 不再走 host 的 HTTP（也不再顺手拉起 daemon），`E_DAEMON_DOWN` 与 `E_ROUTER_HOST_OLD` 从这条路径彻底消失；没 host 时输出会提示"远程控制暂不可用"。
+- **Pi 控制扩展改为等待 host 而不是退出**：之前拿不到 `session.json` 就直接结束循环，导致"先起指挥台、后起 host"永远接不上；现在退避重试，启动顺序不再重要。
 - **Router 运行时加 `--no-skills`**：它的契约是 `ROUTER.md`；通用 `mo` 技能里全是 shell 命令示例，而 Router 没有 shell，技能发现又是全局的（含 `~/.agents/skills`），不显式关掉就会读到。
 - **技能里加了角色判定**：开场先分辨"主 Agent（派单）"与"执行者（按卡干活）"。执行者**不需要**加载技能——它要的一切都在任务卡信封里（交付物、验收、回执路径与 JSON 模板）；AGENTS.md 的指针也注明了"仅主 Agent"，并补一句执行者该怎么做。
 - **启动脚本里不再有 API key**：`start.sh` 改为 0644 且只含 pid/cd/exec，凭据投影到单独的 `secrets.sh`（0600），**只在运行期间存在**，`stop` 或前台退出即删除；`credentials.json` 仍是唯一事实源。

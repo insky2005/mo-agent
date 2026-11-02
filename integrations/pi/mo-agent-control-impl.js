@@ -126,9 +126,11 @@ async function loop(state) {
   while (!state.stopped) {
     const session = loadSession();
     if (!session) {
-      state.stopped = true;
-      if (current === state) current = null;
-      return;
+      // host 还没起（或刚被重启）：等它出现，不要直接退出。
+      // 否则"先起指挥台、后起 host"的 Router 永远接不上，除非重启它。
+      await sleep(delay);
+      delay = Math.min(delay * 2, RECONNECT_MAX_MS);
+      continue;
     }
     try {
       await request(session, "/local/pi/session", {

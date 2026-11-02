@@ -340,8 +340,8 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 **pid 归"启动它的那个进程"，host 只做接管。** 这条在 [cli 分层重构](../plans/cli-layer-split.md) 后落地：
 
-- `mo router start` 先试 host 的 `/local/router/start`；host 不在（或还是旧构建）就**退回本地实现**（`cli/lib/router-manager`），不再抛 `E_DAEMON_DOWN`；
-- host 启动时调 `adoptRouterSession()`：读 `router.json` + `router.pid`，发现 Router 活着就注入 hub、接上控制面，**不重启它**；
+- `mo router` 的**所有**动作（start / stop / status / setup / runtime）都在本地完成，不经 HTTP、不需要 host 在场；
+- host 启动时调 `adoptRouterSession()`：读 `router.json` + `router.pid`，发现 Router 活着就注入 hub、接上控制面，**不重启它**；Router 里的 Pi 控制扩展在拿不到 host 时会退避重试（不退出），所以**先起指挥台、后起 host 也能接上**；
 - 于是"只装 CLI 也能用指挥台"，手机/监控等远程能力在 host 起来后自动补上。
 
 历史上曾让 host 独占生命周期，理由是"否则 CLI 与桌面 App 会各起一个"。现在用"pid 由启动者写、host 只读 + 可发 SIGTERM"解决同一个问题，不必把所有权交给服务。

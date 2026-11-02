@@ -33,36 +33,29 @@ test("readHostSession：读端口与令牌；端口缺失视为不可用", () =>
   assert.equal(readHostSession(home), null);
 });
 
-test("host 没起来、且关掉本地兜底时给 E_DAEMON_DOWN，而不是未处理异常", async () => {
+test("命令全在本地执行：没有 host 也能 status / runtime list", async () => {
   const home = tempHome();
-  const safe = { home, autoStart: false, disableLocalFallback: true };
-  await assert.rejects(() => routerCommand(safe, { positional: ["status"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
-  await assert.rejects(() => routerCommand(safe, { positional: ["start"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
-  await assert.rejects(() => routerCommand(safe, { positional: ["runtime"], options: {} }), (error) => error.code === "E_DAEMON_DOWN");
+  const isolated = { home, dataDir: home };
+  const statusCode = await routerCommand(isolated, { positional: ["status"], options: { json: [] } });
+  assert.equal(statusCode, 1, "未运行时退出码 1");
+  const listCode = await routerCommand(isolated, { positional: ["runtime"], options: { json: [] } });
+  assert.equal(listCode, 0, "runtime list 不该依赖 host");
 });
 
-test("host 不在时 status 退回本地实现，不再报 E_DAEMON_DOWN", async () => {
-  const home = tempHome();
-  // dataDir 指到临时目录：否则读的是本机真实状态，测试会随机器漂
-  const code = await routerCommand({ home, dataDir: home, autoStart: false }, { positional: ["status"], options: { json: [] } });
-  assert.equal(code, 1, "未运行时退出码 1");
-});
-
-test("host 不在时 start 用本地实现：报的是配置缺失，不是 E_DAEMON_DOWN", async () => {
+test("start 报的是配置缺失（运行时/凭据），不是 host 没在运行", async () => {
   const home = tempHome();
   await assert.rejects(
-    () => routerCommand({ home, dataDir: home, autoStart: false }, { positional: ["start"], options: {} }),
-    // 环境相关：没装运行时 → RUNTIME_MISSING；装了但这份 dataDir 没凭据 → NO_CREDENTIAL。
-    // 关键是它不再是"host 没在运行"。
+    // --window 走非前台路径，避免测试占住终端
+    () => routerCommand({ home, dataDir: home }, { positional: ["start"], options: { window: [] } }),
     (error) => ["E_ROUTER_RUNTIME_MISSING", "E_ROUTER_NO_CREDENTIAL"].includes(error.code)
   );
 });
 
 test("裸 mo router 等同于 start（不用记两层子命令）", async () => {
-  const safe = { home: tempHome(), autoStart: false, disableLocalFallback: true };
+  const home = tempHome();
   await assert.rejects(
-    () => routerCommand(safe, { positional: [], options: {} }),
-    (error) => error.code === "E_DAEMON_DOWN"
+    () => routerCommand({ home, dataDir: home }, { positional: [], options: { window: [] } }),
+    (error) => ["E_ROUTER_RUNTIME_MISSING", "E_ROUTER_NO_CREDENTIAL"].includes(error.code)
   );
 });
 

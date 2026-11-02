@@ -4,15 +4,18 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { has, one } from "../lib/args.mjs";
 import { emit } from "../lib/output.mjs";
-import { daemonCommand, describeHostOrigin } from "./daemon.mjs";
 import { createRouterManager } from "../lib/router-manager.mjs";
 
 /**
- * host 不在时直接本地干活。
+ * mo router —— 指挥台（Router）的开关、配置与运行时安装。
  *
- * Router 的实现已经在应用层（cli/lib/router-*），不需要服务也能起停；
- * host 起来之后会通过 adopt() 接管控制面。这样 E_DAEMON_DOWN 不会再挡路。
+ * 全部在本地完成：Router 的实现就是应用层（cli/lib/router-*），不需要常驻服务。
+ * host 只负责"被看见 / 被远程说话"（注入 hub、手机与钉钉信道），不在也能起停。
+ * pid 由启动者写，host 启动时用 adopt() 接管，不会重启它。
  */
+
+const USAGE = "mo router start|stop|status|restart|setup|reset|runtime";
+
 const localManagers = new Map();
 function localRouter(dataDir) {
   const key = String(dataDir || "");
@@ -25,24 +28,13 @@ function localRouter(dataDir) {
   return localManagers.get(key);
 }
 
-/**
- * mo router —— 指挥台（Router）的开关、配置与运行时安装。
- *
- * 生命周期与安装都归 host（实现计划 §6 R2）：这里只发本机 HTTP 请求，不自己 spawn 进程，
- * 否则 CLI 与桌面 App 会各起一个，pid 文件互相覆盖。
- */
-
-const USAGE = "mo router start|stop|status|restart|setup|reset|runtime";
-
 function sessionFile(home) {
   return path.join(home, ".mo-agent", "session.json");
 }
 
 /**
  * host 每次启动都会写 session.json（本机令牌 + 地址）。
- *
- * 注意它有 url 也可能有 port，两种都得认——只读 port 会导致"host 明明在跑却报
- * E_DAEMON_DOWN"（踩过：session.json 里只有 url）。
+ * 它有 url 也可能有 port，两种都得认——这里只用来判断"host 在不在"，给提示用。
  */
 export function readHostSession(home) {
   try {
@@ -63,119 +55,16 @@ export function readHostSession(home) {
   }
 }
 
-/** 需要 host 的动作可以自动把它拉起来；MO_AGENT_NO_AUTOSTART=1 可关 */
-async function ensureHost(ctx) {
-  if (String(process.env.MO_AGENT_NO_AUTOSTART || "") === "1") return false;
-  if (ctx && ctx.autoStart === false) return false;
-  process.stderr.write("host 没在运行，正在拉起…\n");
-  try {
-    const code = await daemonCommand(
-      { cwd: (ctx && ctx.cwd) || process.cwd(), env: process.env },
-      // 不要 APK（那是手机装 App 的事）、也不要一屏访问信息
-      { positional: ["start"], options: { "no-apk": true, quiet: true } },
-    );
-    return code === 0;
-  } catch (error) {
-    process.stderr.write("拉起 host 失败：" + (error && error.message ? error.message : error) + "\n");
-    return false;
-  }
-}
-
-/**
- * @param {{autoStart?: boolean, cwd?: string}} options
- *   autoStart: 连不上就顺手把 host 拉起来（只给"需要 host 才能做"的动作开）
- */
-async function callRouter(home, pathname, method, body, options) {
-  const opts = options || {};
-  let session = readHostSession(home);
-  if (!session && opts.autoStart) {
-    await ensureHost(opts);
-    session = readHostSession(home);
-  }
-  if (!session) {
-    throw new MoError("E_DAEMON_DOWN", "mo daemon 没在运行（没有 session.json）", {
-      hint: "先 mo daemon start，或打开桌面 App",
-    });
-  }
-  const url = "http://127.0.0.1:" + session.port + pathname;
-  const headers = {};
-  if (session.token) headers["x-mo-agent-token"] = session.token;
-  const init = { method: method || "GET", headers };
-  if (body !== undefined) {
-    headers["content-type"] = "application/json";
-    init.body = JSON.stringify(body);
-  }
-  let response;
-  try {
-    response = await fetch(url, init);
-  } catch (error) {
-    if (opts.autoStart) {
-      await ensureHost(opts);
-      const retry = readHostSession(home);
-      if (retry) {
-        try {
-          response = await fetch("http://127.0.0.1:" + retry.port + pathname, { ...init, headers: retry.token ? { ...headers, "x-mo-agent-token": retry.token } : headers });
-        } catch (retryError) {
-          response = null;
-        }
-      }
-    }
-    if (!response) {
-      throw new MoError("E_DAEMON_DOWN", "连不上 host：" + (error && error.message ? error.message : error), {
-        hint: "mo daemon status 看看",
-      });
-    }
-  }
-
-  // 旧构建的 host 没有 /local/router/* 路由，别让人去猜 404 是什么意思
-  if (response && response.status === 404 && pathname.startsWith("/local/router/")) {
-    const origin = describeHostOrigin({ env: process.env, home: os.homedir(), cwd: process.cwd() });
-    const which = origin
-      ? origin.label + " · " + origin.entry + (origin.when ? "（" + origin.when + "）" : "")
-      : "找不到 host 可执行文件";
-    throw new MoError("E_ROUTER_HOST_OLD", "host 是旧构建，还没有指挥台接口", {
-      hint:
-        "当前用的 host：" + which + "\n" +
-        "要源码 host：MO_AGENT_ROOT=\"$PWD\" node host/index.mjs --port 7788（先 mo daemon stop）\n" +
-        "要桌面 host：./scripts/build-desktop.sh && ./scripts/install-desktop.sh",
-    });
-  }
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!response.ok || (payload && payload.ok === false)) {
-    const code = (payload && payload.code) || "E_ROUTER_START_FAILED";
-    const message = (payload && payload.error) || "host 返回 " + response.status;
-    const details = {};
-    if (payload && payload.hint) details.hint = payload.hint;
-    if (payload && payload.detail) details.detail = payload.detail;
-    throw new MoError(code, message, Object.keys(details).length ? details : undefined);
-  }
-  return payload || {};
-}
-
-/**
- * 先走 host；host 不在（或还是旧构建）就退回本地实现。
- * ctx.disableLocalFallback 给测试用。
- */
-async function withLocalFallback(ctx, runRemote, runLocal) {
-  try {
-    return await runRemote();
-  } catch (error) {
-    const hostless = error && (error.code === "E_DAEMON_DOWN" || error.code === "E_ROUTER_HOST_OLD");
-    if (!hostless || (ctx && ctx.disableLocalFallback)) throw error;
-    const value = await runLocal();
-    return { ...value, hostless: true };
-  }
+/** 没有 host 就没有远程能力：说清楚，别让人以为手机连不上是坏了 */
+function remoteHint(home) {
+  if (readHostSession(home)) return "";
+  return "\n  远程    现在没有 host：手机 / 钉钉 / 监控页都连不上。要这些能力就另开终端跑 mo daemon start";
 }
 
 function describe(status) {
   if (!status.running) {
     const lines = ["指挥台  未运行"];
-    lines.push("  启动    mo router start");
+    lines.push("  启动    mo router");
     if (!status.onboarded) lines.push("  首次    先 mo router runtime install，再 mo router setup");
     return lines.join("\n");
   }
@@ -187,22 +76,16 @@ function describe(status) {
   return lines.join("\n");
 }
 
-async function runtimeCommand(home, args, ctx) {
+async function runtimeCommand(manager, args) {
   const action = args.positional[1] || "list";
-  // 测试与脚本可以用 ctx.autoStart=false 关掉自动拉起
-  const allowAuto = !(ctx && ctx.autoStart === false);
 
   if (action === "list") {
-    const value = await callRouter(home, "/local/router/runtime/list", "GET", undefined, { autoStart: false });
+    const value = manager.runtimes();
     emit(args.options, value, (data) => {
       const lines = ["运行时  清单 pin 在 " + data.pinned + (data.inUse ? "，当前在用 " + data.inUse : "")];
-      if (!data.runtimes.length) {
-        lines.push("  还没有安装：mo router runtime install");
-      } else {
-        for (const item of data.runtimes) {
-          const mark = item.version === data.inUse ? "*" : " ";
-          lines.push("  " + mark + " " + item.version + (item.installed ? "" : "（文件缺失）"));
-        }
+      if (!data.runtimes.length) lines.push("  还没装：mo router runtime install");
+      for (const item of data.runtimes) {
+        lines.push("  " + (item.version === data.inUse ? "*" : " ") + " " + item.version + (item.installed ? "" : "（文件缺失）"));
       }
       return lines.join("\n");
     });
@@ -213,23 +96,22 @@ async function runtimeCommand(home, args, ctx) {
     const version = one(args.options, "version");
     const force = has(args.options, "force");
     process.stderr.write("安装运行时" + (version ? " " + version : "") + "…（首次会下载约 150MB 依赖）\n");
-    const value = await callRouter(home, "/local/router/runtime/install", "POST", {
-      version: version || undefined,
-      force,
-    }, { autoStart: allowAuto });
-    emit(args.options, value, (data) => {
-      if (data.reused) return "✓ 运行时已存在（" + data.version + "），沿用 " + data.dir;
-      return "✓ 运行时已安装（" + data.version + "）\n  " + data.dir + "\n  Node " + (data.nodeVersion || data.node);
-    });
+    const value = await manager.runtimeInstall({ version: version || undefined, force });
+    emit(args.options, value, (data) =>
+      data.reused
+        ? "✓ 运行时已存在（" + data.version + "），沿用 " + data.dir
+        : "✓ 运行时已安装（" + data.version + "）\n  " + data.dir + "\n  Node " + (data.nodeVersion || data.node),
+    );
     return 0;
   }
 
   if (action === "prune") {
-    const value = await callRouter(home, "/local/router/runtime/prune", "POST", undefined, { autoStart: allowAuto });
-    emit(args.options, value, (data) => {
-      if (!data.removed.length) return "没有需要清理的旧版本（保留：" + data.kept.join(" / ") + "）";
-      return "✓ 已删除旧版本：" + data.removed.join(" / ") + "\n  保留：" + data.kept.join(" / ");
-    });
+    const value = manager.runtimePrune();
+    emit(args.options, value, (data) =>
+      data.removed.length
+        ? "✓ 已删除旧版本：" + data.removed.join(" / ") + "\n  保留：" + data.kept.join(" / ")
+        : "没有需要清理的旧版本（保留：" + data.kept.join(" / ") + "）",
+    );
     return 0;
   }
 
@@ -239,12 +121,11 @@ async function runtimeCommand(home, args, ctx) {
 }
 
 export async function routerCommand(ctx, args) {
-  // 裸 `mo router` = 启动：用户不该为了打开指挥台记两层子命令
   const sub = args.positional[0] || "start";
   const home = (ctx && ctx.home) || os.homedir();
-  const allowAuto = !(ctx && ctx.autoStart === false);
+  const manager = localRouter(ctx && ctx.dataDir);
 
-  if (sub === "runtime") return runtimeCommand(home, args, ctx);
+  if (sub === "runtime") return runtimeCommand(manager, args);
 
   if (sub === "setup") {
     const provider = one(args.options, "provider");
@@ -253,10 +134,10 @@ export async function routerCommand(ctx, args) {
     const test = !has(args.options, "no-test");
     if (!provider && !apiKey) {
       throw new MoError("E_USAGE", "setup 需要 --provider 与 --key", {
-        hint: 'mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...',
+        hint: "mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...",
       });
     }
-    const value = await callRouter(home, "/local/router/setup", "POST", { provider, model, apiKey, test }, { autoStart: allowAuto });
+    const value = await manager.setup({ provider, model, apiKey, test });
     emit(args.options, value, (data) => {
       const lines = ["✓ 指挥台已配置"];
       lines.push("  模型    " + data.provider + " / " + data.model);
@@ -272,64 +153,52 @@ export async function routerCommand(ctx, args) {
   }
 
   if (sub === "reset") {
-    const value = await callRouter(home, "/local/router/reset", "POST", undefined, { autoStart: allowAuto });
+    const value = manager.reset();
     emit(args.options, value, (data) => (data.removed ? "✓ 已删除 Router 的凭据" : "本来就没有凭据"));
     return 0;
   }
 
   if (sub === "start") {
     // 默认就地跑：在终端里敲 mo router，本来就是"我要在这儿用它"。
-    // 要后台/开窗口用 --window；非 TTY（脚本、CI）仍走窗口/后台，否则会挂住调用方。
+    // 要后台/开窗口用 --window；非 TTY（脚本、CI）仍走窗口，否则会挂住调用方。
     const wantsWindow = has(args.options, "window") || has(args.options, "detach");
     const wantsForeground = has(args.options, "foreground") || has(args.options, "f");
     const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
     const foreground = !wantsWindow && (wantsForeground || tty);
+
     if (foreground) {
-      // 前台只对"当前终端"有意义：直接本地跑，不经过 host
-      process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止\n");
-      const value = await localRouter(ctx && ctx.dataDir).start({ foreground: true });
+      process.stderr.write("指挥台在当前终端运行，Ctrl-C 停止" + (readHostSession(home) ? "" : "（没有 host：远程控制暂不可用）") + "\n");
+      const value = await manager.start({ foreground: true });
       emit(args.options, value, (data) => "指挥台已退出（退出码 " + (data.exitCode === undefined ? "?" : data.exitCode) + "）");
       return 0;
     }
-    const value = await withLocalFallback(
-      ctx,
-      () => callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto }),
-      () => localRouter(ctx && ctx.dataDir).start(),
-    );
+
+    const value = await manager.start();
     emit(args.options, value, (data) => {
       if (data.attached) return "指挥台已在运行（pid " + data.pid + "），没有重复启动";
       const head = "✓ 指挥台已启动（pid " + data.pid + "）";
       const warnings = Array.isArray(data.warnings) && data.warnings.length ? "\n  " + data.warnings.join("\n  ") : "";
-      const where = data.hostless ? "\n  注意    host 未运行，已在本地拉起；host 起来后会自动接管" : "";
-      return head + warnings + "\n  工作台  " + data.cwd + "\n  打开终端窗口后即可对话" + where;
+      return head + warnings + "\n  工作台  " + data.cwd + remoteHint(home);
     });
     return 0;
   }
 
   if (sub === "stop") {
-    const value = await withLocalFallback(
-      ctx,
-      () => callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false }),
-      () => localRouter(ctx && ctx.dataDir).stop(),
-    );
+    const value = manager.stop();
     emit(args.options, value, (data) => (data.stopped ? "✓ 指挥台已停止（pid " + data.pid + "）" : "指挥台本来就没在运行"));
     return 0;
   }
 
   if (sub === "status") {
-    const value = await withLocalFallback(
-      ctx,
-      () => callRouter(home, "/local/router/status", "GET", undefined, { autoStart: false }),
-      () => localRouter(ctx && ctx.dataDir).status(),
-    );
-    emit(args.options, value, describe);
+    const value = manager.status();
+    emit(args.options, value, (data) => describe(data) + (data.running ? "" : remoteHint(home)));
     return value.running ? 0 : 1;
   }
 
   if (sub === "restart") {
-    await callRouter(home, "/local/router/stop", "POST", undefined, { autoStart: false }).catch(() => null);
-    const value = await callRouter(home, "/local/router/start", "POST", undefined, { autoStart: allowAuto });
-    emit(args.options, value, (data) => "✓ 指挥台已重启（pid " + data.pid + "）");
+    manager.stop();
+    const value = await manager.start();
+    emit(args.options, value, (data) => "✓ 指挥台已重启（pid " + data.pid + "）" + remoteHint(home));
     return 0;
   }
 
