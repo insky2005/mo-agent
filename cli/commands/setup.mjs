@@ -581,7 +581,7 @@ async function stepMcp(ctx) {
  *  - 非交互模式必须显式 --router，绝不因为 --yes 就悄悄装东西。
  */
 const ROUTER_PROVIDERS = ["deepseek", "anthropic", "openai"];
-const ROUTER_DEFAULT_MODEL = { deepseek: "deepseek-v4-flash" };
+const ROUTER_DEFAULT_MODEL = { deepseek: "deepseek-flash" };
 
 async function stepRouter(ctx) {
   const options = ctx.options || {};

@@ -7,6 +7,7 @@ import { EVENT, SESSION_ROLE } from "../../core/contract.mjs";
 import { renderRouterContract } from "../../core/manager/contract.mjs";
 import {
   ROUTER_AGENT_LABEL,
+  ROUTER_DEFAULT_THINKING,
   ROUTER_ERROR,
   ROUTER_SESSION_ID,
   ROUTER_SESSION_NAME,
@@ -160,6 +161,7 @@ export function createRouterManager(options) {
     readme: P.workbenchReadme(dataDir),
     extension: P.extensionFile(dataDir),
     mcp: P.mcpConfigFile(dataDir),
+    settings: P.settingsFile(dataDir),
   };
 
   function readState() {
@@ -203,12 +205,24 @@ export function createRouterManager(options) {
     }
   }
 
+  /** 运行时真正的模型/思考等级以它的 settings.json 为准（用户可能在 TUI 里改过） */
+  function runtimeSettings() {
+    const value = readJsonSafe(files.settings, null);
+    if (!value || typeof value !== "object") return {};
+    return {
+      provider: typeof value.defaultProvider === "string" ? value.defaultProvider : null,
+      model: typeof value.defaultModel === "string" ? value.defaultModel : null,
+      thinking: typeof value.defaultThinkingLevel === "string" ? value.defaultThinkingLevel : null,
+    };
+  }
+
   function status() {
     const state = readState() || {};
     const pid = readPidFile(files.pid) || (state.pid ? Number(state.pid) : null);
     const running = isAlive(pid);
     if (!running && pid) cleanStaleFiles();
     const session = hub ? hub.get(ROUTER_SESSION_ID) : null;
+    const settings = runtimeSettings();
     return {
       ok: true,
       running,
@@ -216,8 +230,9 @@ export function createRouterManager(options) {
       onboarded: Boolean(state.onboarded),
       runtime: state.runtime || null,
       version: state.version || null,
-      provider: state.provider || null,
-      model: state.model || null,
+      provider: settings.provider || state.provider || null,
+      model: settings.model || state.model || null,
+      thinking: settings.thinking || null,
       source: state.source || null,
       sessionId: ROUTER_SESSION_ID,
       cwd: files.workbench,
@@ -258,7 +273,28 @@ export function createRouterManager(options) {
     }
   }
 
-  function ensureAssets(runtime) {
+  /**
+   * 种一份运行时的 settings.json：模型与思考等级放这里，而不是命令行参数。
+   *
+   * 只在缺失时写（force 例外）。写死了每次覆盖的话，用户在 TUI 里 /model
+   * 改成别的，下次启动又被打回去——这正是之前的毛病。
+   */
+  function seedSettings(provider, model, force) {
+    if (!force && fs.existsSync(files.settings)) return { seeded: false };
+    const thinking = String(env.MO_ROUTER_THINKING || ROUTER_DEFAULT_THINKING);
+    writeJsonPrivate(
+      files.settings,
+      {
+        defaultProvider: provider,
+        defaultModel: model,
+        defaultThinkingLevel: thinking,
+      },
+      0o600,
+    );
+    return { seeded: true, thinking };
+  }
+
+  function ensureAssets(runtime, credentials) {
     fs.mkdirSync(files.config, { recursive: true });
     fs.mkdirSync(files.sessions, { recursive: true });
     fs.mkdirSync(files.workbench, { recursive: true });
@@ -266,6 +302,7 @@ export function createRouterManager(options) {
     writeFilePrivate(files.readme, WORKBENCH_README, 0o644);
     writeMcpConfig();
     ensureExtension();
+    if (credentials) seedSettings(credentials.provider, credentials.model, false);
     return runtime;
   }
 
@@ -304,7 +341,7 @@ export function createRouterManager(options) {
       throw new MoError(credentials.code, credentials.reason, { provider: credentials.provider });
     }
 
-    ensureAssets(runtime);
+    ensureAssets(runtime, credentials);
 
     const extensionPath = fs.existsSync(files.extension) ? files.extension : null;
     const argv = buildPiArgv({
@@ -489,6 +526,9 @@ export function createRouterManager(options) {
       });
     }
 
+    // setup 是显式重配：settings.json 也要跟着刷新（覆盖用户在 TUI 里的临时选择）
+    const seeded = seedSettings(credentials.provider, credentials.model, true);
+
     let test = { tested: false, reason: "已跳过测通" };
     if (value.test !== false) {
       const runtime = resolveRuntime({ home: osHome, env, platform });
@@ -529,6 +569,7 @@ export function createRouterManager(options) {
       ok: true,
       provider: credentials.provider,
       model: credentials.model,
+      thinking: seeded.thinking || null,
       redacted: redactSecret(credentials.apiKey),
       source: credentials.source,
       test,

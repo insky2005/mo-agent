@@ -82,7 +82,7 @@
   "runtime": "pi",
   "version": "1.3.0",
   "provider": "deepseek",
-  "model": "deepseek-v4-flash",
+  "model": "deepseek-flash",
   "sessionId": "mo-router",
   "pid": 51234,
   "cwd": "/Users/x/.mo-agent/router/workbench",
@@ -345,6 +345,13 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 - 于是"只装 CLI 也能用指挥台"，手机/监控等远程能力在 host 起来后自动补上。
 
 历史上曾让 host 独占生命周期，理由是"否则 CLI 与桌面 App 会各起一个"。现在用"pid 由启动者写、host 只读 + 可发 SIGTERM"解决同一个问题，不必把所有权交给服务。
+
+**模型与思考等级写在运行时的 settings.json，不用命令行参数。**
+
+- `~/.mo-agent/router/config/settings.json` 种入 `defaultProvider` / `defaultModel` / `defaultThinkingLevel`；
+- **只在缺失时种**（`mo router setup` 会强制刷新），之后归 Pi 管——这样用户在 TUI 里 `/model` 改了不会被下次启动打回去；
+- 默认 `deepseek-flash` + 思考 `low`（Router 只做分派，深度思考是浪费）；`MO_ROUTER_THINKING` 可改；
+- `mo router status` 显示 settings.json 里的**实际**模型与思考等级，不是 mo 记的旧值。
 
 **两种形态，默认开窗口，`--foreground` 就地跑。** TUI 需要 tty，detached 进程没有终端可画，所以：
 

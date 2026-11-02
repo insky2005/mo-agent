@@ -11,7 +11,12 @@ import { credentialsFile } from "./router-paths.mjs";
  */
 
 export const DEFAULT_PROVIDER = "deepseek";
-export const DEFAULT_MODEL = "deepseek-v4-flash";
+/**
+ * 默认模型必须是 Pi 目录里真实存在的 id。
+ * 之前用的 "deepseek-v4-flash" 在 Pi 里查不到，会被当成 custom model id
+ * （启动时警告 Model not found），TUI 的 /model 里也看不到它。
+ */
+export const DEFAULT_MODEL = "deepseek-flash";
 
 /** provider -> 运行时可识别的环境变量 */
 export const PROVIDER_ENV = Object.freeze({

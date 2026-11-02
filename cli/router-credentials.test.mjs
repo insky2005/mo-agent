@@ -70,7 +70,7 @@ test("没有凭据时给出稳定错误码，不静默启动", () => {
 
 test("写凭据：0600、可回读、只露后四位", () => {
   const home = tempHome();
-  const written = writeCredentials(home, { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-abcdefg9999" });
+  const written = writeCredentials(home, { provider: "deepseek", model: "deepseek-flash", apiKey: "sk-abcdefg9999" });
   assert.equal(written.redacted, "****9999");
   assert.equal(fs.statSync(credentialsFile(home)).mode & 0o777, 0o600);
 

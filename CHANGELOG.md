@@ -39,6 +39,10 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 - **`mo router start` 默认就在当前终端跑**（TTY 下），Ctrl-C 停；要开新窗口用 `--window`，非 TTY（脚本 / CI）自动走窗口。前台路径不经过 host。
 - **指挥台契约承诺了不存在的工具**：`ROUTER.md` 里让 Router 用 `note_write`，但该工具还没实现（P3）。在落地前改成"派单，不要自己写"，避免 Router 调一个不存在的工具。
 - **重复启动 `mo router`**：前台启动时如果已有实例在跑，现在会明确说"已在运行（pid X），当前终端不接管"（之前会误报"指挥台已退出（退出码 ?）"）。并发保护也补了：后写 pid 的赢，先起的那个发现自己没登记上就收掉自己、转成 attach，不留孤儿进程。进程被强杀留下的 stale pid 与 `secrets.sh` 会在下次 `status` 时自动清掉。
+- **指挥台改用官方模型 id `deepseek-flash`**（原 `deepseek-v4-flash` 在 Pi 目录里不存在，启动会警告并当成 custom model id，TUI 的 `/model` 里也看不到它）。
+- **模型/思考等级改为写 `config/settings.json`**，不再用 `--provider/--model` 命令行参数：参数会在每次启动覆盖用户的选择，导致 TUI 里 `/model` 改了又回去。现在只在缺失时种一份（`mo router setup` 强制刷新），之后归 Pi 管；`mo router status` 显示 settings 里的实际值。
+- **默认思考等级 `low`**（Router 只做分派，`high` 是浪费）；`MO_ROUTER_THINKING` 可改。
+- **Pi 会话名从 `mo Router` 改为「指挥台」**（`MO_ROUTER_NAME` 可覆盖）。
 - **`mo router --start-daemon` 的退出与重复启动**：Ctrl-C 只退指挥台，host 不会跟着退——现在退出时会提示它还在跑、怎么停；host 已在运行时不会重复启动（先探 health，再靠 `mo daemon start` 自身的幂等）。
 - **补全：`mo router --<TAB>` 看不到 `--window` / `--start-daemon`**：裸 `mo router` 等同 `start`，但补全表里这一层没登记 flag，只给全局项。补上后两层都能补全。
 - **`--start-daemon` 会被旧 `session.json` 骗过**：host 停了文件还在，代码以为它活着就跳过了启动，接着"打开监控屏"失败。现在先用 pid 判活、再用 `/api/health` 确认，两者都过才去开页面。

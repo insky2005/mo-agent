@@ -11,7 +11,11 @@
 
 export const ROUTER_ROLE = "router";
 export const ROUTER_SESSION_ID = "mo-router";
-export const ROUTER_SESSION_NAME = "mo Router";
+/** Pi TUI 标题栏显示的名字；MO_ROUTER_NAME 可覆盖 */
+export const ROUTER_SESSION_NAME = process.env.MO_ROUTER_NAME || "指挥台";
+
+/** Router 只做分派，深度思考是浪费：默认 low，MO_ROUTER_THINKING 可改 */
+export const ROUTER_DEFAULT_THINKING = "low";
 export const ROUTER_AGENT_LABEL = "指挥台";
 
 /** 只读工具：由运行时提供。Router 需要能自己搜代码，否则分派质量会下降。 */

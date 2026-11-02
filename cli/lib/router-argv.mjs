@@ -69,10 +69,8 @@ export function buildPiArgv(options) {
     "--append-system-prompt",
     String(opts.contractPath),
   ];
-  if (opts.provider && opts.model) {
-    // 模型由 mo 决定，不依赖运行时的 settings.json（那是运行时的私有状态）
-    args.push("--provider", String(opts.provider), "--model", String(opts.model));
-  }
+  // 不再传 --provider/--model：模型与思考等级放 settings.json。
+  // 传命令行参数会把用户在 TUI 里 /model 的选择每次启动都覆盖掉。
   if (opts.extensionPath) args.push("-e", String(opts.extensionPath));
 
   const env = { PI_CODING_AGENT_DIR: String(opts.agentDir) };

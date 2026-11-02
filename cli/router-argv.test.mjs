@@ -31,7 +31,7 @@ test("Router 不加载技能：--no-skills 必须在，避免读到通用主 Age
 test("会话身份固定：--session-id 与 --name", () => {
   const { args } = buildPiArgv(BASE);
   assert.equal(args[args.indexOf("--session-id") + 1], "mo-router");
-  assert.equal(args[args.indexOf("--name") + 1], "mo Router");
+  assert.equal(args[args.indexOf("--name") + 1], "指挥台");
 });
 
 test("契约通过 --append-system-prompt 注入，扩展通过 -e 注入", () => {

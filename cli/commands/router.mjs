@@ -159,7 +159,10 @@ function describe(status) {
     return lines.join("\n");
   }
   const lines = ["指挥台  运行中（pid " + status.pid + "）"];
-  if (status.model) lines.push("  模型    " + status.provider + " / " + status.model);
+  if (status.model) {
+    const thinking = status.thinking ? "（思考 " + status.thinking + "）" : "";
+    lines.push("  模型    " + (status.provider ? status.provider + " / " : "") + status.model + thinking);
+  }
   if (status.runtime) lines.push("  运行时  " + status.runtime + " " + status.version);
   lines.push("  工作台  " + status.cwd);
   lines.push("  停止    mo router stop");
@@ -224,13 +227,13 @@ export async function routerCommand(ctx, args) {
     const test = !has(args.options, "no-test");
     if (!provider && !apiKey) {
       throw new MoError("E_USAGE", "setup 需要 --provider 与 --key", {
-        hint: "mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...",
+        hint: "mo router setup --provider deepseek --model deepseek-flash --key sk-...",
       });
     }
     const value = await manager.setup({ provider, model, apiKey, test });
     emit(args.options, value, (data) => {
       const lines = ["✓ 指挥台已配置"];
-      lines.push("  模型    " + data.provider + " / " + data.model);
+      lines.push("  模型    " + data.provider + " / " + data.model + (data.thinking ? "（思考 " + data.thinking + "）" : ""));
       lines.push("  凭据    " + data.redacted + "（" + data.source + "）");
       if (data.test && data.test.tested) {
         lines.push(data.test.ok ? "  测通    ✓ " + data.test.ms + "ms" : "  测通    ✗ " + data.test.error);

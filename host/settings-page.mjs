@@ -301,7 +301,7 @@ function renderRouterSection() {
     "</div>",
     "<p>在终端里完成后三步：</p>",
     "<pre style='white-space:pre-wrap;opacity:.85'>"
-      + ["mo router runtime install", "mo router setup --provider deepseek --model deepseek-v4-flash --key sk-...", "mo router start"].join("\n")
+      + ["mo router runtime install", "mo router setup --provider deepseek --model deepseek-flash --key sk-...", "mo router start"].join("\n")
       + "</pre>",
     "</div></div>",
     "</div>",

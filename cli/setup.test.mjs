@@ -263,12 +263,12 @@ test("指挥台步骤：--router + 凭据时只输出计划，不下真东西", 
     "setup", "--dry-run", "--only", "router",
     "--router",
     "--router-provider", "deepseek",
-    "--router-model", "deepseek-v4-flash",
+    "--router-model", "deepseek-flash",
     "--router-key", "sk-test-dryrun",
   ]);
   const step = result.parsed.steps[0];
   assert.equal(step.status, "planned");
-  assert.match(step.message, /deepseek \/ deepseek-v4-flash/);
+  assert.match(step.message, /deepseek \/ deepseek-flash/);
   assert.ok(step.lines.some((line) => line.includes("运行时") || line.includes("运行时")));
   assert.ok(step.lines.some((line) => line.includes("credentials.json")));
   // dry-run 不许真的建出凭据文件

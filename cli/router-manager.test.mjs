@@ -111,6 +111,16 @@ test("headless 启动：写状态、注入 hub、可 attach、可停止", async 
     // 控制扩展进了私有目录：手机/钉钉才能给指挥台发指令
     assert.ok(fs.existsSync(P.extensionFile(home)), "控制扩展没复制进私有配置目录");
 
+    // 模型与思考等级落进 settings.json（不再用命令行参数覆盖，否则 TUI 里改不动）
+    const settings = JSON.parse(fs.readFileSync(P.settingsFile(home), "utf8"));
+    assert.equal(settings.defaultProvider, "deepseek");
+    assert.equal(settings.defaultModel, "deepseek-flash");
+    assert.equal(settings.defaultThinkingLevel, "low");
+    // 命令行不再带 --provider / --model
+    const scriptText2 = fs.readFileSync(P.startScriptFile(home), "utf8");
+    assert.ok(!scriptText2.includes("--model"), "启动参数不该再写死 --model");
+    assert.ok(!scriptText2.includes("--provider"), "启动参数不该再写死 --provider");
+
     // hub 里的会话带 router 角色
     const session = hub.get("mo-router");
     assert.ok(session, "hub 里没有 Router 会话");

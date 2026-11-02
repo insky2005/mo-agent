@@ -48,6 +48,11 @@ export function credentialsFile(home) {
   return path.join(routerRoot(home), "credentials.json");
 }
 
+/** Pi 的 settings.json：模型与思考等级的落点（Pi 会自己读写它） */
+export function settingsFile(home) {
+  return path.join(configDir(home), "settings.json");
+}
+
 /** 私有配置目录：PI_CODING_AGENT_DIR 指向这里，绝不回落用户全局 */
 export function configDir(home) {
   return path.join(routerRoot(home), "config");
