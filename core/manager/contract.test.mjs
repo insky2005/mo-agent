@@ -89,7 +89,9 @@ test("指挥台契约：只读 + mo 工具，不含 shell 示例", () => {
   assert.doesNotMatch(doc, /mo task /, "指挥台契约里不应出现命令行调用");
   // 三条边界必须显式出现
   assert.match(doc, /不属于任何项目/);
-  assert.match(doc, /note_write/);
+  assert.match(doc, /memory_propose/);
+  // note_write 落地前不许出现在契约里：不能让 Router 去调不存在的工具
+  assert.doesNotMatch(doc, /note_write/);
   assert.match(doc, /派单/);
 });
 
