@@ -2,14 +2,14 @@
  * TAB 补全：按「组 → 子命令 → 该子命令自己的 flag」组织。
  * 纯计算，读注册表与任务卡，不改任何东西。
  */
-import { moHome } from "./paths.mjs";
-import { listProjects, findProjectRoot } from "./project.mjs";
-import { listCards } from "./store.mjs";
-import { listAgents } from "./executors.mjs";
-import { listCandidates } from "./candidates.mjs";
-import { groupNames } from "./help.mjs";
-import { allTargets } from "../commands/skill.mjs";
-import { CONFIG_KEYS } from "./config.mjs";
+import { moHome } from "../lib/paths.mjs";
+import { listProjects, findProjectRoot } from "../lib/project.mjs";
+import { listCards } from "../lib/store.mjs";
+import { listAgents } from "../lib/executors.mjs";
+import { listCandidates } from "../lib/candidates.mjs";
+import { groupNames } from "../lib/help.mjs";
+import { allTargets } from "./skill.mjs";
+import { CONFIG_KEYS } from "../lib/config.mjs";
 
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 

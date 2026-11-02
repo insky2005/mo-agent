@@ -52,3 +52,25 @@ export function listFiles(dir, suffix) {
     return [];
   }
 }
+
+/**
+ * 敏感文件：0600 落盘。tmp -> rename 保证不会留下半截，
+ * chmod 在非 POSIX 上失败就忽略（Windows）。
+ */
+export function writeFilePrivate(file, content, mode) {
+  const target = mode === undefined ? 0o600 : mode;
+  ensureDir(path.dirname(file));
+  const tmp = file + ".tmp-" + process.pid;
+  fs.writeFileSync(tmp, content, { mode: target });
+  fs.renameSync(tmp, file);
+  try {
+    fs.chmodSync(file, target);
+  } catch {
+    // 非 POSIX 或无权限：内容已经写好了，不要因为 chmod 失败就丢
+  }
+}
+
+export function writeJsonPrivate(file, value, mode) {
+  writeFilePrivate(file, JSON.stringify(value, null, 2) + "\n", mode);
+}
+

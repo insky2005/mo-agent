@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { probeModel } from "./probe.mjs";
+import { probeModel } from "./lib/router-probe.mjs";
 
 function fakeBin(body) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-probe-"));

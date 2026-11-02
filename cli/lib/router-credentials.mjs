@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { MoError } from "../../core/errors.mjs";
 import { ROUTER_ERROR } from "../../core/router.mjs";
 import { readJsonSafe, writeJsonPrivate } from "./fsx.mjs";
-import { credentialsFile } from "./paths.mjs";
+import { credentialsFile } from "./router-paths.mjs";
 
 /**
  * Router 的凭据：由 mo 持有，启动时通过环境变量注入运行时。

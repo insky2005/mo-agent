@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Hub } from "../../core/hub.mjs";
-import { SESSION_ROLE } from "../../core/contract.mjs";
-import { admitRuntime } from "../../core/router.mjs";
-import { createRouterManager, PI_ROUTER_CAPABILITIES, resolveRuntime } from "./manager.mjs";
-import * as P from "./paths.mjs";
+import { Hub } from "../core/hub.mjs";
+import { SESSION_ROLE } from "../core/contract.mjs";
+import { admitRuntime } from "../core/router.mjs";
+import { createRouterManager, PI_ROUTER_CAPABILITIES, resolveRuntime } from "./lib/router-manager.mjs";
+import * as P from "./lib/router-paths.mjs";
 
 const silentLog = { info() {}, warn() {}, error() {} };
 

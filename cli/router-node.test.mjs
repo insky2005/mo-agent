@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareVersions, parseVersion, resolveNode, satisfies } from "./node.mjs";
+import { compareVersions, parseVersion, resolveNode, satisfies } from "./lib/router-node.mjs";
 
 test("版本解析与比较", () => {
   assert.deepEqual(parseVersion("v22.23.2"), { major: 22, minor: 23, patch: 2 });

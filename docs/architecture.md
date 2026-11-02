@@ -48,8 +48,8 @@ Mo Agent 有两个面：
 | 目录 | 职责 | 边界 | 实测代码量 |
 |---|---|---|---|
 | `core/` | **领域核心，纯逻辑**。事件词汇表、Hub 归约、通知策略、任务卡状态机、记忆打分、Router 能力面策略 | **不碰文件、不发网络、不起进程** | 2.2k |
-| `cli/` | **应用内核 + 命令行**。项目注册、建卡、批准、派单、回执、账本、记忆、MCP stdio、Router 生命周期 | 不 import `host/`；退出即止 | 9.5k |
-| `host/` | **常驻服务**。HTTP/SSE、鉴权、配对、适配器调度、钉钉 Stream、推送、语音、hooks 写入、批准页 | 唯一的常驻 IO 层 | 11.1k |
+| `cli/` | **应用内核 + 命令行**（物理上还在一起，按 §5 的两条守卫分界）：`lib/` 是应用层（项目、卡、批准、派单、回执、账本、记忆、**Router 的安装与生命周期**）；`commands/` + `mo.mjs` 是接口层（argv、文案、补全） | 不 import `host/`；退出即止 | 9.7k |
+| `host/` | **常驻服务**。HTTP/SSE、鉴权、配对、适配器调度、钉钉 Stream、推送、语音、hooks 写入、批准页；Router 只保留"会话接管 + HTTP 薄壳"（`router-session.mjs`） | 唯一的常驻 IO 层 | 10.9k |
 | `adapters/` | **观测层**。把每家 Agent 的原始状态翻译成统一事件；`profiles/*.json` 声明能力 | 只陈述事实，不决定通知文案；不投递 | 2.9k |
 | `approvals/` | **审批挂接点**。被 Agent 调用的 hook CLI、决策 broker、厂商事件名映射 | 不直接推送 | 0.5k |
 | `app/web/` | 监控页、管理页、审批页、语音浮层、PWA | **只通过 host 的 HTTP/SSE 访问**，不 import 任何后端模块 | 5.0k |
@@ -81,8 +81,8 @@ Mo Agent 有两个面：
 | 从 \ 到 | core | cli | host | adapters | approvals |
 |---|---|---|---|---|---|
 | **core** | — | — | — | — | — |
-| **cli** | ✅ 52 | — | ❌ 6（待还） | — | — |
-| **host** | ✅ 18 | ✅ 4 | — | ✅ 4 | ✅ 4 |
+| **cli** | ✅ 63 | — | — | — | — |
+| **host** | ✅ 9 | ✅ 8 | — | ✅ 4 | ✅ 4 |
 | **adapters** | ✅ 8 | — | — | — | — |
 | **approvals** | ✅ 2 | — | — | — | — |
 | **app/web** | — | — | HTTP/SSE | — | — |
@@ -103,11 +103,18 @@ Mo Agent 有两个面：
 
 **这张表由 `scripts/architecture.test.mjs` 守着**：出现未登记的白名单外依赖会直接失败；已知违规写进 `KNOWN_DEBT`，只许减少不许新增。
 
-### 待还的债（本表是目标，现状只有这一处违规）
+### 债已还清
 
-| 位置 | 反向依赖 | 还法 |
-|---|---|---|
-| `cli/commands/setup.mjs`（4 处）、`cli/commands/doctor.mjs`（2 处） | 引了 `host/router/*` | Router 实现（argv / 安装 / 凭据 / 生命周期）下移到 `cli/lib/router-*.mjs`，host 只留 HTTP 薄壳与会话注入。顺带让 `mo router` 不再要求 host 在场 |
+上一版唯一的违规是 `cli/commands/{setup,doctor}.mjs` 反向 import `host/router/*`（6 处）。根因是 **Router 这个应用能力的实现住在接口层**。
+
+已按 [cli 分层重构清单](plans/cli-layer-split.md) 处理完 P0 + P1：
+
+| 变化 | 现在 |
+|---|---|
+| Router 实现（argv / script / install / credentials / probe / manager / paths …） | `cli/lib/router-*.mjs`（应用层，10 个模块） |
+| host 侧 | 只剩 `host/router-session.mjs`：启动时 `adopt()` 扫 pid 接管已运行的 Router |
+| `cli → host` | **0 处** |
+| 守卫测试 | 从"白名单 + 债"变成纯白名单，另加两条结构规则：`cli/lib` 不许引 `cli/commands`、`cli/commands` 不许引 `host` |
 
 ## 6. 扩展一个 Agent
 

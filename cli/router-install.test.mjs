@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installRuntime, listRuntimes, loadManifest, manifestFor, pruneRuntimes, runtimeBinPath, writeShim } from "./install.mjs";
-import { RUNTIMES } from "./runtimes.mjs";
-import { runtimeRoot } from "./paths.mjs";
+import { installRuntime, listRuntimes, loadManifest, manifestFor, pruneRuntimes, runtimeBinPath, writeShim } from "./lib/router-install.mjs";
+import { RUNTIMES } from "./lib/router-runtimes.mjs";
+import { runtimeRoot } from "./lib/router-paths.mjs";
 
 function tempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mo-router-inst-"));

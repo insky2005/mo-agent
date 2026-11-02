@@ -1,6 +1,7 @@
 # Router 实现计划（任务书）
 
 状态：**待执行**　日期：2026-11-01　基线：v0.3.0，585 项测试全绿
+路径说明：本文档保留任务书原貌；其中 `host/router/*` 后来按 [cli 分层重构清单](cli-layer-split.md) 迁到 `cli/lib/router-*.mjs`（应用层），host 只留 `router-session.mjs`。
 设计：[ADR-0004](../adr/adr-0004-private-router-runtime.md)、[spec/router.md](../spec/router.md)
 工作量估计：单人约 **9–10 人日**，四个阶段，每个阶段结束时系统都可测、可停、可回退。
 
@@ -39,8 +40,8 @@
 |---|---|---|---|
 | P0.1 | 会话身份增加 `role` | `core/contract.mjs`、`core/hub.mjs` | 常量 `SESSION_ROLE = {ROUTER, WORKER, UNKNOWN}`；`normalize` 保留既有 `role`（不被后续 upsert 覆盖成 unknown）；`list()` 支持按 role 过滤 |
 | P0.2 | 契约分角色渲染 | `core/manager/contract.mjs` | `render({ role: "router" })` 产出 spec §8 的 6 条；`render()` 默认仍是 worker 版，**现有生成物一字不变**（`npm run check` 必须过） |
-| P0.3 | Pi 启动参数构造（纯函数） | 新增 `host/router/argv.mjs` | `buildPiArgv({ runtimeBin, cwd, contractPath, sessionId, tools })` → `{ argv, env }`；断言：含 `--tools`、含 `read,grep,find,ls,mcp__mo__*`、**不含** `bash/edit/write`、env 里 `PI_CODING_AGENT_DIR` 指向私有目录 |
-| P0.4 | 运行时能力准入（纯函数） | 新增 `host/router/admission.mjs` | `checkRuntime(capabilities)` → `{ ok, reason }`；`toolRestriction:"none"` 必须返回拒绝且码为 `E_ROUTER_RUNTIME_UNSUPPORTED` |
+| P0.3 | Pi 启动参数构造（纯函数） | 新增 `cli/lib/router-argv.mjs` | `buildPiArgv({ runtimeBin, cwd, contractPath, sessionId, tools })` → `{ argv, env }`；断言：含 `--tools`、含 `read,grep,find,ls,mcp__mo__*`、**不含** `bash/edit/write`、env 里 `PI_CODING_AGENT_DIR` 指向私有目录 |
+| P0.4 | 运行时能力准入（纯函数） | 新增 `core/router.mjs`（准入判定） | `checkRuntime(capabilities)` → `{ ok, reason }`；`toolRestriction:"none"` 必须返回拒绝且码为 `E_ROUTER_RUNTIME_UNSUPPORTED` |
 | P0.5 | 错误码登记 | `core/errors.mjs` 或就近 | spec §4.3 的 8 个码都有定义、有中文提示、有下一步 hint |
 
 **为什么 P0.3 先做**：它是整个"Router 没有手"承诺的唯一落地点，必须是纯函数 + 单测。写成一段字符串拼接塞在 spawn 里，就没有任何东西能保证它一直对。

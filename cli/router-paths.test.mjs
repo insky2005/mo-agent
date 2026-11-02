@@ -13,7 +13,7 @@ import {
   runtimeRoot,
   sessionsDir,
   workbenchDir,
-} from "./paths.mjs";
+} from "./lib/router-paths.mjs";
 
 const HOME = "/Users/x";
 const DATA = "/Users/x/.mo-agent";

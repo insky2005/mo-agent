@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderRouterScript, shellQuote } from "./script.mjs";
+import { renderRouterScript, shellQuote } from "./lib/router-script.mjs";
 
 test("shellQuote：安全字符原样，其余单引号包裹", () => {
   assert.equal(shellQuote("plain"), "plain");

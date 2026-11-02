@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { grantAdminCookie, isAdminAuthed } from "./admin-auth.mjs";
-import { credentialsFile, routerFile, runtimeRoot, workbenchDir } from "./router/paths.mjs";
-import { readJsonSafe } from "./router/fsx.mjs";
+import { credentialsFile, routerFile, runtimeRoot, workbenchDir } from "../cli/lib/router-paths.mjs";
+import { readJsonSafe } from "../cli/lib/fsx.mjs";
 import { isLoopback } from "./logs-http.mjs";
 import {
   PAGE_STYLE,

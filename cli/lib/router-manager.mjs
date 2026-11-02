@@ -12,14 +12,14 @@ import {
   ROUTER_SESSION_NAME,
   admitRuntime,
 } from "../../core/router.mjs";
-import { buildPiArgv } from "./argv.mjs";
-import { deleteCredentials, redactSecret, resolveCredentials, writeCredentials } from "./credentials.mjs";
-import { probeModel } from "./probe.mjs";
-import { installRuntime, listRuntimes, manifestFor, pruneRuntimes, repairShim } from "./install.mjs";
-import { openTerminal } from "./terminal.mjs";
-import { renderRouterScript } from "./script.mjs";
+import { buildPiArgv } from "./router-argv.mjs";
+import { deleteCredentials, redactSecret, resolveCredentials, writeCredentials } from "./router-credentials.mjs";
+import { probeModel } from "./router-probe.mjs";
+import { installRuntime, listRuntimes, manifestFor, pruneRuntimes, repairShim } from "./router-install.mjs";
+import { openTerminal } from "./router-terminal.mjs";
+import { renderRouterScript } from "./router-script.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
-import * as P from "./paths.mjs";
+import * as P from "./router-paths.mjs";
 
 /** Pi 作为 Router 时声明给准入检查的能力（见 core/router.mjs） */
 export const PI_ROUTER_CAPABILITIES = Object.freeze({
@@ -107,13 +107,32 @@ function waitForPid(file, timeoutMs, now) {
   });
 }
 
+/** Router 会话在 hub 里的形状：host 注入与会话接管共用，避免两处各写一份 */
+export function routerSessionPayload(patch) {
+  return {
+    id: ROUTER_SESSION_ID,
+    sessionId: ROUTER_SESSION_ID,
+    role: SESSION_ROLE.ROUTER,
+    agent: "pi",
+    agentLabel: ROUTER_AGENT_LABEL,
+    title: ROUTER_SESSION_NAME,
+    status: "running",
+    running: true,
+    capabilities: { control: ["prompt", "cancel"], prompt: true, cancel: true },
+    ...patch,
+  };
+}
+
 /**
- * Router 的生命周期归 host（实现计划 §6 R2）：CLI 只发 HTTP 请求。
- * 这个工厂只做三件事：改文件、起进程、把会话注入 hub。
+ * Router 的生命周期：谁启动谁持有 pid；host 只做"接管控制面"。
+ * 这个工厂只做三件事：改文件、起进程、把会话通知出去。
+ *
+ * hub 是可选的：host 传它（会话直接进 hub）；CLI 不传（本地起，等 host 启动时 adopt）。
  */
 export function createRouterManager(options) {
   const opts = options || {};
-  const hub = opts.hub;
+  const hub = opts.hub || null;
+  const onSession = typeof opts.onSession === "function" ? opts.onSession : null;
   const log = opts.log || { info() {}, warn() {}, error() {} };
   const env = opts.env || process.env;
   const platform = opts.platform || process.platform;
@@ -121,8 +140,6 @@ export function createRouterManager(options) {
   const spawnImpl = opts.spawn || spawn;
   const openTerminalImpl = opts.openTerminal || openTerminal;
   const probe = opts.probe || probeModel;
-
-  if (!hub) throw new Error("createRouterManager 需要 hub");
 
   // dataDir：mo 的数据目录（跟人走）；osHome：只用来推程序产物路径
   const dataDir = opts.dataDir || P.moDataDir(env);
@@ -149,28 +166,24 @@ export function createRouterManager(options) {
     return value && typeof value === "object" ? value : null;
   }
 
+  /** 会话通知：onSession 回调（CLI 自用）+ hub（host 用），两者都可以为空 */
+  function notifySession(kind, payload) {
+    if (onSession) onSession(kind, payload);
+    if (hub) hub.emit(kind === "upsert" ? EVENT.SESSION_UPSERT : EVENT.SESSION_REMOVED, payload);
+  }
+
   function emitSession(patch) {
-    hub.emit(EVENT.SESSION_UPSERT, {
-      id: ROUTER_SESSION_ID,
-      sessionId: ROUTER_SESSION_ID,
-      role: SESSION_ROLE.ROUTER,
-      agent: "pi",
-      agentLabel: ROUTER_AGENT_LABEL,
-      title: ROUTER_SESSION_NAME,
-      cwd: files.workbench,
-      status: "running",
-      running: true,
-      capabilities: { control: ["prompt", "cancel"], prompt: true, cancel: true },
-      updatedAt: now(),
-      ...patch,
-    });
+    notifySession(
+      "upsert",
+      routerSessionPayload({ cwd: files.workbench, updatedAt: now(), ...patch }),
+    );
   }
 
   function status() {
     const state = readState() || {};
     const pid = readPidFile(files.pid) || (state.pid ? Number(state.pid) : null);
     const running = isAlive(pid);
-    const session = hub.get(ROUTER_SESSION_ID);
+    const session = hub ? hub.get(ROUTER_SESSION_ID) : null;
     return {
       ok: true,
       running,
@@ -372,7 +385,7 @@ export function createRouterManager(options) {
     }
     const state = readState();
     if (state) writeJsonPrivate(files.state, { ...state, pid: null, stoppedAt: new Date(now()).toISOString() });
-    hub.emit(EVENT.SESSION_REMOVED, { sessionId: ROUTER_SESSION_ID, id: ROUTER_SESSION_ID });
+    notifySession("removed", { sessionId: ROUTER_SESSION_ID, id: ROUTER_SESSION_ID });
     return { ok: true, stopped: Boolean(pid), pid: pid || null };
   }
 

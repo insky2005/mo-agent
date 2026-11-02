@@ -4,9 +4,9 @@ import { spawn } from "node:child_process";
 import { MoError } from "../../core/errors.mjs";
 import { ROUTER_ERROR } from "../../core/router.mjs";
 import { readJsonSafe, writeFilePrivate, writeJsonPrivate } from "./fsx.mjs";
-import { RUNTIMES, runtimeManifest } from "./runtimes.mjs";
-import { resolveNode } from "./node.mjs";
-import { runtimeInstallDir, runtimeRoot } from "./paths.mjs";
+import { RUNTIMES, runtimeManifest } from "./router-runtimes.mjs";
+import { resolveNode } from "./router-node.mjs";
+import { runtimeInstallDir, runtimeRoot } from "./router-paths.mjs";
 
 /**
  * Router 运行时的私有安装。

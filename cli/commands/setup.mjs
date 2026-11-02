@@ -35,15 +35,15 @@ import {
   installRuntime,
   listRuntimes,
   manifestFor,
-} from "../../host/router/install.mjs";
+} from "../lib/router-install.mjs";
 import {
   buildEnv,
   providerEnvName,
   resolveCredentials,
   writeCredentials,
-} from "../../host/router/credentials.mjs";
-import { probeModel } from "../../host/router/probe.mjs";
-import { runtimeRoot } from "../../host/router/paths.mjs";
+} from "../lib/router-credentials.mjs";
+import { probeModel } from "../lib/router-probe.mjs";
+import { runtimeRoot } from "../lib/router-paths.mjs";
 
 /**
  * mo setup —— 首次装配，幂等。

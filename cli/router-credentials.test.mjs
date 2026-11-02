@@ -13,8 +13,8 @@ import {
   redactSecret,
   resolveCredentials,
   writeCredentials,
-} from "./credentials.mjs";
-import { credentialsFile } from "./paths.mjs";
+} from "./lib/router-credentials.mjs";
+import { credentialsFile } from "./lib/router-paths.mjs";
 
 function tempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mo-router-cred-"));

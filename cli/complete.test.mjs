@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { complete, describe } from "./lib/complete.mjs";
+import { complete, describe } from "./commands/complete.mjs";
 import { attachProject } from "./lib/project.mjs";
 import { saveCard } from "./lib/store.mjs";
 

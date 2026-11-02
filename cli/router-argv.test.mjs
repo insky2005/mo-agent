@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPiArgv } from "./argv.mjs";
-import { ROUTER_TOOL_SPEC } from "../../core/router.mjs";
+import { buildPiArgv } from "./lib/router-argv.mjs";
+import { ROUTER_TOOL_SPEC } from "../core/router.mjs";
 
 const BASE = {
   runtimeBin: "/Users/x/Library/Application Support/mo-agent/routers/pi/1.3.0/bin/pi",

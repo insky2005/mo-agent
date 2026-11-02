@@ -30,7 +30,8 @@ import { createDictationRunner } from "./voice/dictate.mjs";
 import { createHelperClient } from "./voice/helper-client.mjs";
 import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
-import { createRouterManager } from "./router/manager.mjs";
+import { createRouterManager } from "../cli/lib/router-manager.mjs";
+import { adoptRouterSession } from "./router-session.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { handleSettingsRoutes } from "./settings-page.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
@@ -601,7 +602,9 @@ async function runDictate() {
 }
 
 // Router（指挥台）：mo 自己的主 Agent；生命周期归 host，CLI 只发 HTTP 请求
+// pid 归启动它的进程；host 只做"接管控制面"——发现活着的 Router 就注入 hub
 const routerManager = createRouterManager({ hub, log });
+adoptRouterSession({ hub, manager: routerManager, log });
 
 const moHost = createMoAgentServer({
   config,

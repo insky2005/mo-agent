@@ -1,6 +1,8 @@
 # cli/ 分层重构清单
 
-状态：待执行　日期：2026-11-01　基线：0.3.0（657 项测试全绿）
+状态：**P0 + P1 已完成**（P2 未做）　日期：2026-11-01　基线：0.3.0（659 项测试全绿）
+
+完成后的事实：`cli → host` 从 6 处降到 **0**；Router 实现（10 个模块）搬到 `cli/lib/router-*.mjs`；host 只剩 `router-session.mjs` 做会话接管；守卫测试变成纯白名单，并新增两条结构规则（`cli/lib` 不许引 `cli/commands`、`cli/commands` 不许引 `host`）。
 关联：[architecture.md §5](../architecture.md)、[ADR-0004](../adr/adr-0004-private-router-runtime.md)、[守卫测试](../../scripts/architecture.test.mjs)
 
 ## 0. 为什么要动

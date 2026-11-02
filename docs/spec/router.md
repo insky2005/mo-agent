@@ -263,7 +263,7 @@ hub.emit(session.upsert, {
 })
 ```
 
-这样依赖方向是干净的：Worker 走 `adapters/`（观测），Router 走 `host/router/`（自持），两条路径互不引用。
+这样依赖方向是干净的：Worker 走 `adapters/`（观测），Router 走 `cli/lib/router-*`（自持），两条路径互不引用。
 
 ### 6.2 与 Pi adapter 的去重
 
@@ -303,7 +303,7 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 | `openai` | `OPENAI_API_KEY` |
 | 其它 | 运行时支持 `--api-key` 时走参数，否则该 provider 不支持 |
 
-映射表放在 `host/router/credentials.mjs`，**换 runtime 时只换这张表**。好处：删凭据只删一个文件；配置目录里永远没有秘密；不会因为运行时改了 auth 格式而断。
+映射表放在 `cli/lib/router-credentials.mjs`，**换 runtime 时只换这张表**。好处：删凭据只删一个文件；配置目录里永远没有秘密；不会因为运行时改了 auth 格式而断。
 
 ### 7.3 轮换与删除
 
@@ -350,7 +350,7 @@ Pi adapter 靠进程表 + 会话文件可能也看到这个进程。约定：
 
 ## 11. 升级与回滚
 
-- 版本 pin 在代码里的 `host/router/runtimes.mjs`（随 mo 版本走），**不是 latest**；
+- 版本 pin 在代码里的 `cli/lib/router-runtimes.mjs`（随 mo 版本走），**不是 latest**；
   **必须是 JS 模块而不是 JSON**：单文件二进制（`bun --compile`）只内联 JS 模块，运行时读外部 JSON 会拿到不存在的 `/$bunfs/...` 路径；
 - 安装方式：`npm install --prefix <staging>` 装进临时目录，用**私有 npm cache**（`<runtimeRoot>/npm-cache`），
   避免用户 `~/.npm` 损坏时把安装拖下水；自检通过后 `rename` 到最终目录，失败不留半个安装；

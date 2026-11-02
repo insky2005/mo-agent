@@ -8,9 +8,9 @@ import { listProjects } from "../lib/project.mjs";
 import { readEvents } from "../lib/store.mjs";
 import { memoryDir } from "../lib/knowledge.mjs";
 import { cachedUpdate } from "../lib/upgrade.mjs";
-import { credentialsFile, routerFile, runtimeRoot } from "../../host/router/paths.mjs";
+import { credentialsFile, routerFile, runtimeRoot } from "../lib/router-paths.mjs";
 import { findHost } from "./daemon.mjs";
-import { readJsonSafe } from "../../host/router/fsx.mjs";
+import { readJsonSafe } from "../lib/fsx.mjs";
 
 /**
  * 自检：只有必需项失败才算失败。

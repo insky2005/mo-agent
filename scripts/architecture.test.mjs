@@ -32,10 +32,12 @@ const ALLOWED = new Set([
   "scripts → integrations",
 ]);
 
-/** 已知违规：cli 反向依赖 host。只许变少。 */
-const KNOWN_DEBT = new Set([
-  "cli → host",
-]);
+/**
+ * 已知违规：现在是空的。
+ * 曾经有 6 处 cli → host/router/*（Router 实现住在接口层），P1 已把它们下移到 cli/lib。
+ * 这里保留集合本身：以后真有临时债，写进来并注明还债期限。
+ */
+const KNOWN_DEBT = new Set();
 
 function walk(dir, out = []) {
   let entries = [];
@@ -90,6 +92,31 @@ test("已知违规不许扩大：cli 不能 import host 的新模块", () => {
   const offenders = edges.get("cli → host") || [];
   // 6 处（setup ×4、doctor ×2）是登记的债；超过就是新增，直接失败
   assert.ok(offenders.length <= 6, "cli → host 的反向依赖变多了：" + offenders.join(", "));
+});
+
+test("应用层不许反向依赖接口层（cli/lib 不能引 cli/commands）", () => {
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "cli", "lib"))) {
+    const text = fs.readFileSync(file, "utf8");
+    const re = /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+    let match;
+    while ((match = re.exec(text))) {
+      if (!match[1].startsWith(".")) continue;
+      const target = path.resolve(path.dirname(file), match[1]);
+      if (target.includes(path.join("cli", "commands"))) offenders.push(path.relative(ROOT, file));
+    }
+  }
+  assert.deepEqual([...new Set(offenders)], [], "cli/lib 里出现了对 cli/commands 的依赖");
+});
+
+test("接口层（cli/commands）不许反向依赖 host", () => {
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "cli", "commands"))) {
+    const text = fs.readFileSync(file, "utf8");
+    const re = /from\s+["']([^"']*host\/[^"']*)["']/g;
+    if (re.test(text)) offenders.push(path.relative(ROOT, file));
+  }
+  assert.deepEqual(offenders, [], "cli/commands 里出现了对 host 的依赖");
 });
 
 test("core 不认识任何更高层", () => {

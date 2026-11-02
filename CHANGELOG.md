@@ -31,8 +31,11 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 - **能看见 host 到底用的是哪一份**：`mo daemon status` 新增 `host` 行（来源 · 路径 · 编译时间）；`E_ROUTER_HOST_OLD` 会把当前 host 的来源与时间打出来，并给出"源码 host / 桌面 host"两条具体命令。
 
-### 变更
+### 重构
 
+- **cli / host 分层归位（P0 + P1）**：Router 的 10 个实现模块从 `host/router/*` 下移到 `cli/lib/router-*.mjs`（argv / script / terminal / node / runtimes / install / credentials / probe / paths / manager），`fsx` 并入 `cli/lib/fsx.mjs`；host 只保留 `router-session.mjs`——启动时 `adopt()` 扫 `router.json` + pid，发现活着的 Router 就注入 hub 接管控制面。`cli → host` 从 6 处降到 **0**，`KNOWN_DEBT` 清空。
+- **manager 的 hub 变可选**：改为 `onSession` 回调 + 可选 hub，为"CLI 自己拉起 Router、host 后到接管"铺路。
+- 补全表 `complete.mjs` 从应用层归位到接口层（`cli/commands/complete.mjs`），消除唯一一处 `cli/lib → cli/commands` 的反向依赖。
 - 新增 [cli/ 分层重构清单](docs/plans/cli-layer-split.md)：把 cli/ 按"应用层 / 接口层 / 工具层"盘点，列出 5 个混住的具体症状（S1–S5）与 P0–P2 分阶段清单、逐文件搬迁表与验收。
 - **依赖方向有了守卫测试**：`scripts/architecture.test.mjs` 扫描真实 import 边，未登记的白名单外依赖直接失败；已知违规（`cli → host` 6 处）写进 `KNOWN_DEBT`，只许减少不许新增，并额外断言 `core` 无对外依赖、前端与壳不 import 后端。
 - **重写 [架构总览](docs/architecture.md)**：按实测 import 矩阵重画分层（core → cli → host → 用户面，adapters/approvals 为旁支），补齐 `cli` / `app` / `desktop` / `hooks` / `integrations` 的职责与边界、四个运行体的依赖关系，并把唯一一处反向依赖（`cli → host/router/*`）登记为待还债务。
