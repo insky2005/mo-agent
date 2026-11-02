@@ -151,6 +151,8 @@ CLI 入口：**裸 `mo router` 就等同于 `mo router start`**（默认子命�
 
 runtime 只给只读工具；所有副作用（写文档、提记忆、建卡派单）统一从 mo 的 MCP 工具走。这样换 runtime 时 Router 的能力面完全一致，落点、权限与审计也留在 mo 里。
 
+**Router 不加载技能（`--no-skills`）。** 它的契约是 `ROUTER.md`（`--append-system-prompt`）；通用 `mo` 技能里全是 shell 命令示例，而 Router 没有 shell，技能发现又是全局的（含 `~/.agents/skills`），不显式关掉就会被误导。
+
 ### 5.1 只读白名单（runtime 提供）
 
 ```

@@ -58,6 +58,10 @@ export function buildPiArgv(options) {
   const args = [
     "--session-id",
     String(opts.sessionId || ROUTER_SESSION_ID),
+    // Router 不加载任何技能：它的契约是 ROUTER.md（--append-system-prompt），
+    // 通用技能里全是 shell 命令示例，而 Router 没有 shell，读了只会误导。
+    // 技能发现是全局的（含 ~/.agents/skills），所以必须显式关掉。
+    "--no-skills",
     "--name",
     String(opts.sessionName || ROUTER_SESSION_NAME),
     "--tools",

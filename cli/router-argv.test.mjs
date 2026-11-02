@@ -23,6 +23,11 @@ test("启动参数把工具面收窄在命令行上，不靠提示词", () => {
   }
 });
 
+test("Router 不加载技能：--no-skills 必须在，避免读到通用主 Agent 技能", () => {
+  const { args } = buildPiArgv(BASE);
+  assert.ok(args.includes("--no-skills"), "缺少 --no-skills：Router 会捡到 ~/.agents/skills 里的通用技能");
+});
+
 test("会话身份固定：--session-id 与 --name", () => {
   const { args } = buildPiArgv(BASE);
   assert.equal(args[args.indexOf("--session-id") + 1], "mo-router");
