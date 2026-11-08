@@ -87,11 +87,12 @@ test("跨层依赖只允许出现在白名单里", () => {
   assert.deepEqual(unknown, [], "出现了未登记的跨层依赖：" + unknown.join(", "));
 });
 
-test("已知违规不许扩大：cli 不能 import host 的新模块", () => {
+test("cli 不允许 import host（不许再留余量）", () => {
   const edges = collectEdges();
   const offenders = edges.get("cli → host") || [];
-  // 6 处（setup ×4、doctor ×2）是登记的债；超过就是新增，直接失败
-  assert.ok(offenders.length <= 6, "cli → host 的反向依赖变多了：" + offenders.join(", "));
+  // 曾经有 6 处（setup ×4、doctor ×2），P1 已全部下移到 cli/lib。
+  // 这里不再保留余量：出现一处就是分层错了。
+  assert.deepEqual(offenders, [], "cli → host 的反向依赖：" + offenders.join(", "));
 });
 
 test("应用层不许反向依赖接口层（cli/lib 不能引 cli/commands）", () => {
@@ -129,4 +130,96 @@ test("前端与壳不 import 后端模块（只走 HTTP / 子进程）", () => {
   const edges = collectEdges();
   const bad = [...edges.keys()].filter((key) => key.startsWith("app → ") || key.startsWith("desktop → "));
   assert.deepEqual(bad, [], "界面层直接 import 了后端：" + bad.join(", "));
+});
+
+/**
+ * 分层守卫的第二组（D1）：cli/lib 是"应用内核"，不是随便什么都能往里加。
+ *  - host 只能复用内核模块，不许碰呈现层（output/help/args/skill-content）；
+ *  - 内核模块不许自己写 stdout —— 输出只有 output.mjs 一个出口。
+ */
+const HOST_CLI_ALLOWED = new Set([
+  "paths.mjs",
+  "fsx.mjs",
+  "config.mjs",
+  "project.mjs",
+  "store.mjs",
+  "approvals.mjs",
+  "dispatch.mjs",
+  "workers-config.mjs",
+  "self.mjs",
+  "router-argv.mjs",
+  "router-install.mjs",
+  "router-manager.mjs",
+  "router-paths.mjs",
+  "router-credentials.mjs",
+  "router-probe.mjs",
+  "router-runtimes.mjs",
+  "router-script.mjs",
+  "router-terminal.mjs",
+  "router-node.mjs",
+]);
+
+test("host 只复用 cli/lib 的内核模块，不碰呈现层", () => {
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "host"))) {
+    const text = fs.readFileSync(file, "utf8");
+    const re = /(?:from\s+|import\s*\(\s*)["'](\.\.\/cli\/(?:lib\/)?[^"']+)["']/g;
+    let match;
+    while ((match = re.exec(text))) {
+      const relative = match[1];
+      if (relative.startsWith("../cli/commands/")) {
+        offenders.push(path.relative(ROOT, file) + " → " + relative);
+        continue;
+      }
+      const name = path.basename(relative);
+      if (!HOST_CLI_ALLOWED.has(name)) offenders.push(path.relative(ROOT, file) + " → " + relative);
+    }
+  }
+  assert.deepEqual(offenders, [], "host 引用了不该复用的 cli 模块：" + offenders.join(", "));
+});
+
+test("cli/lib 不直接写 stdout（输出只有 cli/ui/output.mjs 一个出口）", () => {
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "cli", "lib"))) {
+    const text = fs.readFileSync(file, "utf8");
+    // 只看"语句位置"的写入；命令行字符串里的 process.stdout.write 不算
+    if (/^[ \t]*(?:process\.stdout\.write|console\.log)\b/m.test(text)) {
+      offenders.push(path.relative(ROOT, file));
+    }
+  }
+  assert.deepEqual(offenders, [], "cli/lib 里出现了直接输出：" + offenders.join(", "));
+});
+
+test("cli/lib 是内核：不许依赖 cli/ui 与 cli/commands", () => {
+  const offenders = [];
+  const re = /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+  for (const file of walk(path.join(ROOT, "cli", "lib"))) {
+    const text = fs.readFileSync(file, "utf8");
+    let match;
+    while ((match = re.exec(text))) {
+      if (!match[1].startsWith(".")) continue;
+      const relative = path.relative(ROOT, path.resolve(path.dirname(file), match[1]));
+      if (relative.startsWith(path.join("cli", "ui")) || relative.startsWith(path.join("cli", "commands"))) {
+        offenders.push(path.relative(ROOT, file) + " → " + match[1]);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], "cli/lib 依赖了界面层：" + offenders.join(", "));
+});
+
+test("cli/ui 是界面层：不许依赖 cli/commands", () => {
+  const offenders = [];
+  const re = /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+  for (const file of walk(path.join(ROOT, "cli", "ui"))) {
+    const text = fs.readFileSync(file, "utf8");
+    let match;
+    while ((match = re.exec(text))) {
+      if (!match[1].startsWith(".")) continue;
+      const relative = path.relative(ROOT, path.resolve(path.dirname(file), match[1]));
+      if (relative.startsWith(path.join("cli", "commands"))) {
+        offenders.push(path.relative(ROOT, file) + " → " + match[1]);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], "cli/ui 依赖了命令层：" + offenders.join(", "));
 });

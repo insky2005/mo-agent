@@ -4,11 +4,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { downloadVerified } from "./download.mjs";
+import { dataDirFrom } from "./paths.mjs";
 
 const DEFAULT_REPO = "insky2005/mo-agent";
 
-export function apkDest(home = os.homedir()) {
-  return path.join(home, ".mo-agent", "app.apk");
+export function apkDest(home = os.homedir(), env = process.env) {
+  return path.join(dataDirFrom(home, env), "app.apk");
 }
 
 function pickApkAsset(releases) {
@@ -31,7 +32,7 @@ export async function fetchApk(options = {}) {
   const home = options.home || os.homedir();
   const env = options.env || process.env;
   const log = options.log || (() => {});
-  const dest = apkDest(home);
+  const dest = apkDest(home, env);
 
   if (fs.existsSync(dest)) return { path: dest, downloaded: false, skipped: "已存在" };
 

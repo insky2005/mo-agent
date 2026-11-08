@@ -90,8 +90,8 @@ test("指挥台契约：只读 + mo 工具，不含 shell 示例", () => {
   // 三条边界必须显式出现
   assert.match(doc, /不属于任何项目/);
   assert.match(doc, /memory_propose/);
-  // note_write 落地前不许出现在契约里：不能让 Router 去调不存在的工具
-  assert.doesNotMatch(doc, /note_write/);
+  // note_write 已落地（spec/router.md §5.4）：契约里必须出现，否则 Router 不知道能记过程文档
+  assert.match(doc, /note_write/);
   assert.match(doc, /派单/);
 });
 

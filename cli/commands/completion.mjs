@@ -1,5 +1,5 @@
 import { MoError } from "../../core/errors.mjs";
-import { emit } from "../lib/output.mjs";
+import { emit } from "../ui/output.mjs";
 import { complete, describe } from "./complete.mjs";
 
 // 用单引号拼接 shell 脚本：这些脚本里大量 ${...}，放进模板字符串会与 JS 插值打架。

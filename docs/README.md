@@ -46,7 +46,7 @@ docs/
 | [event-contract.md](spec/event-contract.md) | ✅ 生效（M1–M4 已落地） | 事件词汇表、状态语义、映射责任、接入清单 |
 | [dingtalk-bot.md](spec/dingtalk-bot.md) | ✅ 生效 | 钉钉 Stream 通道、消息形态、配置 |
 | [workbench-flow.md](spec/workbench-flow.md) | 🟡 P0 已落地（CLI） | 个人工作台：任务流转、分支、安装 |
-| [router.md](spec/router.md) | 🟡 设计（未实现） | Router（指挥台）：私有运行时、工具面白名单、会话注入、凭据、启动流程与验收 |
+| [router.md](spec/router.md) | ✅ 生效（0.3.0 起） | Router（指挥台）：私有运行时、工具面白名单、会话注入、凭据、启动流程与验收 |
 
 ### guides/ — 操作手册
 

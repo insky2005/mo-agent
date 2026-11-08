@@ -7,10 +7,14 @@ import {
   detectDanger,
   digitSequence,
   makeNonce,
+  makeWordNonce,
   matchesNonce,
+  NONCE_WORDS,
   parseReply,
+  spellNonce,
   spellPaths,
   toSimplified,
+  WORD_NONCE_SIZE,
 } from "./text.mjs";
 
 test("digitSequence 认中文数字、阿拉伯数字与混合", () => {
@@ -117,4 +121,36 @@ test("buildApprovalDraft 普通操作不吓人", () => {
   assert.equal(draft.danger.level, "normal");
   assert.ok(!draft.prompt.includes("危险操作"));
   assert.ok(draft.prompt.includes("s r c / a p p . j s"));
+});
+
+test("makeWordNonce：默认三个不重复的词，可注入随机源", () => {
+  const zeros = makeWordNonce(WORD_NONCE_SIZE, () => 0);
+  const words = zeros.split("-");
+  assert.equal(words.length, WORD_NONCE_SIZE);
+  assert.equal(new Set(words).size, WORD_NONCE_SIZE, "不该取到重复词");
+  assert.ok(words.every((word) => NONCE_WORDS.includes(word)));
+
+  const many = makeWordNonce(8);
+  assert.equal(many.split("-").length, 8);
+});
+
+test("spellNonce：数字逐位念，词之间停顿", () => {
+  assert.equal(spellNonce("4729"), "4 7 2 9");
+  assert.equal(spellNonce("红-苹果-火车"), "红，苹果，火车");
+  assert.equal(spellNonce(""), "");
+});
+
+test("口语口令按词序列匹配，忽略空白与标点", () => {
+  const nonce = "红-苹果-火车";
+  assert.equal(matchesNonce("红苹果火车", nonce), true);
+  assert.equal(matchesNonce("请复述：红，苹果，火车。", nonce), true);
+  assert.equal(matchesNonce("红 苹果 火车", nonce), true);
+  assert.equal(matchesNonce("红苹果", nonce), false, "少一个词不行");
+  assert.equal(matchesNonce("蓝苹果火车", nonce), false, "词换了不行");
+  assert.equal(matchesNonce("4729", nonce), false);
+});
+
+test("buildApprovalDraft：口语口令也念成可复述的形式", () => {
+  const draft = buildApprovalDraft({ agentLabel: "Claude", toolName: "Bash", nonce: "红-苹果-火车" });
+  assert.ok(draft.prompt.includes("红，苹果，火车"));
 });

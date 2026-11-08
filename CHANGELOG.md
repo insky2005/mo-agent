@@ -7,6 +7,34 @@ CI 会用 `node scripts/check-changelog.mjs --release` 校验这一点；平时�
 
 ## [Unreleased]
 
+### 变更
+
+- **命令面第二批（E1/E2/E6 收口）**：新增 `memory create`（= `init`）、`connect project`（= `project agent`）、`internal memory-migrate`（= `memory migrate`）；`worker current` / `terminal current` 改由 `use` 不带参数承担。**弃用登记表** `cli/ui/deprecate.mjs` 统一登记旧名、提示新位置并写明 **0.5.0 移除**（同一进程只提示一次）。`mo help` 去掉了重复的 daemon 分组，内部命令不再出现在主 help。
+- **`cli/lib` 拆出 `cli/ui/`（D1）**：argv 解析、输出、help、弃用提示移到界面层，`cli/lib` 只留内核；新增三条结构守卫——host 只许复用内核白名单、`cli/lib` 不许依赖 `cli/ui`/`commands`、`cli/lib` 不许直接写 stdout。
+- **`note_write`（spec/router.md §5.4 落地）**：Router 可以记过程文档了——落 `~/.mo-agent/notes/YYYY-MM-DD-<slug>.md`，**不接受路径参数**、append-only（同日同名加 `-2`）、单篇 64KB 上限、不提供编辑删除；链路是 `MCP note_write → mo internal note-write → cli/lib/notes.mjs`，账本记 `note.written`。Router 契约的「记忆与文档」也据此改写（过程文档用 note_write，交付物才派单）。
+- **任务确认成为正式事件**：新增 `task.confirm_requested`（signal，critical），host 扫描 `approvals/` 时发它而不是笼统的 `notice`，payload 带交付物与验收项；手机端据此即时刷新卡片，并直接显示"要批什么"。`/api/task-approvals` 也返回同样的字段。
+- **首屏收敛**：`mo help` 默认只给一条主路径（11 行），不再一上来就铺 19 个分组；全部分组与子命令移到 `mo help --all`。见 `docs/plans/ux-improvements.md` §3.E。
+- **`check:` 接受裸路径**：`--verify "check:dist/index.html"` 现在按“文件存在”判定，契约与 USAGE 的示例同步改成这个写法。此前照文档写会落成 `kind=unknown → needs_human → blocked`，且不报错；现在写错路径会明确显示“文件不存在”。
+- **`mo task list` 增加「待办 / 验收」两列**：多张卡时不用逐张 `status` 也能看出谁在等人批、谁验收没过。
+- **`blocked` 的下一步按原因分流**：只有 `missing_receipt` / `timeout` 提示重试；`verify_failed` 提示重跑验收、`bad_receipt` 提示看日志、`needs_input` 提示看提问。
+- **批准前看得到卡的内容**：`mo task approve` 的确认框现在显示交付物与验收项，不再只有标题与指纹。
+- **running 不再允许重复派单**：`mo task dispatch` 对 `running` 的卡返回 `E_ALREADY_RUNNING`，要再派一次必须加 `--force`——避免两个执行者往同一个回执文件里写。
+- **入口导航**：README 首屏新增「先选一条路」（四条入口对照表）；SKILL 契约新增「三条路，先看用户在哪条」，与 `mo agent describe` 同源生成。
+- **文档与守卫对齐**：`docs/README.md` 里 router 从「🟡 设计（未实现）」改为「✅ 生效」；`docs/architecture.md` §3 的 cli/host 代码量按实测更新；`scripts/architecture.test.mjs` 去掉 `cli → host` 的 6 处余量，改为必须为 0。
+- **任务确认请求会推送了**：确认请求一直只落 `~/.mo-agent/approvals/`，不进事件流也不推送，于是"手机亮起来批准任务卡"这条链其实是暗的。host 现在常驻扫描该目录（[`host/task-watch.mjs`](host/task-watch.mjs)），把新出现的 pending 请求翻成一条 `notice`（kind `task-confirm`，要求人处理）——手机、桌面、webhook 都走已有的通知通道；过期请求不提示，同一请求只提示一次。
+- **批准/拒绝进收件箱**：人做完决定后写一条 `task.confirmed` / `task.confirm_rejected` 到 inbox（与任务终态共用 `mo inbox pull`），主 Agent 下一轮拉到就能继续派单，不用等人再催一句；任务出结果时这条提醒会被自动清掉，不会一卡占两条。
+- **`mo task dispatch --detach`**：后台派单，立即返回 pid 与日志路径，结果用 `mo inbox pull` 收——不再让无头执行者把 Agent 的工具调用挂到 45 分钟。派单前先把卡推进到 `dispatched/running` 占位，连点两次不会起两个执行者。
+- **修掉 `dispatched` 卡派单后卡住的漏洞**：卡片停在 `dispatched`（崩溃、或后台派单占位）时再派单，原来不会补 `running`，导致后续回执与验收无法推进；现在会补上。
+- **`mo doctor` 给「建议入口」**：按"装了技能 / 配了指挥台 / 建过任务卡"判断用户已经在哪条路上，最后一行给出下一步命令（A3）；`mo setup` 早就会问「现在配置指挥台？」（A1）。
+- **文档**：USAGE 写明"任务卡可以在手机上批，但批准≠派单"；mo-cli 指南补 `--detach` / `--force` 与 `check:<路径>` 的简写。
+- **分层守卫补强（D1）**：新增两条架构测试——host 只能复用 `cli/lib` 的内核模块（白名单，禁止碰 `output/help/args` 这类呈现层与 `commands/`），`cli/lib` 不许在语句位置直接写 stdout（`output.mjs` 是唯一出口）。`docs/architecture.md` 新增 §3.1 host 内部模块分组与"通道统一契约"。
+- **手机「允许并派单」（B3）**：`POST /api/task-approvals/:id` 支持 `{ decision: "approve", dispatch: true }`，host 批准后立刻用卡上的执行者（缺省回落默认执行者）在后台派单；手机/网页的确认卡片因此多了「允许并派单」按钮，`只允许` 仍保留。派单失败不回滚批准，原因随响应返回（`dispatched.error`）。
+- **语音口令改口语词（D4）**：默认口令从 4 位随机数字改成 3 个不重复的口语词（念作"红，苹果，火车"）。数字在 ASR 里最容易糊（"一/七""零/六"），换成听感差异大的词后一次念对率更高。`matchesNonce` 两种格式都认（纯数字仍逐位严格比对），`spellNonce` 统一回读方式，`MO_AGENT_VOICE_NONCE` 与 `--nonce` 调试入口不变。
+- **`npm run voice:test` 修好**：Node 22 不再把目录参数当测试集合，原来直接 `node --test host/voice/` 会 `MODULE_NOT_FOUND`；改成显式列出测试文件。
+- **通知静音时段（D3）**：`notify.json` 新增 `quietHours`（默认 22:30–08:00，新装写入 `notify-defaults.json`）。静音时段只挡 normal（完成/取消），**critical（授权、报错）照常送达**；`allowCritical:false` 可连 critical 一起挡，`enabled:false` 关掉，老配置没有该项时不静音。同时修掉去重表"满 500 条整表清空"导致重复提醒的问题——改成逐条淘汰最旧的。
+- **`MO_AGENT_HOME` 现在真的管住 daemon 与 host**：`daemon.pid` / `session.json` / `daemon.log` / `app.apk` / `devices.json` / `voice.json` 都改走数据目录（`dataDirFrom()`），不再写死 `os.homedir()`。此前隔离环境（如 `MO_AGENT_HOME=$(mktemp -d)`）里跑 daemon 会碰到真实 `~/.mo-agent`，`serve restart` 甚至在沙箱里报 EPERM。
+- **命令面收敛（第一批，全部带别名）**：新增 `mo serve`（`start/stop/restart/status/open` + `serve router …`，收编 `mo daemon` 与 `mo router` 的父子关系）、`mo connect`（`mo agent` 的新名字）、`mo internal`（`mcp / receipt / watchdog / completion`）；`task show`（= `status`）、`project create`（= `init`）为统一动词。旧命令全部继续可用，其中 `receipt / watchdog / completion` 会在 stderr 打一行 `[deprecated] … → mo internal …`；`mo mcp` 不提示（它被写进 Agent 配置，属稳定接口）。补全表与 `mo help`（含 `mo help connect|daemon|receipt|watchdog|mcp|completion` 的别名解析）同步更新；主 help 不再列出内部命令。`mo daemon status` 的提示改成 `mo serve start`；`worker use` 不带参数即打印当前默认（`worker current` 保留）。
+
 ### 新增
 
 - **`mo daemon install`：只装 CLI 也能补齐 host**。此前 host 只随桌面 App 分发，而 `get-cli.sh` 只装一个 `mo` 二进制——只装 CLI 的用户没有 host，手机批准、监控、钉钉全都用不了。现在按 `mo-agent-runtime-<os>-<arch>.tar.gz` 从 Release 下载（可 `MO_AGENT_HOST_URL` 覆盖）→ 校验 sha256 → 解到 findHost 早已预留的 `~/.mo-agent/runtime`。`mo doctor` 增加 host 行，`mo daemon status` 在没有 host 时直接给出 `mo daemon install`。

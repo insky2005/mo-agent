@@ -1,4 +1,4 @@
-import { INTENT, digitSequence, isDictationConfirm, matchesNonce, parseReply } from "./text.mjs";
+import { INTENT, digitSequence, isDictationConfirm, matchesNonce, parseReply, spellNonce } from "./text.mjs";
 
 export const OUTCOME = Object.freeze({
   ALLOW: "allow",
@@ -164,12 +164,12 @@ export async function runVoiceConfirm(options) {
       const got = digitSequence(text);
       if (got) {
         if (isLast) return finalize("口令不对");
-        await say("口令不对。请复述：" + nonce.split("").join(" ") + "。");
+        await say("口令不对。请复述：" + spellNonce(nonce) + "。");
         continue;
       }
       if (reply.intent === INTENT.CONFIRM) {
         if (isLast) return finalize("没有收到口令");
-        await say("请复述口令：" + nonce.split("").join(" ") + "。");
+        await say("请复述口令：" + spellNonce(nonce) + "。");
         continue;
       }
       if (isLast) return finalize("没听懂");

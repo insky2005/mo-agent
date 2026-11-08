@@ -25,6 +25,7 @@ export const EVENT = Object.freeze({
   APPROVAL_RESOLVED: "approval.resolved",
   NOTICE: "notice",
   SOURCE_ERROR: "source.error",
+  TASK_CONFIRM_REQUESTED: "task.confirm_requested",
   NOTIFY: "notify",
 });
 
@@ -50,6 +51,8 @@ export const EVENT_META = Object.freeze({
   [EVENT.APPROVAL_RESOLVED]: { category: "state", replay: true, required: ["id"] },
   [EVENT.NOTICE]: { category: "signal", replay: false, required: ["title"] },
   [EVENT.SOURCE_ERROR]: { category: "state", replay: true, required: ["source", "message"] },
+  // 任务卡的确认请求：来自 ~/.mo-agent/approvals/（文件队列），host 扫描后发一次
+  [EVENT.TASK_CONFIRM_REQUESTED]: { category: "signal", replay: false, required: ["requestId", "taskId"] },
   [EVENT.NOTIFY]: { category: "derived", replay: false, required: ["severity", "kind", "title"] },
 });
 
@@ -217,6 +220,25 @@ export const NOTIFY_POLICY = Object.freeze({
     notificationType: p.notificationType || null,
     requiresAction: p.requiresAction === true || p.kind === "approval" || p.kind === "question",
     toolName: null,
+  }),
+
+  // 任务卡确认：手机/桌面要能用它渲染一张可点的卡片（不只是"有件事"）
+  [EVENT.TASK_CONFIRM_REQUESTED]: (p) => ({
+    severity: SEVERITY.CRITICAL,
+    kind: "task-confirm",
+    title: "有任务卡等你批准",
+    body: withPrefix(
+      p.title,
+      Array.isArray(p.deliverables) && p.deliverables.length ? "交付：" + p.deliverables.join("；") : "批准后才可以派单"
+    ),
+    requiresAction: true,
+    eventId: p.requestId || null,
+    sessionId: null,
+    agent: null,
+    agentLabel: null,
+    sessionTitle: null,
+    toolName: null,
+    taskId: p.taskId || null,
   }),
 
   [EVENT.RUN_COMPLETED]: (p) => ({

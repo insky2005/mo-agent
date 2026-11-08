@@ -1,5 +1,5 @@
-import { has, one } from "../lib/args.mjs";
-import { emit, isJson } from "../lib/output.mjs";
+import { has, one } from "../ui/args.mjs";
+import { emit, isJson } from "../ui/output.mjs";
 import { MoError } from "../../core/errors.mjs";
 import { runUpgrade } from "../lib/upgrade.mjs";
 import { moHome } from "../lib/paths.mjs";

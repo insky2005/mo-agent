@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
-import { all, has, one } from "../lib/args.mjs";
-import { emit, isJson, padDisplay } from "../lib/output.mjs";
+import { all, has, one } from "../ui/args.mjs";
+import { emit, isJson, padDisplay } from "../ui/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import {

@@ -76,9 +76,27 @@ test("verify 为空 → 不执行、不判通过", () => {
   assert.deepEqual(outcome.results, []);
 });
 
-test("无法判定的 check → needs_human 并给原因", () => {
+test("裸路径 check 按“存在”判定：文件缺失是可见失败，不是 needs_human", () => {
   const root = workspace();
-  const outcome = runVerify({ card: card([{ check: "看起来没问题" }]), root });
+  const outcome = runVerify({ card: card([{ check: "looks-fine.txt" }]), root });
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.needsHuman, false);
+  assert.equal(outcome.results[0].kind, "check");
+  assert.match(outcome.results[0].detail, /文件不存在/);
+});
+
+test("裸路径 check：文件存在即通过（契约里的 check:<路径> 写法）", () => {
+  const root = workspace();
+  fs.writeFileSync(path.join(root, "dist.html"), "<html></html>\n");
+  const outcome = runVerify({ card: card([{ check: "dist.html" }]), root });
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.needsHuman, false);
+  assert.equal(outcome.results[0].detail, "文件存在");
+});
+
+test("空 check → needs_human 并给原因", () => {
+  const root = workspace();
+  const outcome = runVerify({ card: card([{ check: "" }]), root });
   assert.equal(outcome.ok, false);
   assert.equal(outcome.needsHuman, true);
   assert.equal(outcome.results[0].kind, "unknown");

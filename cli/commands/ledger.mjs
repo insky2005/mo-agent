@@ -1,7 +1,7 @@
 import { MoError } from "../../core/errors.mjs";
 import { filterEvents } from "../../core/tasks/ledger.mjs";
-import { all, one } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { all, one } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { readEvents } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";

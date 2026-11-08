@@ -1,6 +1,7 @@
 import { MoError } from "../../core/errors.mjs";
-import { has, one } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { has, one } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
+import { deprecate } from "../ui/deprecate.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { findProjectRoot, resolveProject } from "../lib/project.mjs";
 import { addWorker, defaultWorkerName, listWorkers, removeWorker, setDefaultWorker } from "../lib/workers-config.mjs";
@@ -20,7 +21,10 @@ export function workerCommand(ctx, args) {
   if (sub === "add") return add(ctx, args);
   if (sub === "remove") return remove(ctx, args);
   if (sub === "use") return use(ctx, args);
-  if (sub === "current") return current(ctx, args);
+  if (sub === "current") {
+    deprecate("mo worker current");
+    return current(ctx, args);
+  }
   throw new MoError("E_USAGE", "未知子命令：worker " + sub + "（可用：list / add / remove / use / current）");
 }
 

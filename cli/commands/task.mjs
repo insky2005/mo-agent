@@ -2,9 +2,9 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { cardSections, renderCard, validateCard, verifyItems } from "../../core/tasks/card.mjs";
 import { newTaskId } from "../lib/ids.mjs";
-import { all, has, one } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
-import { moHome, cardPath } from "../lib/paths.mjs";
+import { all, has, one } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
+import { moHome, cardPath, logPath } from "../lib/paths.mjs";
 import { appendEvent, listCards, loadCard, readEvents, readReceipt, saveCard } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";
 import { dispatchSession, dispatchTask } from "../lib/dispatch.mjs";
@@ -13,6 +13,8 @@ import { readRunLog } from "../lib/logs.mjs";
 import { resolveDefaultWorker, resolveWorker } from "../lib/workers-config.mjs";
 import { transition } from "../lib/ingest.mjs";
 import readline from "node:readline/promises";
+import { spawn } from "node:child_process";
+import { selfCommand } from "../lib/self.mjs";
 import { applyDecision, expireOverdue, listRequests, pendingForTask, readRequest, requestConfirmation } from "../lib/approvals.mjs";
 import { cardDigest, parseApprovalAnswer } from "../../core/manager/approval.mjs";
 import { parseDuration } from "../lib/envelope.mjs";
@@ -76,7 +78,7 @@ export function taskCommand(ctx, args) {
   if (sub === "reject") return rejectTask(ctx, args, home);
   if (sub === "requests") return requestsTask(ctx, args, home);
   if (sub === "cancel") return cancelTask(ctx, args, home);
-  if (sub === "status") return statusTask(ctx, args, home);
+  if (sub === "status" || sub === "show") return statusTask(ctx, args, home);
   if (sub === "list") return listTask(ctx, args, home);
   if (sub === "dispatch") return dispatchCommand(ctx, args, home);
   if (sub === "verify") return verifyTask(ctx, args, home);
@@ -85,7 +87,7 @@ export function taskCommand(ctx, args) {
   throw new MoError("E_USAGE", "未知子命令：task " + (sub || "") + "（可用：create / confirm / approve / reject / requests / cancel / status / list / dispatch / verify / logs）");
 }
 
-function createTask(ctx, args, home) {
+async function createTask(ctx, args, home) {
   const resolved = resolveContext(ctx, args, { autoAttach: true });
   const title = one(args.options, "title");
   if (!title) throw new MoError("E_USAGE", "缺少 --title");
@@ -157,7 +159,39 @@ function createTask(ctx, args, home) {
       "",
       "下一步（确认）：mo task confirm " + id,
     ].join("\n"));
-  return 0;
+
+  // TTY 下把「确认 + 批准 + 派单」合成一次交互（C4）。
+  // 非 TTY / --json / --no-prompt 保持纯建卡：脚本与 Agent 不能被卡在提示上。
+  if (!process.stdin.isTTY || has(args.options, "json") || has(args.options, "no-prompt")) return 0;
+  const hasExecutor = Boolean(meta.exec || meta.worker || resolveDefaultWorker({ home, projectRoot: resolved.root }));
+  if (!hasExecutor) {
+    process.stderr.write("[W_NO_EXECUTOR] 没有执行者，先 mo worker use <名称> 再 mo task dispatch " + id + "\n");
+    return 0;
+  }
+
+  const answer = parseApprovalAnswer(
+    await askYesNo([
+      "",
+      "现在批准并派单吗？",
+      "",
+      "  y 批准并后台派单 / n 只建卡（稍后自己确认）",
+    ]),
+  );
+  if (answer !== "yes") return 0;
+
+  return approveAndDetach({ args, home, root: resolved.root, taskId: id, chosen });
+}
+
+/** create 的「现在批准并派单」：确认 + 批准 + 后台派单，一步完成（C4）。 */
+export function approveAndDetach({ args, home, root, taskId, chosen }) {
+  const { request } = requestConfirmation({
+    home,
+    root,
+    card: loadCard(root, taskId),
+    requestedBy: { actor: "human", from: "cli" },
+  });
+  applyDecision({ home, root, request, status: "approved", channel: "terminal", note: "create 时一并批准" });
+  return detachDispatch({ args, home, root, taskId, chosen });
 }
 
 function loadTarget(ctx, args) {
@@ -260,6 +294,24 @@ async function askYesNo(lines) {
   }
 }
 
+/** 批准前给人看的内容：交付物与验收项，而不是只有标题和指纹。 */
+function describeForApproval(card) {
+  const sections = cardSections(card.body || "");
+  const deliverables = String(sections["交付物"] || "")
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter((line) => line && line !== "（未填写）");
+  const verify = verifyItems(card.meta).map((raw) => {
+    if (raw && typeof raw === "object") {
+      const kind = ["run", "check", "human"].find((key) => raw[key] !== undefined);
+      if (kind) return kind + ": " + String(raw[kind]);
+      return JSON.stringify(raw);
+    }
+    return String(raw);
+  });
+  return { deliverables, verify };
+}
+
 /** mo task approve —— 人在终端批准；指纹不一致就作废 */
 async function approveTask(ctx, args, home) {
   const { resolved, taskId, card } = loadTarget(ctx, args);
@@ -277,13 +329,15 @@ async function approveTask(ctx, args, home) {
   }
 
   if (interactive) {
+    const preview = describeForApproval(card);
     const answer = parseApprovalAnswer(
       await askYesNo([
         "要批准这张卡吗？",
         "",
         "  标题   " + card.meta.title,
         "  项目   " + card.meta.project,
-        "  验收   " + (verifyItems(card.meta).length ? verifyItems(card.meta).length + " 项" : "无"),
+        "  交付   " + (preview.deliverables.length ? preview.deliverables.join("；") : "（未填写）"),
+        "  验收   " + (preview.verify.length ? preview.verify.join("；") : "（无，完成后无法判定）"),
         "  指纹   " + cardDigest(card).slice(0, 12) + "…",
         "  请求   " + request.id,
         "",
@@ -430,16 +484,46 @@ function statusTask(ctx, args, home) {
   return 0;
 }
 
-function listTask(ctx, args) {
+/** 一句话说明这张卡在等什么；没有就留空（列表靠它一眼看出该找谁）。 */
+function todoOf(card, pendingTasks) {
+  if (pendingTasks.has(card.meta.id)) return "待批准";
+  if (card.meta.status === "blocked") return "待重试";
+  if (card.meta.status === "draft") return "待确认";
+  return "";
+}
+
+function listTask(ctx, args, home) {
   const resolved = resolveContext(ctx, args);
   const cards = listCards(resolved.root);
   if (!cards.length) {
     emit(args.options, { tasks: [] }, "这个项目还没有任务卡");
     return 0;
   }
-  const rows = cards.map((card) => [card.meta.id, card.meta.status, card.meta.title]);
-  emit(args.options, { tasks: cards.map((card) => ({ id: card.meta.id, status: card.meta.status, title: card.meta.title })) }, () =>
-    table(rows, ["id", "状态", "标题"]));
+  const pendingTasks = new Set(
+    listRequests(home)
+      .filter((item) => item.status === "pending")
+      .map((item) => item.taskId),
+  );
+  const rows = cards.map((card) => [
+    card.meta.id,
+    card.meta.status,
+    todoOf(card, pendingTasks),
+    card.meta.verified || "unverified",
+    card.meta.title,
+  ]);
+  emit(
+    args.options,
+    {
+      tasks: cards.map((card) => ({
+        id: card.meta.id,
+        status: card.meta.status,
+        todo: todoOf(card, pendingTasks),
+        verified: card.meta.verified || "unverified",
+        title: card.meta.title,
+      })),
+    },
+    () => table(rows, ["id", "状态", "待办", "验收", "标题"]),
+  );
   return 0;
 }
 
@@ -539,14 +623,83 @@ function dispatchCommand(ctx, args, home) {
 }
 
 function nextStep(result, taskId) {
-  // 只在需要动作时才提示；done 是终点，不再给"下一步"制造噪音
+  // 只在需要动作时才提示；done 是终点，不再给"下一步"制造噪音。
+  // blocked 的出路取决于原因：只有缺回执/超时值得直接重派。
   if (result.status === "blocked") {
-    return { label: "重试", command: "mo task dispatch " + taskId };
+    if (result.reason === "missing_receipt" || result.reason === "timeout") {
+      return { label: "重试", command: "mo task dispatch " + taskId };
+    }
+    if (result.reason === "verify_failed") {
+      return { label: "看验收", command: "mo task verify " + taskId };
+    }
+    if (result.reason === "bad_receipt") {
+      return { label: "看日志", command: "mo task logs " + taskId };
+    }
+    if (result.reason === "needs_input") {
+      return { label: "看提问", command: "mo task status " + taskId };
+    }
+    return { label: "看状态", command: "mo task status " + taskId };
   }
   if (result.status === "failed") {
     return { label: "排查", command: "mo task status " + taskId };
   }
   return null;
+}
+
+/**
+ * 后台派单：spawn 一个自己（同样的命令 + --force），立即返回。
+ * 卡先被改成 dispatched/running 占位，重复调用会被状态机挡住。
+ */
+function detachDispatch({ args, home, root, taskId, chosen }) {
+  const card = loadCard(root, taskId);
+  const status = card.meta.status;
+  if (status !== "confirmed" && status !== "blocked") {
+    throw new MoError("E_NOT_CONFIRMED", "只有 confirmed / blocked 的卡能后台派单，当前状态是 " + status, {
+      hint: status === "draft" ? "先 mo task confirm " + taskId : "用 mo task status " + taskId + " 看进展",
+    });
+  }
+
+  const claimed = status === "blocked" ? "running" : "dispatched";
+  transition({ home, root, card, to: claimed, payload: { detach: true }, actor: "agent" });
+
+  const self = selfCommand();
+  const childArgs = [...self.prefix, "task", "dispatch", taskId, "--force", "--project", root];
+  const exec = chosen && chosen.command ? chosen.command : one(args.options, "exec");
+  if (exec) childArgs.push("--exec", String(exec));
+  if (one(args.options, "timeout")) childArgs.push("--timeout", String(one(args.options, "timeout")));
+
+  let child;
+  try {
+    child = spawn(self.command, childArgs, {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } catch (error) {
+    throw new MoError("E_DISPATCH_FAILED", "后台派单启动失败：" + (error && error.message ? error.message : error), {
+      hint: "卡片已经是 " + claimed + "；用 mo task status " + taskId + " 看状态",
+    });
+  }
+
+  const log = path.relative(root, logPath(root, taskId));
+  emit(
+    args.options,
+    { ok: true, taskId, status: claimed, detached: true, pid: child.pid || null, log },
+    () =>
+      [
+        "✓ 已后台派单",
+        "",
+        "  id     " + taskId,
+        "  状态   " + claimed,
+        "  进程   " + (child.pid || "-"),
+        "  日志   " + log,
+        "",
+        "等结果：mo inbox pull --wait 10m（或 mo task status " + taskId + "）",
+      ].join("\n"),
+  );
+  return 0;
 }
 
 export function runDispatch(args, { home, root, taskId }) {
@@ -575,9 +728,16 @@ export function runDispatch(args, { home, root, taskId }) {
       hint: "先装好它，或换一个 --worker / 用 --exec",
     });
   }
+  const force = has(args.options, "force");
+
+  // 后台派单：先占位（改状态）再 spawn 自己，避免连点两次起两个执行者
+  if (has(args.options, "detach") && !(chosen && chosen.session)) {
+    return detachDispatch({ args, home, root, taskId, chosen });
+  }
+
   // 会话型 worker：开窗口跑，过程可见；dispatch 立即返回，结果等回执
   if (chosen && chosen.session) {
-    const result = dispatchSession({ home, root, taskId, worker: chosen, actor: "agent" });
+    const result = dispatchSession({ home, root, taskId, worker: chosen, actor: "agent", force });
     emit(
       args.options,
       { ok: true, ...result },
@@ -605,6 +765,7 @@ export function runDispatch(args, { home, root, taskId }) {
     exec: chosen ? chosen.command : one(args.options, "exec"),
     timeout: one(args.options, "timeout"),
     actor: "agent",
+    force,
   }).then((result) => {
     emit(args.options, { ok: result.status === "done", ...result }, () => {
       const head = {

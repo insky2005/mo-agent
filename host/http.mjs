@@ -7,7 +7,7 @@ import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { handleLogRoutes } from "./logs-http.mjs";
 import { handleMonitorRoutes } from "./monitor-http.mjs";
 import { canControl } from "../core/contract.mjs";
-import { decideTaskApproval, listTaskApprovals } from "./task-approvals.mjs";
+import { decideTaskApproval, dispatchApprovedTask, listTaskApprovals } from "./task-approvals.mjs";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -673,7 +673,19 @@ export function createMoAgentServer(options) {
         try {
           const result = decideTaskApproval({ id: taskApprovalMatch[1], decision: String(body.decision || "") });
           log.info("网页已处理任务确认 " + result.id + " -> " + result.status + "（任务 " + result.taskId + "）");
-          return json(res, 200, { ok: true, ...result });
+
+          // 「批准并派单」：手机上这一次点击就能把卡送出去，不用再回终端敲 dispatch。
+          // 派单失败不影响批准本身（批准已经落盘），把失败原因带回给客户端。
+          let dispatched = null;
+          if (result.status === "approved" && body.dispatch === true) {
+            try {
+              dispatched = dispatchApprovedTask({ id: result.id, log });
+            } catch (error) {
+              dispatched = { error: (error && error.code) || "E_DISPATCH", message: (error && error.message) || "派单失败" };
+              log.warn("按批准派单失败 " + result.taskId + "：" + dispatched.message);
+            }
+          }
+          return json(res, 200, { ok: true, ...result, ...(dispatched ? { dispatched } : {}) });
         } catch (error) {
           const code = (error && error.code) || null;
           const status = code === "E_CARD_CHANGED" ? 409 : code === "E_USAGE" ? 400 : 404;

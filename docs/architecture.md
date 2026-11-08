@@ -48,8 +48,8 @@ Mo Agent 有两个面：
 | 目录 | 职责 | 边界 | 实测代码量 |
 |---|---|---|---|
 | `core/` | **领域核心，纯逻辑**。事件词汇表、Hub 归约、通知策略、任务卡状态机、记忆打分、Router 能力面策略 | **不碰文件、不发网络、不起进程** | 2.2k |
-| `cli/` | **应用内核 + 命令行**（物理上还在一起，按 §5 的两条守卫分界）：`lib/` 是应用层（项目、卡、批准、派单、回执、账本、记忆、**Router 的安装与生命周期**）；`commands/` + `mo.mjs` 是接口层（argv、文案、补全） | 不 import `host/`；退出即止 | 9.7k |
-| `host/` | **常驻服务**。HTTP/SSE、鉴权、配对、适配器调度、钉钉 Stream、推送、语音、hooks 写入、批准页；Router 只保留"会话接管 + HTTP 薄壳"（`router-session.mjs`） | 唯一的常驻 IO 层 | 10.9k |
+| `cli/` | **应用内核 + 命令行**（按目录分界）：`lib/` 是**内核**（项目、卡、批准、派单、回执、账本、记忆、notes、**Router 的安装与生命周期**），host 可复用；`ui/` 是界面层（argv 解析、输出、help、弃用提示）；`commands/` + `mo.mjs` 是接口层 | 不 import `host/`；退出即止；`lib` 不许 import `ui`/`commands` | 11.1k |
+| `host/` | **常驻服务**。HTTP/SSE、鉴权、配对、适配器调度、钉钉 Stream、推送、语音、hooks 写入、批准页；Router 只保留"会话接管 + HTTP 薄壳"（`router-session.mjs`） | 唯一的常驻 IO 层 | 9.8k |
 | `adapters/` | **观测层**。把每家 Agent 的原始状态翻译成统一事件；`profiles/*.json` 声明能力 | 只陈述事实，不决定通知文案；不投递 | 2.9k |
 | `approvals/` | **审批挂接点**。被 Agent 调用的 hook CLI、决策 broker、厂商事件名映射 | 不直接推送 | 0.5k |
 | `app/web/` | 监控页、管理页、审批页、语音浮层、PWA | **只通过 host 的 HTTP/SSE 访问**，不 import 任何后端模块 | 5.0k |
@@ -58,6 +58,22 @@ Mo Agent 有两个面：
 | `hooks/` | 三家 Agent 的 `settings.snippet.json` 模板 | 只是模板，由 host 写入真实配置 | 0 行代码 |
 | `integrations/` | Pi 控制扩展（注入到 Pi 进程内） | 只跟 host 的 `/local/pi/*` 说话 | 0.2k |
 | `scripts/` | 构建、安装、生成、e2e、发版 | 可以调任何层，但只做工具 | — |
+
+### 3.1 host 内部模块
+
+host 对外只有一条边界："常驻 IO + 外部事件源 + UI 数据面"。对内按职责分七组，新增代码先归组，再决定要不要新起一组：
+
+| 组 | 模块 | 职责 |
+|---|---|---|
+| 接入 | `index.mjs`、`http.mjs`、`admin-auth.mjs` | 启动、路由、鉴权、SSE |
+| 设备 | `pairing.mjs`、`pair-http.mjs`、`push-tokens.mjs`、`hms-push.mjs` | 配对令牌、设备登记、系统推送 |
+| 通道 | `notify-webhook.mjs`、`notify-config.mjs`、`dingtalk-*.mjs`、`voice/*` | 把 notify 事件送到人面前 |
+| 任务 | `task-approvals.mjs`、`task-watch.mjs` | 任务卡批准（含"允许并派单"）与待批提示 |
+| 观测 | `agent-hooks.mjs`、`pi-extension.mjs`、`monitor-http.mjs`、`logs-http.mjs` | hook 写入、Pi 扩展、监控与日志页 |
+| 页面 | `settings-page.mjs` | 设置页（安装 / 配对 / 钉钉 / Agent / 语音 / 系统） |
+| 壳 | `config.mjs`、`log.mjs`、`log-file.mjs`、`router-session.mjs` | 配置、日志轮转、指挥台会话接管 |
+
+**通道统一契约**：任何推送通道只要实现 `{ accepts?(payload), send(payload) }`，就能挂到 `core/notify.mjs` 的 `Notifier`（`register/unregister`）。通道不判断"要不要打扰"——那是 `NOTIFY_POLICY` 与静音时段的事；通道也不碰重试之外的业务状态。
 
 ## 4. 一次事件的生命周期
 

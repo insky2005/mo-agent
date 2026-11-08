@@ -27,7 +27,13 @@ const TYPE = {
   failed: "task.failed",
   canceled: "task.canceled",
   expired: "task.expired",
+  approved: "task.confirmed",
+  rejected: "task.confirm_rejected",
+  stale: "task.confirm_stale",
 };
+
+/** 确认结果用单独文件，任务进入终态时清掉——否则同一张卡会占两条收件箱。 */
+const CONFIRM_SUFFIX = "@confirm";
 
 /**
  * 只有任务"需要人看一眼"时才落收件箱：完成、阻塞、失败。
@@ -57,6 +63,45 @@ export function writeInbox({ home, taskId, project, projectRoot, title, status, 
     needs: Array.isArray(needs) ? needs : [],
     deviations: Array.isArray(deviations) ? deviations : [],
     source,
+  };
+  writeJsonAtomic(file, item);
+  // 任务有结果了，之前那条「已批准、待派单」的提醒就没意义了
+  try {
+    fs.rmSync(path.join(pendingDir(home), taskId + CONFIRM_SUFFIX + ".json"), { force: true });
+  } catch {
+    // 删不掉不影响主流程
+  }
+  return item;
+}
+
+/**
+ * 确认请求的结果也进收件箱（B2）：主 Agent 下一轮 pull 就能知道
+ * "人已经批了 / 拒了"，不用等人再催一句。批准本身仍然只能由人做。
+ */
+export function writeConfirmInbox({ home, project, projectRoot, taskId, title, decision, requestId, channel }) {
+  if (!taskId || !TYPE[decision]) return null;
+  const file = path.join(pendingDir(home), taskId + CONFIRM_SUFFIX + ".json");
+  const previous = readJsonSafe(file, null);
+  if (previous && previous.requestId === requestId && previous.status === decision) return previous;
+  const item = {
+    v: 1,
+    id: taskId + CONFIRM_SUFFIX,
+    seq: (previous && Number(previous.seq)) ? Number(previous.seq) + 1 : 1,
+    at: new Date().toISOString(),
+    type: TYPE[decision],
+    status: decision,
+    taskId,
+    requestId: requestId || null,
+    channel: channel || null,
+    project: project || null,
+    projectRoot: projectRoot || null,
+    title: title || null,
+    verified: "unverified",
+    summary: null,
+    reason: decision,
+    needs: [],
+    deviations: [],
+    source: "human",
   };
   writeJsonAtomic(file, item);
   return item;

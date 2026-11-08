@@ -1,8 +1,7 @@
-import fs from "node:fs";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { VERSION } from "../lib/version.mjs";
 import { TOOLS as CONTRACT_TOOLS } from "../../core/manager/contract.mjs";
+import { selfCommand } from "../lib/self.mjs";
 
 /**
  * mo mcp —— stdio 薄壳（spec §9）。
@@ -98,17 +97,6 @@ async function confirmWithElicitation(args) {
   const applied = await runCli(["task", action, taskId, "--yes", "--channel", "mcp-elicitation", "--json"]);
   const body = applied.stdout.trim() || applied.stderr.trim() || "（无输出）";
   return { result: textResult(body, applied.code !== 0) };
-}
-
-/** 自我定位：源码运行时 execPath + cli/mo.mjs，单文件二进制时直接 execPath */
-function selfCommand() {
-  try {
-    const entry = fileURLToPath(new URL("../mo.mjs", import.meta.url));
-    if (fs.existsSync(entry)) return { command: process.execPath, prefix: [entry] };
-  } catch {
-    // 单文件二进制里 import.meta.url 不是真实路径，落到下面的分支
-  }
-  return { command: process.execPath, prefix: [] };
 }
 
 function runCli(args, { input, cwd } = {}) {
@@ -219,6 +207,16 @@ const BUILDERS = {
       flag(list, "scope", [args.scope]);
       return list;
     },
+  },
+  note_write: {
+    build: () => ["internal", "note-write"],
+    input: (args) =>
+      JSON.stringify({
+        title: args.title,
+        slug: args.slug,
+        body: args.body,
+        tags: args.tags || [],
+      }),
   },
   memory_propose: {
     build: () => ["memory", "propose", "--file", "-"],

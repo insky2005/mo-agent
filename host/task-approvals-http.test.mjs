@@ -112,3 +112,24 @@ test("重复处理返回 404，非法 decision 返回 400", async () => {
     app.server.close();
   }
 });
+
+test("POST 带 dispatch:true：批准后顺手派单，失败原因带回但不影响批准", async () => {
+  const ws = workspace();
+  const app = await startServer();
+  try {
+    const base = "http://127.0.0.1:" + app.server.address().port;
+    const response = await fetch(base + "/api/task-approvals/" + ws.request.id, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "approve", dispatch: true }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.status, "approved");
+    assert.equal(loadCard(ws.project, "t_1").meta.status, "confirmed", "批准本身必须生效");
+    // 这张卡没有执行者 → 派单失败，但错误被带回客户端而不是 500
+    assert.equal(body.dispatched.error, "E_NO_EXECUTOR");
+  } finally {
+    app.server.close();
+  }
+});

@@ -7,7 +7,7 @@ import { listProjects, findProjectRoot } from "../lib/project.mjs";
 import { listCards } from "../lib/store.mjs";
 import { listAgents } from "../lib/executors.mjs";
 import { listCandidates } from "../lib/candidates.mjs";
-import { groupNames } from "../lib/help.mjs";
+import { groupNames } from "../ui/help.mjs";
 import { allTargets } from "./skill.mjs";
 import { CONFIG_KEYS } from "../lib/config.mjs";
 
@@ -30,6 +30,7 @@ const SPEC = {
       requests: { flags: [] },
       cancel: { flags: [], ...taskIds },
       status: { flags: [], ...taskIds },
+      show: { flags: [], ...taskIds },
       list: { flags: [] },
       dispatch: { flags: ["--worker", "--exec", "--timeout"], ...taskIds },
       verify: { flags: [], ...taskIds },
@@ -39,6 +40,7 @@ const SPEC = {
   project: {
     subs: {
       init: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
+      create: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
       agent: { flags: ["--file", "--mode", "--remove"] },
       list: { flags: [] },
       remove: { flags: ["--path", "--purge", "--dry-run", "--yes", "--id"] },
@@ -48,6 +50,7 @@ const SPEC = {
     subs: {
       recall: { flags: ["--limit", "--scope", "--all"] },
       list: { flags: ["--scope"] },
+      create: { flags: [] },
       init: { flags: [] },
       path: { flags: [] },
       migrate: { flags: ["--dry-run"] },
@@ -138,6 +141,33 @@ const SPEC = {
       status: { flags: [] },
     },
   },
+  connect: {
+    subs: {
+      describe: { flags: ["--json"] },
+      add: { flags: ["--mcp", "--prompt", "--name"] },
+      project: { flags: ["--file", "--mode", "--remove"] },
+    },
+  },
+  serve: {
+    subs: {
+      start: { flags: ["--port", "--foreground", "--no-apk"] },
+      stop: { flags: [] },
+      restart: { flags: [] },
+      status: { flags: [] },
+      open: { flags: ["--browser", "--show-token"], positional: "daemonTarget" },
+      router: { flags: [] },
+    },
+  },
+  internal: {
+    subs: {
+      mcp: { flags: [] },
+      receipt: { flags: [], ...taskIds },
+      watchdog: { flags: ["--project", "--all", "--dry-run"] },
+      completion: { flags: [] },
+      "memory-migrate": { flags: ["--dry-run"] },
+      "note-write": { flags: ["--file", "--title", "--body", "--slug", "--tag"] },
+    },
+  },
   setup: { subs: {} },
   upgrade: { subs: {} },
   completion: { subs: { bash: { flags: [] }, zsh: { flags: [] } } },
@@ -178,7 +208,7 @@ const NO_SUB_FLAGS = {
   upgrade: ["--check", "--dry-run", "--version", "--force", "--json"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "router", "config", "setup", "upgrade", "watchdog", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "router", "config", "setup", "upgrade", "watchdog", "completion", "connect", "serve", "internal", "version", "help"];
 
 function item(value, description) {
   return { value, description };

@@ -2,8 +2,8 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { has, one } from "../lib/args.mjs";
-import { emit } from "../lib/output.mjs";
+import { has, one } from "../ui/args.mjs";
+import { emit } from "../ui/output.mjs";
 import { daemonCommand } from "./daemon.mjs";
 import { createRouterManager } from "../lib/router-manager.mjs";
 

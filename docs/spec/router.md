@@ -194,7 +194,7 @@ capabilities: {
 |---|---|---|---|
 | `task_create` / `task_confirm` / `task_dispatch` | 建卡、发起确认、派单 | 项目内 `.mo-agent/` | ✅ 已有 |
 | `memory_propose` | 记忆候选 | `~/.mo-agent/memory/candidates/` | ✅ 已有 |
-| `note_write` | 过程文档 | `~/.mo-agent/notes/` | ❌ 待新增 |
+| `note_write` | 过程文档 | `~/.mo-agent/notes/` | ✅ 已有（`cli/lib/notes.mjs`，CLI 说法是 `mo internal note-write`） |
 
 三者的共同点：**都不接受任意路径**，落点由 mo 决定。Router 永远没有"写这个文件"的能力，只有"记这一笔"的能力。
 

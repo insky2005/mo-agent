@@ -13,7 +13,7 @@ import { loadMobileMode, loadNotifyChannels } from "./notify-webhook.mjs";
 import { createDingTalkBot, loadDingTalkBotConfig } from "./dingtalk-bot.mjs";
 import { createDingTalkSetup } from "./dingtalk-setup.mjs";
 import { createPushTokenStore } from "./push-tokens.mjs";
-import { ensureNotifyConfig } from "./notify-config.mjs";
+import { ensureNotifyConfig, readQuietHours } from "./notify-config.mjs";
 import { DshClient } from "../adapters/dsh.mjs";
 import { createPiControl } from "../adapters/pi-control.mjs";
 import { installPiExtension, piExtensionStatus, uninstallPiExtension } from "./pi-extension.mjs";
@@ -32,6 +32,8 @@ import { createMoAgentServer, localIPv4List } from "./http.mjs";
 import { createHooksManager } from "./agent-hooks.mjs";
 import { createRouterManager } from "../cli/lib/router-manager.mjs";
 import { adoptRouterSession } from "./router-session.mjs";
+import { createTaskWatch } from "./task-watch.mjs";
+import { moHome } from "../cli/lib/paths.mjs";
 import { handlePairRoutes } from "./pair-http.mjs";
 import { handleSettingsRoutes } from "./settings-page.mjs";
 import { PairingManager, buildPairPayload } from "./pairing.mjs";
@@ -46,15 +48,16 @@ const webDir = path.join(root, "app", "web");
 // APK 有两个来源：打包进运行时的（桌面分发版），或用户用 scripts/fetch-apk.sh 下到本机的。
 // 前者优先；都没有时 /app.apk 会 404 并提示去下载。
 const bundledApkPath = path.join(root, "app", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-const fetchedApkPath = path.join(os.homedir(), ".mo-agent", "app.apk");
+const dataDir = moHome();
+const fetchedApkPath = path.join(dataDir, "app.apk");
 const apkPath = fs.existsSync(bundledApkPath) ? bundledApkPath : fetchedApkPath;
 // host 自己写这份日志并在 5MB 处轮转（.1 -> .3），桌面壳不再重定向 stdout/stderr。
 // 桌面端的启动/退出信息单独写 desktop.log，避免两个进程抢同一个文件。
 const logFile = process.env.MO_AGENT_LOG_FILE || path.join(os.homedir(), "Library", "Logs", "mo-agent", "host.log");
 // 已配对设备令牌落盘，host 重启后不丢（否则每次「重启服务」都要重新配对）
-const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(os.homedir(), ".mo-agent", "devices.json");
+const deviceFile = process.env.MO_AGENT_DEVICE_FILE || path.join(dataDir, "devices.json");
 // 本机会话凭证：令牌跨 host 重启复用，避免书签/管理 Cookie 每次重启失效。
-const sessionFile = path.join(os.homedir(), ".mo-agent", "session.json");
+const sessionFile = path.join(dataDir, "session.json");
 
 const config = loadConfig(process.argv);
 config.transcriptPollMs = config.transcriptPollMs || 2000;
@@ -63,7 +66,8 @@ const log = createLogger(config.logLevel, createRotatingSink({ file: logFile }))
 
 const hub = new Hub({ log, historySize: config.historySize });
 // 统一通知路由：把授权/提问/完成/失败翻译成 notify 事件，客户端只认这一条
-const notifier = new Notifier({ hub, log });
+// 静音时段只挡不紧急的通知（授权/报错是 critical，照常送达）
+const notifier = new Notifier({ hub, log, quietHours: readQuietHours({ env: process.env }) });
 const pushTokens = createPushTokenStore({ log });
 // 首次启动自动写默认通知配置，用户（含其他安装者）不用手写 ~/.mo-agent/notify.json
 const notifyDefaults = process.env.MO_AGENT_NOTIFY_DEFAULTS
@@ -76,6 +80,11 @@ for (const channel of loadNotifyChannels({ log, mobileMode: loadMobileMode({ log
   log.info("已注册通知通道: " + channel.name);
 }
 notifier.start();
+
+// 任务确认请求是文件队列（~/.mo-agent/approvals/），CLI 写完不进事件流；
+// host 常驻时把它翻成 notice，手机/桌面才收得到「有卡等你批准」。
+const taskWatch = createTaskWatch({ hub, log });
+taskWatch.start();
 
 function readPersistedLocalToken() {
   try {
@@ -122,7 +131,7 @@ function firstExisting(candidates, fallback) {
 
 function readVoiceConfig() {
   try {
-    const file = path.join(os.homedir(), ".mo-agent", "voice.json");
+    const file = path.join(dataDir, "voice.json");
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
     return parsed && parsed.enabled === true;
   } catch (error) {
@@ -761,6 +770,7 @@ async function main() {
         /* 忽略 */
       }
     }
+    if (taskWatch) taskWatch.stop();
     if (voice) voice.stop();
     if (dingtalkBot) dingtalkBot.stop();
     broker.cancelAll("shutdown");

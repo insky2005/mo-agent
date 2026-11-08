@@ -71,9 +71,12 @@
       parts.push('<div class="cardTop"><div class="cardTitle">确认任务卡 · ' + esc(item.title || item.taskId) + '</div><span class="badge waiting">需要你批准</span></div>');
       parts.push('<div class="meta">' + esc(item.taskId) + ' · 指纹 ' + esc(String(item.cardHash || '').slice(0, 8)) + ' · ' + esc(item.expiresAt ? '有效至 ' + item.expiresAt.replace('T', ' ').slice(0, 16) : '') + '</div>');
       if (item.requestedBy && item.requestedBy.from) parts.push('<div class="meta">来自 ' + esc(item.requestedBy.from) + '</div>');
+      if (item.deliverables && item.deliverables.length) parts.push('<div class="meta">交付：' + esc(item.deliverables.join('；')) + '</div>');
+      if (item.verify && item.verify.length) parts.push('<div class="meta">验收：' + esc(item.verify.join('；')) + '</div>');
       parts.push('<div class="qText">批准后主 Agent 才能派发这张卡；批准前改卡会让这次批准失效。</div>');
       parts.push('<div class="cardActions">');
-      parts.push('<button class="ok" data-task-id="' + esc(item.id) + '" data-task-decision="approve">允许</button>');
+      parts.push('<button class="ok" data-task-id="' + esc(item.id) + '" data-task-decision="approve-dispatch">允许并派单</button>');
+      parts.push('<button data-task-id="' + esc(item.id) + '" data-task-decision="approve">只允许</button>');
       parts.push('<button class="no" data-task-id="' + esc(item.id) + '" data-task-decision="reject">拒绝</button>');
       parts.push('</div></div>');
       return parts.join('');
@@ -93,11 +96,11 @@
       .catch(function () { /* 忽略 */ });
   }
 
-  function decideTask(id, decision) {
+  function decideTask(id, decision, dispatch) {
     fetch(BASE + '/api/task-approvals/' + encodeURIComponent(id), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-mo-agent-token': token },
-      body: JSON.stringify({ decision: decision })
+      body: JSON.stringify({ decision: decision, dispatch: Boolean(dispatch) })
     })
       .then(function (res) { return res.json(); })
       .then(function (result) {
@@ -251,6 +254,9 @@
       } else if (evt.type === 'approval.resolved') {
         approvals.delete(p.id);
         render();
+      } else if (evt.type === 'task.confirm_requested') {
+        // 正式事件：不用等 5 秒轮询，新的待批卡片立刻出现
+        loadTasks();
       }
     };
   }
@@ -270,7 +276,12 @@
     }
     var taskButton = event.target.closest('button[data-task-decision]');
     if (taskButton) {
-      decideTask(taskButton.getAttribute('data-task-id'), taskButton.getAttribute('data-task-decision'));
+      var taskDecision = taskButton.getAttribute('data-task-decision');
+      if (taskDecision === 'approve-dispatch') {
+        decideTask(taskButton.getAttribute('data-task-id'), 'approve', true);
+      } else {
+        decideTask(taskButton.getAttribute('data-task-id'), taskDecision);
+      }
       return;
     }
     var button = event.target.closest('button[data-approval-decision]');

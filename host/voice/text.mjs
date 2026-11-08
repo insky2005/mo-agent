@@ -102,11 +102,36 @@ export function isDictationConfirm(text) {
   return DICTATION_CONFIRM_RE.test(normalized);
 }
 
-/** 口令必须逐位一致，多一位少一位都不行。 */
+/**
+ * 口令校验。
+ *
+ * 两种口令都认：
+ *  - 纯数字（旧格式 / 兼容）：必须逐位一致，多一位少一位都不行；
+ *  - 口语词（默认，见 makeWordNonce）：按词序列匹配，忽略空白与标点。
+ *
+ * 语音里念一串随机数字的识别率很低（"一/七""零/六"尤其糊），
+ * 所以默认改成念词；数字口令保留，老脚本和演示不受影响。
+ */
 export function matchesNonce(text, nonce) {
-  const want = String(nonce == null ? "" : nonce).replace(/\D/g, "");
+  const want = String(nonce == null ? "" : nonce).trim();
   if (!want) return false;
-  return digitSequence(text) === want;
+
+  if (/^\d+$/.test(want)) return digitSequence(text) === want;
+
+  const heard = normalizeReply(text);
+  const target = normalizeReply(want.replace(/[-—·\s]+/g, ""));
+  return Boolean(target) && heard.includes(target);
+}
+
+/**
+ * 念口令的方式：数字逐位念，词之间停顿。
+ * TTS 念"4729"会读成"四千七百二十九"，所以两种都要显式拆开。
+ */
+export function spellNonce(nonce) {
+  const value = String(nonce == null ? "" : nonce).trim();
+  if (!value) return "";
+  if (/^\d+$/.test(value)) return value.split("").join(" ");
+  return value.split(/[-—·\s]+/).filter(Boolean).join("，");
 }
 
 export function makeNonce(length, random) {
@@ -115,6 +140,31 @@ export function makeNonce(length, random) {
   let out = "";
   for (let i = 0; i < n; i++) out += String(Math.floor(rnd() * 10) % 10);
   return out;
+}
+
+/**
+ * 口语口令的词表：都挑 1–2 个音节、听感差异大的常用词。
+ * 刻意混入"红/蓝色"这种颜色词与"苹果/月亮"这种实物词，避免被 ASR 归成同一类。
+ */
+export const NONCE_WORDS = Object.freeze([
+  "红", "蓝", "苹果", "香蕉", "火车", "石头", "月亮", "太阳",
+  "雨伞", "老虎", "大象", "钢琴", "雪球", "灯塔", "铃铛", "海豚",
+]);
+
+/** 默认口令长度：3 个词（≈ 4 位数字的强度，但好念得多）。 */
+export const WORD_NONCE_SIZE = 3;
+
+/** 生成口语口令，形如"红-苹果-三"；不取重复词。 */
+export function makeWordNonce(length, random) {
+  const n = Math.max(1, Math.min(NONCE_WORDS.length, length || WORD_NONCE_SIZE));
+  const rnd = random || Math.random;
+  const pool = NONCE_WORDS.slice();
+  const picked = [];
+  for (let i = 0; i < n; i++) {
+    const index = Math.floor(rnd() * pool.length) % pool.length;
+    picked.push(pool.splice(index, 1)[0]);
+  }
+  return picked.join("-");
 }
 
 const DANGER_RULES = [
@@ -190,6 +240,6 @@ export function buildApprovalDraft(input) {
     : "";
   const targetText = target ? "，目标 " + spellPaths(target) : "";
   const prompt = prefix + agentLabel + " 请求" + toolName + targetText + "。" +
-    "听到提示音后，请复述口令：" + nonce.split("").join(" ") + "。";
+    "听到提示音后，请复述口令：" + spellNonce(nonce) + "。";
   return { kind: "approval", agentLabel, toolName, title, target, nonce, danger, prompt };
 }
