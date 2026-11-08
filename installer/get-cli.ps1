@@ -92,9 +92,27 @@ try {
 
   Write-Host ""
   Write-Host "下一步："
-  Write-Host "  mo setup                 首次装配（幂等）；先看会做什么：mo setup --dry-run"
-  Write-Host "  mo doctor                自检"
-  Write-Host "  mo project init          在项目目录初始化 .mo-agent/"
+  Write-Host "  mo setup         首次装配（幂等）：配置、记忆、默认执行者/终端、技能、MCP"
+  Write-Host "                   会问要不要配指挥台（那一步要下载约 150MB，可以说不）"
+  Write-Host "                   先看它会做什么：mo setup --dry-run"
+  Write-Host "  mo doctor        自检；最后一行会告诉你「下一步做什么」"
+  Write-Host ""
+  Write-Host "先选一条路（随时可以换）："
+  Write-Host "  只看不改         装桌面 App + 手机（Windows 版适配中）：收通知、远程批准"
+  Write-Host "  接外部 Agent     mo connect describe    提示词 / MCP / 技能三种接法"
+  Write-Host "  用内置指挥台     mo router start        mo 自己的主 Agent，只分派不动手"
+  Write-Host "  只敲命令         看下面这段"
+  Write-Host ""
+  Write-Host "基本用法（在项目目录里）："
+  Write-Host "  mo project create    认领当前目录：写 .mo-agent/ 与 Agent 说明"
+  Write-Host "  mo worker list       看可用执行者（裸名=会话，-headless=无头）"
+  Write-Host '  mo task create --title hello --deliverable "x" --verify "run:echo hi" --worker claude-headless'
+  Write-Host "  mo task show <id>    状态 / 验收 / 待批 / 结论"
+  Write-Host "  mo task dispatch <id> --detach    批准后后台派单（手机也能点「允许并派单」）"
+  Write-Host "  mo inbox pull        收结果；也可以等手机通知"
+  Write-Host ""
+  Write-Host "没在 create 时批准：mo task confirm <id> 发起请求，手机或终端批准后再 dispatch"
+  Write-Host "命令以 mo help 为准（mo help --all 看全部分组，mo help <组> 看细节）。"
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 }
