@@ -10,16 +10,17 @@ import {
 } from "../lib/project.mjs";
 import { moHome, projectDir } from "../lib/paths.mjs";
 import { exists } from "../lib/fsx.mjs";
-import { all, has, one } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { all, has, one } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
+import { deprecate } from "../ui/deprecate.mjs";
 import { applyAgentFile, projectAgent } from "./agent.mjs";
 
 export function projectCommand(ctx, args) {
   const sub = args.positional[0] || "list";
   const home = moHome();
 
-  // init 是主名字；add 保留为别名
-  if (sub === "init" || sub === "add") {
+  // create 是统一动词（E1）；init / add 保留为别名
+  if (sub === "init" || sub === "add" || sub === "create") {
     const dir = args.positional[1] ? path.resolve(ctx.cwd, args.positional[1]) : ctx.cwd;
     const attached = attachProject(dir, { name: one(args.options, "name"), home });
 
@@ -44,6 +45,7 @@ export function projectCommand(ctx, args) {
   }
 
   if (sub === "agent") {
+    deprecate("mo project agent");
     return projectAgent(ctx, args);
   }
 

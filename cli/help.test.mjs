@@ -20,15 +20,31 @@ function run(args) {
   });
 }
 
-test("mo help 给主线与分组，不是一长串命令", () => {
+test("mo help 默认只给一条主路径，不超过 12 行", () => {
   const result = run(["help"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /第一次用/);
+  const lines = result.stdout.trim().split("\n");
+  assert.ok(lines.length <= 12, "首屏太长：" + lines.length + " 行");
+  assert.match(result.stdout, /mo setup/);
+  assert.match(result.stdout, /mo task create/);
+  assert.match(result.stdout, /mo task show <id>/);
+  assert.match(result.stdout, /mo serve start/);
+  assert.match(result.stdout, /mo connect describe/);
+  assert.match(result.stdout, /mo inbox pull/);
+  assert.match(result.stdout, /mo help --all/);
+  assert.match(result.stdout, /mo help <组>/);
+  assert.doesNotMatch(result.stdout, /全部子命令/);
+});
+
+test("mo help --all 才是全部分组与子命令", () => {
+  const result = run(["help", "--all"]);
+  assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /一个新项目/);
   assert.match(result.stdout, /一个新任务/);
   assert.match(result.stdout, /mo task approve <id>/);
-  assert.match(result.stdout, /mo help <组>/);
   assert.match(result.stdout, /全部子命令/);
+  assert.match(result.stdout, /inbox\s+pull/);
+  assert.match(result.stdout, /router/);
 });
 
 test("mo help <组> 给出该组子命令与说明", () => {
@@ -39,7 +55,7 @@ test("mo help <组> 给出该组子命令与说明", () => {
   assert.match(task.stdout, /全部命令：mo help/);
 
   const memory = run(["help", "memory"]);
-  assert.match(memory.stdout, /mo memory migrate/);
+  assert.match(memory.stdout, /mo memory create/);
 });
 
 test("组帮助带选项，而不是只列子命令", () => {
@@ -56,9 +72,9 @@ test("组帮助带选项，而不是只列子命令", () => {
   assert.match(task.stdout, /--verify run:\|check:\|human:/);
 });
 
-test("主帮助列出 inbox 组", () => {
+test("主帮助提到 inbox（等结果的入口）", () => {
   const result = run(["help"]);
-  assert.match(result.stdout, /inbox\s+pull/);
+  assert.match(result.stdout, /mo inbox pull/);
 });
 
 test("mo <组> --help 与 mo <组> help 等价", () => {

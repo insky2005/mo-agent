@@ -79,6 +79,22 @@ test("pointer 只有块头，MO.md 中等长度", () => {
   assert.ok(doc.split("\n").length < render("skill").split("\n").length);
 });
 
+test("指挥台契约：只读 + mo 工具，不含 shell 示例", () => {
+  const doc = render("router");
+  for (const tool of TOOLS) {
+    assert.ok(doc.includes(tool.name), "指挥台契约漏了工具 " + tool.name);
+  }
+  // 没有任何命令行示例：Router 没有 shell，写 bash 例子会诱导它去执行
+  assert.doesNotMatch(doc, /```/, "指挥台契约里不应有代码块");
+  assert.doesNotMatch(doc, /mo task /, "指挥台契约里不应出现命令行调用");
+  // 三条边界必须显式出现
+  assert.match(doc, /不属于任何项目/);
+  assert.match(doc, /memory_propose/);
+  // note_write 已落地（spec/router.md §5.4）：契约里必须出现，否则 Router 不知道能记过程文档
+  assert.match(doc, /note_write/);
+  assert.match(doc, /派单/);
+});
+
 test("所有格式都非空且以换行结尾", () => {
   for (const format of FORMATS) {
     const text = render(format);

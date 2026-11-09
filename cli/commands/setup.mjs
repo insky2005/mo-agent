@@ -1,9 +1,10 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { MoError } from "../../core/errors.mjs";
-import { all, has } from "../lib/args.mjs";
-import { emit, isJson, padDisplay } from "../lib/output.mjs";
+import { all, has, one } from "../ui/args.mjs";
+import { emit, isJson, padDisplay } from "../ui/output.mjs";
 import { ledgerDir, moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import {
@@ -30,6 +31,19 @@ import {
   terminalsFile,
 } from "../lib/terminals.mjs";
 import { doctorReport } from "./doctor.mjs";
+import {
+  installRuntime,
+  listRuntimes,
+  manifestFor,
+} from "../lib/router-install.mjs";
+import {
+  buildEnv,
+  providerEnvName,
+  resolveCredentials,
+  writeCredentials,
+} from "../lib/router-credentials.mjs";
+import { probeModel } from "../lib/router-probe.mjs";
+import { runtimeRoot } from "../lib/router-paths.mjs";
 
 /**
  * mo setup —— 首次装配，幂等。
@@ -328,8 +342,19 @@ async function stepMemory(ctx) {
 
 async function stepWorker(ctx) {
   const current = defaultWorkerName({ home: ctx.home });
-  if (current) return skipped("默认执行者 = " + current);
+  if (current && ctx.choices.workerKeep) return skipped("默认执行者 = " + current);
   if (ctx.choices.workerSkipped) return skipped("已跳过默认执行者");
+  // 已配置：非交互保持幂等（不改），交互问一句要不要换——否则看起来像"这一步没了"
+  if (current) {
+    if (!ctx.interactive) return skipped("默认执行者 = " + current + "（要改：mo worker use <名>）");
+    promptGap(ctx);
+    const answer = (await ctx.prompter.ask("默认执行者已是 " + current + "，要换吗？(y/N) ")).toLowerCase();
+    ctx.asked = true;
+    if (answer !== "y" && answer !== "yes") {
+      ctx.choices.workerKeep = true;
+      return skipped("默认执行者 = " + current);
+    }
+  }
 
   const installed = listWorkers({ home: ctx.home }).filter((worker) => worker.source === "builtin" && worker.installed);
   if (!installed.length) {
@@ -364,8 +389,19 @@ async function stepWorker(ctx) {
 
 async function stepTerminal(ctx) {
   const current = currentTerminal({ home: ctx.home });
-  if (current) return skipped("默认终端 = " + current);
+  if (current && ctx.choices.terminalKeep) return skipped("默认终端 = " + current);
   if (ctx.choices.terminalSkipped) return skipped("已跳过默认终端");
+  // 同 stepWorker：交互时让"已经配过"也能改
+  if (current) {
+    if (!ctx.interactive) return skipped("默认终端 = " + current + "（要改：mo terminal use <名>）");
+    promptGap(ctx);
+    const answer = (await ctx.prompter.ask("默认终端已是 " + current + "，要换吗？(y/N) ")).toLowerCase();
+    ctx.asked = true;
+    if (answer !== "y" && answer !== "yes") {
+      ctx.choices.terminalKeep = true;
+      return skipped("默认终端 = " + current);
+    }
+  }
 
   const file = terminalsFile(ctx.home);
   const detected = detectTerminal();
@@ -537,6 +573,130 @@ async function stepMcp(ctx) {
   }, lines);
 }
 
+/**
+ * 指挥台（Router）：装私有运行时 + 配 provider/model/key。
+ *
+ * 这一步会下载约 150MB 依赖，所以：
+ *  - 交互模式先问一句；
+ *  - 非交互模式必须显式 --router，绝不因为 --yes 就悄悄装东西。
+ */
+const ROUTER_PROVIDERS = ["deepseek", "anthropic", "openai"];
+const ROUTER_DEFAULT_MODEL = { deepseek: "deepseek-flash" };
+
+async function stepRouter(ctx) {
+  const options = ctx.options || {};
+  const osHome = os.homedir();
+  const installed = listRuntimes({ home: osHome, env: process.env, platform: process.platform }).runtimes;
+  const hasRuntime = installed.some((item) => item.installed);
+  const current = resolveCredentials(ctx.home, process.env);
+
+  if (hasRuntime && current.ok) {
+    return skipped("指挥台已配置（运行时 " + installed[0].version + "，" + current.provider + " / " + current.model + "）");
+  }
+
+  const explicit = has(options, "router");
+  if (!ctx.interactive && !explicit) {
+    return skipped("非交互且未加 --router；手动：mo router runtime install && mo router setup");
+  }
+
+  if (ctx.interactive && !explicit) {
+    promptGap(ctx);
+    process.stdout.write(
+      "指挥台：mo 自己的主 Agent，常驻、只读代码、只做分派。\n" +
+        "它有独立的运行时与配置，不碰你平时用的 Agent，也不碰项目工作区。\n" +
+        "安装会下载约 150MB 依赖（一次），之后可随时 mo router setup 重配。\n",
+    );
+    const answer = (await ctx.prompter.ask("现在配置指挥台？(Y/n) ")).toLowerCase();
+    ctx.asked = true;
+    if (answer === "n" || answer === "no") {
+      return skipped("已跳过指挥台", null, ["之后：mo router runtime install", "然后：mo router setup --provider deepseek --key sk-..."]);
+    }
+  }
+
+  // provider
+  let provider = one(options, "router-provider") || process.env.MO_ROUTER_PROVIDER || "deepseek";
+  if (!ROUTER_PROVIDERS.includes(provider)) {
+    return failed("未知 provider：" + provider, null, ["可用：" + ROUTER_PROVIDERS.join(" / ")]);
+  }
+
+  // model
+  let model = one(options, "router-model") || process.env.MO_ROUTER_MODEL || "";
+  const modelFallback = ROUTER_DEFAULT_MODEL[provider] || "";
+  if (!model && ctx.interactive) {
+    const hint = modelFallback ? "（回车=" + modelFallback + "）" : "（必填，例如 provider 的模型 id）";
+    model = (await ctx.prompter.ask("模型 " + provider + " " + hint + "：")).trim() || modelFallback;
+    ctx.asked = true;
+  }
+  if (!model) model = modelFallback;
+  if (!model) {
+    return failed("缺少模型名", null, ["加上 --router-model <id>，或之后用 mo router setup 补"]);
+  }
+
+  // key：flag > 环境变量 > 交互输入 > 跳过
+  let apiKey = one(options, "router-key") || "";
+  const envName = providerEnvName(provider);
+  if (!apiKey && envName && process.env[envName]) apiKey = String(process.env[envName]);
+  if (!apiKey && ctx.interactive) {
+    promptGap(ctx);
+    process.stdout.write(
+      "凭据：" + provider + " 的 API key。会明文写入 " + ctx.home + "/router/credentials.json（0600）。\n" +
+        "想避免明文输入：先 export " + (envName || "…") + "=… 再跑 mo setup；或这里直接回车跳过。\n",
+    );
+    apiKey = (await ctx.prompter.ask("API key（回车=跳过）：")).trim();
+    ctx.asked = true;
+  }
+  if (!apiKey) {
+    return skipped("已跳过凭据", null, ["之后：mo router setup --provider " + provider + " --model " + model + " --key sk-..."]);
+  }
+
+  if (ctx.dryRun) {
+    const plan = [];
+    if (!hasRuntime) plan.push("将安装运行时 " + manifestFor("pi").version + "（约 150MB）");
+    plan.push("将写入凭据 " + ctx.home + "/router/credentials.json（0600）");
+    plan.push("将测通 " + provider + " / " + model);
+    return planned("将配置指挥台：" + provider + " / " + model, { provider, model }, plan);
+  }
+
+  let runtimeVersion = hasRuntime ? installed[0].version : null;
+  if (!hasRuntime) {
+    process.stderr.write("安装运行时 " + manifestFor("pi").version + "…（约 40 秒 / 150MB）\n");
+    const result = await installRuntime({ home: osHome, env: process.env, platform: process.platform });
+    runtimeVersion = result.version;
+  }
+
+  const written = writeCredentials(ctx.home, { provider, model, apiKey });
+  const probe = has(options, "no-test")
+    ? { tested: false, reason: "已跳过测通（--no-test）" }
+    : await probeModel({
+        bin: path.join(runtimeRoot({ home: osHome, env: process.env, platform: process.platform }), "routers", "pi", runtimeVersion, "bin", "pi"),
+        provider: written.provider,
+        model: written.model,
+        env: buildEnv(written.provider, apiKey),
+      });
+
+  const lines = [
+    "运行时 " + runtimeVersion,
+    "模型 " + written.provider + " / " + written.model,
+    "凭据 " + written.redacted + "（0600）",
+  ];
+  if (probe.tested === false) lines.push("测通 " + probe.reason);
+
+  if (probe.tested !== false && !probe.ok) {
+    return warning(
+      "指挥台已配置，但测通失败：" + (probe.error || "未知原因"),
+      { provider: written.provider, model: written.model, runtime: runtimeVersion },
+      [...lines, "测通 ✗ " + (probe.error || ""), "修好之后：mo router start"],
+    );
+  }
+  if (probe.tested !== false) lines.push("测通 ✓ " + probe.ms + "ms");
+  lines.push("启动：mo router start");
+  return created("指挥台已就绪：" + written.provider + " / " + written.model, {
+    provider: written.provider,
+    model: written.model,
+    runtime: runtimeVersion,
+  }, lines);
+}
+
 const STEPS = [
   { id: "dirs", title: "数据目录", run: stepDirs },
   { id: "config", title: "全局配置", run: stepConfig },
@@ -545,6 +705,7 @@ const STEPS = [
   { id: "terminal", title: "默认终端", run: stepTerminal },
   { id: "skill", title: "技能", run: stepSkill },
   { id: "mcp", title: "MCP", run: stepMcp },
+  { id: "router", title: "指挥台", run: stepRouter },
 ];
 
 function parseIdList(options, name, validIds) {
@@ -679,6 +840,7 @@ export async function setupCommand(ctx, args) {
   const runCtx = {
     home: defaultHome,
     cwd: ctx.cwd,
+    options,
     dryRun,
     paged,
     explicitYes,

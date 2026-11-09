@@ -3,11 +3,13 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { downloadVerified } from "./download.mjs";
+import { dataDirFrom } from "./paths.mjs";
 
 const DEFAULT_REPO = "insky2005/mo-agent";
 
-export function apkDest(home = os.homedir()) {
-  return path.join(home, ".mo-agent", "app.apk");
+export function apkDest(home = os.homedir(), env = process.env) {
+  return path.join(dataDirFrom(home, env), "app.apk");
 }
 
 function pickApkAsset(releases) {
@@ -30,7 +32,7 @@ export async function fetchApk(options = {}) {
   const home = options.home || os.homedir();
   const env = options.env || process.env;
   const log = options.log || (() => {});
-  const dest = apkDest(home);
+  const dest = apkDest(home, env);
 
   if (fs.existsSync(dest)) return { path: dest, downloaded: false, skipped: "已存在" };
 
@@ -43,21 +45,32 @@ export async function fetchApk(options = {}) {
   if (!picked) throw new Error("还没有发布过 APK（需要先推 apk-v* tag）");
 
   log("下载 " + picked.asset.name + " …");
-  const bin = await fetch(picked.asset.browser_download_url, { headers });
-  if (!bin.ok) throw new Error("下载 APK 失败：" + bin.status);
-  const bytes = Buffer.from(await bin.arrayBuffer());
-
+  const showProgress = options.progress !== false && Boolean(process.stderr.isTTY);
+  const mb = (n) => (n / 1048576).toFixed(1);
+  let sha = null;
   if (picked.sha) {
     const shaRes = await fetch(picked.sha.browser_download_url, { headers });
-    if (shaRes.ok) {
-      const expected = (await shaRes.text()).trim().split(/\s+/)[0].toLowerCase();
-      const actual = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
-      if (expected !== actual) throw new Error("APK 校验和不匹配");
-      log("✓ 校验和通过");
-    }
+    if (shaRes.ok) sha = (await shaRes.text()).trim().split(/\s+/)[0].toLowerCase();
   }
 
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, bytes, { mode: 0o644 });
-  return { path: dest, downloaded: true };
+  const result = await downloadVerified(picked.asset.browser_download_url, dest, {
+    headers,
+    total: picked.asset.size,
+    expectedSha256: sha,
+    onProgress: showProgress
+      ? (received, total) => {
+          const pct = total ? Math.min(100, Math.floor((received / total) * 100)) : null;
+          const text = pct === null
+            ? "  " + mb(received) + " MB"
+            : "  " + pct + "%（" + mb(received) + " / " + mb(total) + " MB）";
+          process.stderr.write("\r  下载 " + picked.asset.name + text + "   ");
+        }
+      : null,
+  });
+  if (showProgress) {
+    process.stderr.write("\n");
+    log("  下载完成 " + mb(result.bytes) + " MB");
+  }
+  if (sha) log("✓ 校验和通过");
+  return { path: dest, downloaded: true, bytes: result.bytes };
 }

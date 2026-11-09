@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import { MoError } from "../../core/errors.mjs";
 import { validateReceipt } from "../../core/tasks/receipt.mjs";
-import { one } from "../lib/args.mjs";
-import { emit } from "../lib/output.mjs";
+import { one } from "../ui/args.mjs";
+import { emit } from "../ui/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { loadCard, readReceipt, writeReceipt } from "../lib/store.mjs";
 import { resolveProject } from "../lib/project.mjs";

@@ -271,25 +271,32 @@ fi
 
 echo
 echo "下一步："
-echo "  mo setup                 首次装配（幂等）：配置、记忆、默认执行者/终端、技能、MCP"
-echo "                           先看会做什么：mo setup --dry-run"
+echo "  mo setup         首次装配（幂等）：配置、记忆、默认执行者/终端、技能、MCP"
+echo "                   会问要不要配指挥台（那一步要下载约 150MB，可以说不）"
+echo "                   先看它会做什么：mo setup --dry-run"
 if [ "$NEED_SKILL" = "1" ]; then
-  echo "                           只想装技能：mo skill install"
-else
-  echo "                           技能已装，setup 会自动跳过那一步"
+  echo "                   只想先装技能：mo skill install"
 fi
-echo "  mo doctor                自检（Node / 目录 / 记忆库 / 项目）"
-echo "  mo project init          在项目目录初始化 .mo-agent/ 并写入 Agent 说明"
-echo "  mo agent                 把 mo 接给主 Agent（提示词 / MCP / 技能三条路）"
+echo "  mo doctor        自检；最后一行会告诉你「下一步做什么」"
 echo
-echo "基本用法（在项目里）："
-echo "  mo worker list                看可用的执行者（裸名=会话，-headless=无头）"
+echo "先选一条路（随时可以换）："
+echo "  只看不改         装桌面 App + 手机：收通知、远程批准，不碰命令"
+echo "  接外部 Agent     mo connect describe    提示词 / MCP / 技能三种接法"
+echo "  用内置指挥台     mo router start        mo 自己的主 Agent，只分派不动手"
+echo "  只敲命令         看下面这段"
+echo
+echo "基本用法（在项目目录里）："
+echo "  mo project create            认领当前目录：写 .mo-agent/ 与 Agent 说明"
+echo "  mo worker list               看可用执行者（裸名=会话，-headless=无头）"
 echo '  mo task create --title hello --deliverable "print hello world" \'
-echo '                 --verify "run:echo hello world" --worker claude-headless \'
-echo '                 --workdir .        # 相对项目根（默认就是项目根，不是当前目录）'
-echo "  mo task confirm <id>          发起确认请求（不改状态）"
-echo "  mo task approve <id>          人批准（终端里执行）"
-echo "  mo task dispatch <id>         派给执行者并等回执（自动验收）"
-echo "  mo task status <id>           看状态与最近事件"
-echo "  mo task list                  看本项目的任务"
-echo "  mo ledger query --task <id>   看这条任务的时间线"
+echo '                 --verify "run:echo hello world" --worker claude-headless'
+echo "                    TTY 下会问「现在批准并派单吗」，答 y 一步到底"
+echo "  mo task show <id>            状态 / 验收 / 待批 / 结论"
+echo "  mo task dispatch <id> --detach"
+echo "                   批准后后台派单（手机也能点「允许并派单」）"
+echo "  mo inbox pull                收结果；也可以等手机通知"
+echo "  mo ledger query --task <id>  这条任务的时间线"
+echo
+echo "没在 create 时批准：mo task confirm <id> 发起请求，手机或终端批准后再 dispatch"
+echo
+echo "命令以 mo help 为准（mo help --all 看全部分组，mo help <组> 看细节）。"

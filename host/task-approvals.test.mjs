@@ -6,7 +6,7 @@ import path from "node:path";
 import { attachProject } from "../cli/lib/project.mjs";
 import { loadCard, readEvents, saveCard } from "../cli/lib/store.mjs";
 import { requestConfirmation } from "../cli/lib/approvals.mjs";
-import { decideTaskApproval, listTaskApprovals } from "./task-approvals.mjs";
+import { decideTaskApproval, dispatchApprovedTask, listTaskApprovals } from "./task-approvals.mjs";
 
 function workspace() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mo-taskappr-"));
@@ -112,5 +112,62 @@ test("非法 decision 被拒", () => {
   assert.throws(
     () => decideTaskApproval({ home: ws.home, id: request.id, decision: "allow" }),
     (error) => error.code === "E_USAGE",
+  );
+});
+
+// ---- 批准并派单（B3）----
+
+function cardWithExec(ws, exec) {
+  saveCard(
+    ws.project,
+    { id: "t_2", project: ws.projectId, title: "带执行者", status: "draft", created: "2026-01-01T00:00:00.000Z", exec, verify: [{ run: "true" }] },
+    "## 交付物\n\n- x\n",
+  );
+  return loadCard(ws.project, "t_2");
+}
+
+test("批准并派单：用卡上的 exec 起跑，HTTP 立刻返回", () => {
+  const ws = workspace();
+  const card = cardWithExec(ws, "node -e 0");
+  const request = pendingRequest(ws, card);
+  decideTaskApproval({ home: ws.home, id: request.id, decision: "approve" });
+
+  const calls = [];
+  const result = dispatchApprovedTask({
+    home: ws.home,
+    id: request.id,
+    runner: (args) => {
+      calls.push(args);
+      return Promise.resolve({ status: "blocked" });
+    },
+  });
+
+  assert.equal(result.taskId, "t_2");
+  assert.equal(result.exec, "node -e 0");
+  assert.equal(result.started, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].exec, "node -e 0");
+  assert.equal(calls[0].taskId, "t_2");
+  assert.equal(calls[0].actor, "agent");
+});
+
+test("批准并派单：请求还没批准时拒绝", () => {
+  const ws = workspace();
+  const card = cardWithExec(ws, "node -e 0");
+  const request = pendingRequest(ws, card);
+  assert.throws(
+    () => dispatchApprovedTask({ home: ws.home, id: request.id }),
+    (error) => error.code === "E_NOT_CONFIRMED",
+  );
+});
+
+test("批准并派单：卡上没执行者也没有默认执行者 → E_NO_EXECUTOR", () => {
+  const ws = workspace();
+  const card = cardWithExec(ws, undefined);
+  const request = pendingRequest(ws, card);
+  decideTaskApproval({ home: ws.home, id: request.id, decision: "approve" });
+  assert.throws(
+    () => dispatchApprovedTask({ home: ws.home, id: request.id }),
+    (error) => error.code === "E_NO_EXECUTOR",
   );
 });

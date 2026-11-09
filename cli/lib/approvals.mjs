@@ -6,6 +6,7 @@ import { ensureDir, listFiles, readJsonSafe, writeJsonAtomic } from "./fsx.mjs";
 import { loadCard, appendEvent } from "./store.mjs";
 import { transition } from "./ingest.mjs";
 import { newApprovalId } from "./ids.mjs";
+import { writeConfirmInbox } from "./inbox.mjs";
 
 /**
  * 授权请求的落盘队列：唯一真源。
@@ -102,6 +103,22 @@ export function applyDecision({ home, root, request, status, channel, note }) {
   }
 
   const decided = saveRequest(home, decide(request, { status, channel, note }));
+
+  // 结果回执给主 Agent：批准/拒绝都是一条收件箱记录（人不需要再催一遍）
+  try {
+    writeConfirmInbox({
+      home,
+      project: request.project,
+      projectRoot: root,
+      taskId: request.taskId,
+      title: card.meta.title,
+      decision: status,
+      requestId: decided.id,
+      channel,
+    });
+  } catch {
+    // 收件箱写失败不该让批准本身失败
+  }
 
   if (status === "approved") {
     if (card.meta.status === "draft") {

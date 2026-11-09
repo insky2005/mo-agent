@@ -5,7 +5,7 @@
  * 分工：core/ 放纯逻辑（状态机、卡片、回执、账本事件），cli/ 负责 IO 与命令。
  * 设计见 docs/spec/workbench-flow.md。
  */
-import { parseArgs } from "./lib/args.mjs";
+import { parseArgs } from "./ui/args.mjs";
 import { MoError } from "../core/errors.mjs";
 import { projectCommand } from "./commands/project.mjs";
 import { taskCommand } from "./commands/task.mjs";
@@ -24,13 +24,17 @@ import { watchdogCommand } from "./commands/watchdog.mjs";
 import { configCommand } from "./commands/config.mjs";
 import { setupCommand } from "./commands/setup.mjs";
 import { daemonCommand } from "./commands/daemon.mjs";
+import { routerCommand } from "./commands/router.mjs";
 import { upgradeCommand } from "./commands/upgrade.mjs";
+import { serveCommand } from "./commands/serve.mjs";
+import { internalCommand } from "./commands/internal.mjs";
 import { VERSION } from "./lib/version.mjs";
-import { groupNames, renderGroupHelp, renderHelp } from "./lib/help.mjs";
+import { groupNames, renderGroupHelp, renderHelp, renderHelpAll } from "./ui/help.mjs";
+import { deprecate } from "./ui/deprecate.mjs";
 
-function printHelp(topic) {
+function printHelp(topic, all) {
   if (!topic) {
-    process.stdout.write(renderHelp() + "\n");
+    process.stdout.write((all ? renderHelpAll() : renderHelp()) + "\n");
     return 0;
   }
   const text = renderGroupHelp(topic);
@@ -60,7 +64,12 @@ const ROUTES = {
   config: configCommand,
   setup: setupCommand,
   daemon: daemonCommand,
+  router: routerCommand,
   upgrade: upgradeCommand,
+  // E1–E5 的收敛入口：connect 是 agent 的新名字，serve 收 daemon+router，internal 收机器命令
+  connect: agentCommand,
+  serve: serveCommand,
+  internal: internalCommand,
 };
 
 async function main(argv) {
@@ -84,7 +93,7 @@ async function main(argv) {
   if (!group || group === "help" || group === "--help" || args.options.help) {
     // mo help task / mo task --help / mo help 都走同一套
     const topic = group && group !== "help" && group !== "--help" ? group : args.positional[1];
-    return printHelp(topic);
+    return printHelp(topic, Boolean(args.options.all));
   }
 
   // mo task help 等价于 mo help task
@@ -99,6 +108,8 @@ async function main(argv) {
   if (!handler) {
     throw new MoError("E_USAGE", "未知命令：" + group + "（mo help 查看用法）");
   }
+  // 旧顶层名仍可用，但提示新位置（不改行为，只改说法）。mcp 不提示：它被写进 Agent 配置，属稳定接口。
+  deprecate("mo " + group);
 
   return await handler(ctx, subArgs);
 }

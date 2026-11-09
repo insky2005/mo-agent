@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mo CLI · 个人工作台 · Mo Agent</title>
+<meta name="description" content="mo CLI 把想法落成任务卡，派给任意 Agent，按你定的标准验收，全过程记账。文件即状态，不需要常驻服务；装了桌面端的话，任务卡还能在手机上批准。" />
+<link rel="canonical" href="https://mo-agent.mocampus.cn/cli/" />
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+<meta name="theme-color" content="#070a14" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Mo Agent" />
+<meta property="og:title" content="mo CLI · 个人工作台" />
+<meta property="og:description" content="建卡 → 人批准 → 派单 → 验收 → 账本。派给任意 Agent，按标准验收。" />
+<meta property="og:url" content="https://mo-agent.mocampus.cn/cli/" />
+<meta property="og:image" content="https://mo-agent.mocampus.cn/assets/og.png" />
+<meta property="og:locale" content="zh_CN" />
+
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../">
+      <img src="../assets/icon.svg" alt="" width="28" height="28" />
+      <span>Mo Agent</span>
+    </a>
+    <nav class="nav" aria-label="主导航">
+      <a href="../#changes">监理</a>
+      <a href="#workflow">工作流</a>
+      <a href="#router">指挥台</a>
+      <a href="#install">安装</a>
+      <a href="#relationship">与桌面端的关系</a>
+    </nav>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-small" href="https://github.com/insky2005/mo-agent" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary btn-small" href="#install">安装</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow"><span class="dot"></span>mo CLI · 个人工作台</span>
+        <h1>把想法变成任务卡，<br /><span class="grad">派给任意 Agent 干完。</span></h1>
+        <p class="lede">
+          你写卡，人批准，Agent 执行，mo 按你定的验收标准结算，全过程记账。
+          文件即状态，不依赖常驻服务；装了桌面端的话，任务卡也能在手机上批。
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#install">装 mo CLI</a>
+          <a class="btn btn-ghost" href="#workflow">看工作流</a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img src="../assets/icon.svg" alt="Mo Agent 图标" width="260" height="260" />
+      </div>
+    </div>
+  </section>
+
+  <section id="workflow">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>一张卡的一生</h2>
+        <p>没有数据库，没有常驻进程；状态就在文件里，可以 grep、可以 diff、可以进 git。</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <h3>建卡</h3>
+          <p><code>mo task create</code> 写下交付物、验收标准与边界。缺验收会告警：卡能建，但结论得自己看。</p>
+        </div>
+        <div class="step">
+          <h3>人批准</h3>
+          <p><code>mo task confirm</code> 发起请求，只有人能批（终端或手机）。批准前改卡会让这次批准作废。</p>
+        </div>
+        <div class="step">
+          <h3>派单</h3>
+          <p><code>mo task dispatch</code> 派给内置执行者或任意命令；<code>--detach</code> 后台跑，不占终端。</p>
+        </div>
+        <div class="step">
+          <h3>验收</h3>
+          <p>执行者交回执，mo 亲自跑验收（<code>run:</code> / <code>check:</code> / <code>human:</code>），退出码 0 但没有回执不算完成。</p>
+        </div>
+      </div>
+
+      <div class="cli-block">
+        <div class="cli-head">
+          <h3>常用命令</h3>
+          <p>命令以 <code>mo help</code> 为准：<code>mo help --all</code> 看全部分组，<code>mo help &lt;组&gt;</code> 看细节。</p>
+        </div>
+<pre><code><span class="cm"># 认领项目、看执行者</span>
+mo project create
+mo worker list
+
+<span class="cm"># 建卡（TTY 下会问「现在批准并派单吗」）</span>
+mo task create --title "加筛选" \
+  --deliverable "tasks.html 有筛选栏" \
+  --verify "run:npm test" --worker claude-headless
+
+<span class="cm"># 看状态 / 收结果 / 查账本</span>
+mo task show &lt;id&gt;
+mo inbox pull
+mo ledger query --task &lt;id&gt;</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="router">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>不想开外部 Agent？mo 自带一个指挥台</h2>
+        <p>内置主 Agent，只分派、不动手——它没有 shell、不能写文件，想干活只能派单。</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <div class="num">01</div>
+          <h3>没有手</h3>
+          <p>只有 read / grep / find / ls 与 mo 的 MCP 工具；运行时无法收窄工具面就拒绝启动。这条边界靠启动参数，不靠提示词。</p>
+        </article>
+        <article class="card">
+          <div class="num">02</div>
+          <h3>只做分派</h3>
+          <p>理解意图、拆任务卡、派人，按账本事实汇报。过程文档自己记（note_write），交付物一律派单。</p>
+        </article>
+        <article class="card">
+          <div class="num">03</div>
+          <h3>手机也能对话</h3>
+          <p>指挥台以 <code>role: router</code> 进会话列表，手机能给它发话；批准仍然只能由人做。</p>
+        </article>
+      </div>
+      <div class="cli-block">
+        <div class="cli-head">
+          <h3>启用</h3>
+          <p>会装一份私有运行时（约 150MB，版本锁定），凭据落 0600，可用 <code>--no-test</code> 跳过测通。</p>
+        </div>
+<pre><code>mo router setup --provider deepseek --model deepseek-flash --key sk-...
+mo router start</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>安装</h2>
+        <p>单文件二进制，不需要 Node。装完先跑 <code>mo setup</code>（幂等，会问你要不要配指挥台）。</p>
+      </div>
+      <div class="cli-block">
+        <div class="cli-head">
+          <h3>一条命令</h3>
+          <p>macOS / Linux 装到 <code>~/.local/bin/mo</code>；Windows 装到 <code>%USERPROFILE%\.local\bin\mo.exe</code>。需要同时给 Agent 装技能就加 <code>--with-skill</code>。</p>
+        </div>
+<pre><code><span class="cm"># macOS / Linux</span>
+curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash
+
+<span class="cm"># Windows（PowerShell）</span>
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.ps1 | iex"
+
+<span class="cm"># 装完</span>
+mo setup
+mo doctor</code></pre>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>平台</th><th>状态</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>macOS</td><td>可用</td><td>Apple Silicon / Intel 都有单文件产物</td></tr>
+            <tr><td>Linux</td><td>可用</td><td>x64 / arm64</td></tr>
+            <tr><td>Windows</td><td>适配中</td><td>执行者模板与安装器已落地，真机验收待补</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="relationship">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>和桌面端是什么关系</h2>
+        <p>不是两个产品，是一个人的两种用法：桌面端替你盯着、把决定递给你；CLI 负责把活派出去、按标准结算。</p>
+      </div>
+      <ul class="grid-2">
+        <li><strong>同一份数据</strong>：卡、回执、账本、待批请求都在 <code>~/.mo-agent/</code>，手机上批的就是 CLI 建的卡。</li>
+        <li><strong>没有桌面端也能用</strong>：<code>mo serve install</code> 补齐 host，<code>mo serve start</code> 就能扫码配对、手机批准与监控。</li>
+        <li><strong>没有 CLI 也能用</strong>：只装桌面端，就把 mo 当成 Agent 小监理——只观察、只通知、只批准。</li>
+        <li><strong>不必二选一</strong>：先装桌面端看效果，再回来用 CLI 把活派出去，是同一条链路。</li>
+      </ul>
+      <div class="hero-cta">
+        <a class="btn btn-ghost" href="../#start">了解桌面端「监理」→</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <a class="brand" href="../">
+        <img src="../assets/icon.svg" alt="" width="24" height="24" />
+        <span>Mo Agent</span>
+      </a>
+      <div class="footer-links">
+        <a href="../">产品主页</a>
+        <a href="https://github.com/insky2005/mo-agent" target="_blank" rel="noopener">GitHub 仓库</a>
+        <a href="https://github.com/insky2005/mo-agent/releases" target="_blank" rel="noopener">发布版本</a>
+        <a href="https://github.com/insky2005/mo-agent/blob/main/USAGE.md" target="_blank" rel="noopener">使用文档</a>
+        <a href="https://github.com/insky2005/mo-agent/blob/main/INSTALL.md" target="_blank" rel="noopener">安装文档</a>
+        <a href="https://github.com/insky2005/mo-agent/blob/main/LICENSE" target="_blank" rel="noopener">许可证</a>
+      </div>
+    </div>
+    <div class="footer-note">
+      <span>PolyForm Noncommercial 1.0.0 · 个人与非商业用途免费，商业用途需授权</span>
+      <span>Mo Agent，你的 Agent 小监理。</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

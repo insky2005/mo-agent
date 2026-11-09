@@ -46,9 +46,11 @@ bash scripts/install-cli.sh --no-completion  # 不写 shell 补全
 bash scripts/install-cli.sh --uninstall      # 卸载
 ```
 
-## 常驻服务（daemon）
+## 常驻服务（serve / daemon）
 
-`mo daemon` 拉起 host（就是桌面 App 里那个常驻服务），手机扫码配对、下载 APK 都靠它。
+`mo serve` 拉起 host（就是桌面 App 里那个常驻服务），手机扫码配对、下载 APK 都靠它；
+`mo serve router …` 是内置指挥台。**`mo daemon` 与 `mo router` 是同一套东西的旧名字，继续可用**
+（`serve start/stop/status/open` ↔ `daemon`，`serve router …` ↔ `router …`）。
 
 ```bash
 mo daemon start                # 后台启动；顺手把 APK 下到 ~/.mo-agent/app.apk
@@ -245,6 +247,8 @@ mo task logs t_01H…               # 执行者完整日志
 | `mo task approve \| reject <id>` | 人批准 / 拒绝（需 TTY） |
 | `mo task requests` | 待批准的请求 |
 | `mo task dispatch <id>` | 派单并等待，含自动验收 |
+| `mo task dispatch <id> --detach` | 后台派单，立即返回；结果用 `mo inbox pull` 收 |
+| `mo task dispatch <id> --force` | 卡还在 `running` 时强制再派一次（默认拒绝） |
 | `mo task verify <id>` | 对已 done 的卡重跑验收 |
 | `mo task logs <id> [--tail N]` | 执行者日志 |
 | `mo task status <id>` | 状态与最近事件 |
@@ -309,6 +313,7 @@ draft ──approve──▶ confirmed ──dispatch──▶ running ──┬
 | 写法 | 判定 |
 |---|---|
 | `run:<命令>` | 在项目根执行，退出码 0 通过；默认 60s 超时（`MO_VERIFY_TIMEOUT_MS` 可调） |
+| `check:<路径>` | 文件存在通过（等价于 `<路径> 存在`） |
 | `check:<路径> 存在` | 文件存在通过 |
 | `check:<路径> 包含 <文本>` | 文件内容包含文本通过 |
 | `human:<说明>` | 不执行，等人确认 |

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHmac } from "node:crypto";
 import { createHmsChannel } from "./hms-push.mjs";
+import { dataDirFrom } from "../cli/lib/paths.mjs";
 
 /**
  * Webhook 通知通道：把 host 的统一 notify 事件转成第三方服务的请求。
@@ -157,7 +158,7 @@ export function loadChannelConfigs(options) {
   const env = opts.env || process.env;
   // 测试脚本启动的 host 不应真的往手机推通知。
   if (env.MO_AGENT_NOTIFY_DISABLE === "1") return [];
-  const file = opts.file || path.join(os.homedir(), ".mo-agent", "notify.json");
+  const file = opts.file || path.join(dataDirFrom(os.homedir(), opts.env || process.env), "notify.json");
   const configs = [];
 
   try {
@@ -196,7 +197,7 @@ export function loadMobileMode(options) {
   const env = opts.env || process.env;
   const allowed = new Set(["apk", "dingtalk", "both", "none"]);
   if (env.MO_AGENT_MOBILE_MODE && allowed.has(env.MO_AGENT_MOBILE_MODE)) return env.MO_AGENT_MOBILE_MODE;
-  const file = opts.file || path.join(os.homedir(), ".mo-agent", "notify.json");
+  const file = opts.file || path.join(dataDirFrom(os.homedir(), opts.env || process.env), "notify.json");
   try {
     if (!fs.existsSync(file)) return "auto";
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));

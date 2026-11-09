@@ -4,9 +4,9 @@ import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
 import { SKILL_MD, SKILL_NAME } from "../lib/skill-content.mjs";
 import readline from "node:readline/promises";
-import { all, has } from "../lib/args.mjs";
+import { all, has } from "../ui/args.mjs";
 import { which } from "../lib/executors.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { emit, table } from "../ui/output.mjs";
 
 function isDir(target) {
   try {

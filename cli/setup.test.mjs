@@ -63,7 +63,7 @@ test("干净 home：一次装配建好目录、配置、记忆、默认执行者
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.parsed.ok, true);
 
-  assert.deepEqual(result.parsed.steps.map((step) => step.id), ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"]);
+  assert.deepEqual(result.parsed.steps.map((step) => step.id), ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp", "router"]);
   for (const id of ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"]) {
     assert.equal(statusOf(result.parsed, id), "created", id + " 应该是 created：" + JSON.stringify(result.parsed.steps.find((s) => s.id === id)));
   }
@@ -93,7 +93,7 @@ test("连跑两次：第二次每步都是 skipped，且不重复写", () => {
   assert.equal(second.status, 0, second.stderr);
   assert.deepEqual(
     second.parsed.steps.map((step) => step.status),
-    ["skipped", "skipped", "skipped", "skipped", "skipped", "skipped", "skipped"],
+    ["skipped", "skipped", "skipped", "skipped", "skipped", "skipped", "skipped", "skipped"],
   );
 
   // 已装技能要说明是哪份、装在哪
@@ -249,3 +249,39 @@ test("没有可用执行者时给 ⚠，而不是假装装好了", () => {
   assert.ok(step.status === "warn" || step.status === "created", step.status);
   if (step.status === "warn") assert.match(step.message, /没有可用的内置执行者/);
 });
+test("指挥台步骤：非交互不加 --router 一律跳过，不会被 --yes 带着跑", () => {
+  const ws = workspace();
+  const result = runJson(ws, ["setup", "--dry-run", "--only", "router"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusOf(result.parsed, "router"), "skipped");
+  assert.match(result.parsed.steps[0].message, /--router/);
+});
+
+test("指挥台步骤：--router + 凭据时只输出计划，不下真东西", () => {
+  const ws = workspace();
+  const result = runJson(ws, [
+    "setup", "--dry-run", "--only", "router",
+    "--router",
+    "--router-provider", "deepseek",
+    "--router-model", "deepseek-flash",
+    "--router-key", "sk-test-dryrun",
+  ]);
+  const step = result.parsed.steps[0];
+  assert.equal(step.status, "planned");
+  assert.match(step.message, /deepseek \/ deepseek-flash/);
+  assert.ok(step.lines.some((line) => line.includes("运行时") || line.includes("运行时")));
+  assert.ok(step.lines.some((line) => line.includes("credentials.json")));
+  // dry-run 不许真的建出凭据文件
+  assert.equal(fs.existsSync(path.join(ws.home, "router", "credentials.json")), false);
+});
+
+test("指挥台步骤：未知 provider 直接失败，不静默改写", () => {
+  const ws = workspace();
+  const result = runJson(ws, [
+    "setup", "--dry-run", "--only", "router",
+    "--router", "--router-provider", "nope", "--router-key", "sk-x",
+  ]);
+  assert.equal(statusOf(result.parsed, "router"), "failed");
+  assert.match(result.parsed.steps[0].message, /未知 provider/);
+});
+

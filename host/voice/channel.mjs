@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { buildApprovalDraft, makeNonce } from "./text.mjs";
+import { buildApprovalDraft, makeWordNonce, spellNonce, WORD_NONCE_SIZE } from "./text.mjs";
 import { OUTCOME, runVoiceConfirm } from "./confirm.mjs";
 import { createSpeaker } from "./tts.mjs";
 import { createWhisperTranscriber } from "./whisper.mjs";
@@ -84,7 +84,8 @@ export function createVoiceChannel(options) {
     transcribe: createWhisperTranscriber({ binary: opts.whisperBinary, model: opts.model, log: eventLog }),
     log: eventLog,
   });
-  const nonceFactory = opts.nonceFactory || makeNonce;
+  // 默认用口语词口令（念一串随机数字识别率太低）；测试与老脚本可注入数字工厂
+  const nonceFactory = opts.nonceFactory || makeWordNonce;
   const timeoutMs = opts.timeoutMs || 15000;
   const maxAttempts = opts.maxAttempts || 3;
 
@@ -149,7 +150,7 @@ export function createVoiceChannel(options) {
   function handle(item) {
     return exclusive(async function () {
       const payload = (item && item.payload) || {};
-      const nonce = String(nonceFactory(4));
+      const nonce = String(nonceFactory(WORD_NONCE_SIZE));
       const draft = buildApprovalDraft({
         agentLabel: payload.agentLabel || payload.agent,
         toolName: payload.toolName,
@@ -181,10 +182,10 @@ export function createVoiceChannel(options) {
 
   function test() {
     return exclusive(async function () {
-      const nonce = String(nonceFactory(4));
+      const nonce = String(nonceFactory(WORD_NONCE_SIZE));
       const draft = {
         kind: "approval",
-        prompt: "语音测试。听到提示音后，请复述口令：" + nonce.split("").join(" ") + "。",
+        prompt: "语音测试。听到提示音后，请复述口令：" + spellNonce(nonce) + "。",
         nonce,
       };
       log.info("语音测试，口令 " + nonce);

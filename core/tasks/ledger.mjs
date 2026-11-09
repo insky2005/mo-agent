@@ -19,6 +19,7 @@ export const EVENT_TYPES = [
   "receipt.amended",
   "memory.proposed",
   "memory.accepted",
+  "note.written",
 ];
 
 export function makeEvent({ type, project, taskId, actor = "core", payload = {}, machine = "", at = new Date().toISOString() }) {

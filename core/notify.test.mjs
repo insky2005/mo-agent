@@ -154,3 +154,96 @@ test("同一 runId 的完成事件只通知一次", () => {
   assert.equal(notifies.length, 1);
   assert.equal(notifies[0].runId, "s1:turn:1");
 });
+
+
+// ---- 静音时段与去重淘汰（D3）----
+
+test("静音时段：NORMAL 通知被跳过，CRITICAL 照常放行", () => {
+  const hub = new Hub({ log: quiet });
+  const got = [];
+  const notifier = new Notifier({
+    hub,
+    log: quiet,
+    quietHours: { start: "22:00", end: "08:00" },
+    now: () => new Date(2026, 0, 1, 23, 30),
+  });
+  notifier.register({ send: (payload) => got.push(payload) });
+  notifier.start();
+
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r1", sessionId: "s1", agent: "dsh", title: "t", text: "done" });
+  assert.equal(got.length, 0, "夜里不该为“任务完成”吵人");
+
+  hub.emit(EVENT.APPROVAL_PENDING, { id: "a1", title: "需要授权" });
+  assert.equal(got.length, 1, "授权是 critical，静音时段也要放行");
+  assert.equal(got[0].severity, SEVERITY.CRITICAL);
+});
+
+test("静音时段：白天不生效；跨零点窗口两头都算", () => {
+  const at = (h, m) => new Date(2026, 0, 1, h, m);
+  const window = { start: "22:00", end: "08:00" };
+
+  const run = (hour) => {
+    const hub = new Hub({ log: quiet });
+    const got = [];
+    const notifier = new Notifier({ hub, log: quiet, quietHours: window, now: () => at(hour, 0) });
+    notifier.register({ send: (payload) => got.push(payload) });
+    notifier.start();
+    hub.emit(EVENT.RUN_COMPLETED, { runId: "r" + hour, sessionId: "s", agent: "dsh", title: "t", text: "done" });
+    return got.length;
+  };
+
+  assert.equal(run(12), 1, "中午应该正常通知");
+  assert.equal(run(23), 0, "23 点在窗口内");
+  assert.equal(run(3), 0, "凌晨 3 点在跨零点窗口内");
+  assert.equal(run(9), 1, "9 点已经出了窗口");
+});
+
+test("静音时段：allowCritical=false 时连 critical 也挡", () => {
+  const hub = new Hub({ log: quiet });
+  const got = [];
+  const notifier = new Notifier({
+    hub,
+    log: quiet,
+    quietHours: { start: "00:00", end: "23:59", allowCritical: false },
+    now: () => new Date(2026, 0, 1, 12, 0),
+  });
+  notifier.register({ send: (payload) => got.push(payload) });
+  notifier.start();
+  hub.emit(EVENT.APPROVAL_PENDING, { id: "a1", title: "需要授权" });
+  assert.equal(got.length, 0);
+});
+
+test("静音配置非法/关闭时不生效", () => {
+  const hub = new Hub({ log: quiet });
+  const got = [];
+  const notifier = new Notifier({
+    hub,
+    log: quiet,
+    quietHours: { start: "25:99", end: "08:00", enabled: false },
+    now: () => new Date(2026, 0, 1, 3, 0),
+  });
+  notifier.register({ send: (payload) => got.push(payload) });
+  notifier.start();
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r1", sessionId: "s", agent: "dsh", title: "t", text: "done" });
+  assert.equal(got.length, 1);
+});
+
+test("去重表满了只淘汰最旧的，不会整表清空后重复提醒", () => {
+  const hub = new Hub({ log: quiet });
+  const got = [];
+  const notifier = new Notifier({ hub, log: quiet, maxSeen: 2 });
+  notifier.register({ send: (payload) => got.push(payload) });
+  notifier.start();
+
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r1", sessionId: "s1", agent: "dsh", title: "t1", text: "x" });
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r2", sessionId: "s2", agent: "dsh", title: "t2", text: "x" });
+  assert.equal(got.length, 2);
+
+  // 第三条挤掉 r1；此时再发 r2 仍然应该被去重
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r3", sessionId: "s3", agent: "dsh", title: "t3", text: "x" });
+  assert.equal(got.length, 3);
+  hub.emit(EVENT.RUN_COMPLETED, { runId: "r2", sessionId: "s2", agent: "dsh", title: "t2", text: "x" });
+  assert.equal(got.length, 3, "r2 还在去重表里，不该重复通知");
+  assert.equal(notifier.seen.has("run:r2"), true);
+  assert.equal(notifier.seen.has("run:r1"), false, "最旧的被淘汰");
+});

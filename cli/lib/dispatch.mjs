@@ -55,12 +55,17 @@ export function resolveWorkdir(root, meta) {
  * 会话型派单：不 spawn 子进程，而是在新终端窗口里跑交互式 CLI。
  * 人能看到执行过程；dispatch 立即返回，结果靠回执文件（与无头模式的唯一区别）。
  */
-export function dispatchSession({ home, root, taskId, worker, actor = "agent", env = process.env }) {
+export function dispatchSession({ home, root, taskId, worker, actor = "agent", env = process.env, force = false }) {
   const card = loadCard(root, taskId);
   const { meta } = card;
 
   if (meta.status === "draft") {
     throw new MoError("E_NOT_CONFIRMED", "任务卡还没确认，先执行 mo task confirm " + taskId + "（确认权属于人）");
+  }
+  if (meta.status === "running" && !force) {
+    throw new MoError("E_ALREADY_RUNNING", "这张卡正在运行，不重复派单", {
+      hint: "确实要再开一个执行者：mo task dispatch " + taskId + " --force",
+    });
   }
   if (!["confirmed", "dispatched", "running", "blocked"].includes(meta.status)) {
     throw new MoError("E_NOT_CONFIRMED", "任务当前状态是 " + meta.status + "，不能派单");
@@ -91,6 +96,9 @@ export function dispatchSession({ home, root, taskId, worker, actor = "agent", e
       actor,
     });
     transition({ home, root, card, to: "running", payload: { session: terminal.name }, actor });
+  } else if (meta.status === "dispatched") {
+    // 停在 dispatched 说明上次派单没跑起来（崩溃/后台派单占位）：补上 running
+    transition({ home, root, card, to: "running", payload: { resume: true, session: terminal.name }, actor });
   }
 
   const receiptFile = resolveReceiptFile(root, meta);
@@ -150,12 +158,17 @@ export function resolveReceiptFile(root, meta) {
  * 派单：确认 → 派发 → 起进程 → 收执 → 定状态。
  * 返回结构化结果，不打印。
  */
-export async function dispatchTask({ home, root, taskId, exec, timeout, actor = "core" }) {
+export async function dispatchTask({ home, root, taskId, exec, timeout, actor = "core", force = false }) {
   const card = loadCard(root, taskId);
   const { meta } = card;
 
   if (meta.status === "draft") {
     throw new MoError("E_NOT_CONFIRMED", "任务卡还没确认，先执行 mo task confirm " + taskId + "（确认权属于人）");
+  }
+  if (meta.status === "running" && !force) {
+    throw new MoError("E_ALREADY_RUNNING", "这张卡正在运行，不重复派单", {
+      hint: "确实要再派一次：mo task dispatch " + taskId + " --force",
+    });
   }
   const dispatchable = ["confirmed", "dispatched", "running", "blocked"];
   if (!dispatchable.includes(meta.status)) {
@@ -175,6 +188,9 @@ export async function dispatchTask({ home, root, taskId, exec, timeout, actor = 
   } else if (meta.status === "confirmed") {
     transition({ home, root, card, to: "dispatched", payload: { assignee: meta.assignee || "auto", exec: String(command) }, actor });
     transition({ home, root, card, to: "running", payload: {}, actor });
+  } else if (meta.status === "dispatched") {
+    // 停在 dispatched 说明上次派单没跑起来（崩溃/后台派单占位）：补上 running
+    transition({ home, root, card, to: "running", payload: { resume: true }, actor });
   }
 
   const receiptFile = resolveReceiptFile(root, meta);

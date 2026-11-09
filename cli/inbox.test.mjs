@@ -186,3 +186,36 @@ test("--from 写进卡片与账本，缺省回落到环境变量", () => {
   const createdEvent = ledger.parsed.events.find((event) => event.type === "task.created");
   assert.equal(createdEvent.payload.from, "claude-code");
 });
+
+test("人批准后收件箱里有一条 task.confirmed（主 Agent 不用等人催）", () => {
+  const ws = workspace();
+  fs.writeFileSync(path.join(ws.project, "executor.mjs"), DONE_EXECUTOR);
+  runJson(ws, ["project", "add", "."]);
+  const created = runJson(ws, [
+    "task", "create",
+    "--title", "等我派单",
+    "--deliverable", "能用",
+    "--exec", "node executor.mjs",
+  ]);
+  const taskId = created.parsed.taskId;
+  runJson(ws, ["task", "confirm", taskId]);
+  runJson(ws, ["task", "approve", taskId, "--yes"]);
+
+  const pulled = runJson(ws, ["inbox", "pull"]);
+  assert.equal(pulled.parsed.count, 1);
+  assert.equal(pulled.parsed.items[0].type, "task.confirmed");
+  assert.equal(pulled.parsed.items[0].status, "approved");
+  assert.equal(pulled.parsed.items[0].taskId, taskId);
+  assert.equal(pulled.parsed.items[0].requestId !== undefined, true);
+});
+
+test("任务出结果后，确认提醒自动清掉：只留一条", () => {
+  const ws = workspace();
+  const taskId = prepare(ws, DONE_EXECUTOR);
+  runJson(ws, ["task", "dispatch", taskId]);
+
+  const pulled = runJson(ws, ["inbox", "pull"]);
+  assert.equal(pulled.parsed.count, 1, "确认提醒应该被结果覆盖");
+  assert.equal(pulled.parsed.items[0].type, "task.done");
+  assert.equal(pulled.parsed.items[0].taskId, taskId);
+});

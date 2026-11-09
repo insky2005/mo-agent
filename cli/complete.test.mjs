@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { complete, describe } from "./lib/complete.mjs";
+import { complete, describe } from "./commands/complete.mjs";
 import { attachProject } from "./lib/project.mjs";
 import { saveCard } from "./lib/store.mjs";
 
@@ -27,7 +27,7 @@ const values = (items) => items.map((entry) => entry.value);
 test("顶层命令", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: [""] })), [
-    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "upgrade", "watchdog", "completion", "version", "help",
+    "project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "router", "config", "setup", "upgrade", "watchdog", "completion", "connect", "serve", "internal", "version", "help",
   ]);
 });
 
@@ -171,4 +171,25 @@ test("setup 的 flag 有补全，包含 --only / --skip", () => {
 test("自由文本 flag 之后不再给候选", () => {
   const ws = workspace();
   assert.deepEqual(values(complete({ cwd: ws.project, words: ["task", "create", "--title", ""] })), []);
+});
+test("router：子命令、runtime 动作、provider 取值", () => {
+  const ws = workspace();
+  const subs = values(complete({ cwd: ws.project, words: ["router", ""] }));
+  for (const sub of ["start", "stop", "status", "restart", "setup", "reset", "runtime"]) {
+    assert.ok(subs.includes(sub), "缺少子命令 " + sub);
+  }
+  const actions = values(complete({ cwd: ws.project, words: ["router", "runtime", ""] }));
+  assert.deepEqual(actions, ["install", "list", "prune"]);
+  const providers = values(complete({ cwd: ws.project, words: ["router", "setup", "--provider", ""] }));
+  assert.deepEqual(providers, ["deepseek", "anthropic", "openai"]);
+  const steps = values(complete({ cwd: ws.project, words: ["setup", "--only", ""] }));
+  assert.ok(steps.includes("router"), "mo setup --only 里应该有 router");
+});
+
+test("router：裸命令层也要能补 start 的 flag（裸 mo router 等同 start）", () => {
+  const ws = workspace();
+  const flags = values(complete({ cwd: ws.project, words: ["router", "--"] }));
+  for (const flag of ["--window", "--foreground", "--start-daemon", "--no-open"]) {
+    assert.ok(flags.includes(flag), "mo router -- 下缺少 " + flag);
+  }
 });

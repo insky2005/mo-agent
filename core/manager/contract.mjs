@@ -23,7 +23,7 @@ export const TOOLS = [
       properties: {
         title: { type: "string", description: "一句话标题" },
         deliverables: { type: "array", items: { type: "string" }, description: "交付物清单，至少一条" },
-        verify: { type: "array", items: { type: "string" }, description: '验收项，形如 "run:npm test" / "check:文件含X" / "human:视觉确认"' },
+        verify: { type: "array", items: { type: "string" }, description: '验收项，形如 "run:npm test" / "check:<路径>" / "check:<路径> 包含 <文本>" / "human:视觉确认"' },
         boundaries: { type: "array", items: { type: "string" }, description: "边界（不要做什么）" },
         constraints: { type: "array", items: { type: "string" }, description: "约束" },
         background: { type: "string", description: "背景" },
@@ -82,6 +82,20 @@ export const TOOLS = [
     name: "memory_recall",
     description: "按关键词从记忆库召回条目（派单时同一条通道会自动注入）。",
     schema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" }, scope: { type: "string", description: "preferences / pitfalls / decisions" } }, required: ["query"] },
+  },
+  {
+    name: "note_write",
+    description: "记一篇过程文档到 ~/.mo-agent/notes/（不接受路径，append-only，单篇 ≤64KB）。讨论纪要、方案草稿、刚定的结论用这个；交付物仍然派单。",
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "一句话标题（同时用来生成 slug）" },
+        slug: { type: "string", description: "可选，小写字母/数字/连字符，≤64 字符；同日同名会自动加 -2" },
+        body: { type: "string", description: "正文（markdown），单篇上限 64KB" },
+        tags: { type: "array", items: { type: "string" }, description: "可选标签" },
+      },
+      required: ["title", "body"],
+    },
   },
   {
     name: "memory_propose",
@@ -224,6 +238,22 @@ const BOUNDARY = () => [
 ];
 
 const BEHAVIOR = () => [
+  "## 三条路，先看用户在哪条",
+  "",
+  "- 用户已经在别的 Agent（本技能被加载就说明是这种情况）里干活 → 你就是主 Agent，按本技能往下走。",
+  "- 用户没有主 Agent，或不想开外部 Agent → 建议他用内置指挥台（mo router start）：它同样是主 Agent，只是住在 mo 里。",
+  "- 用户只想被通知、随手远程批准 → 不需要任务卡：桌面 App + 手机就够，别硬推建卡。",
+  "",
+  "## 先确认你是谁",
+  "",
+  "本技能是给**主 Agent**（派单的人）的。先判断角色，别搞反：",
+  "",
+  "- 你手里有任务卡或信封（看到「回执写到 …」、「MO_RECEIPT」、交付物/验收清单）→ 你是**执行者**：",
+  "  **不要用本技能**。按卡上的交付物、验收标准、回执模板把活干完、写回执即可；建卡、批准、派单都不是你的事。",
+  "- 用户对你说「开始做 / 落地 / 派给 X / 就这么办」→ 你是主 Agent，继续往下看。",
+  "",
+  "搞不清就只聊，不要动任何 mo 命令。",
+  "",
   ...BOUNDARY(),
   "## 什么时候动手",
   "",
@@ -392,13 +422,85 @@ export function renderPrompt() {
   );
 }
 
+/**
+ * 指挥台（Router）契约：写到 ~/.mo-agent/router/workbench/ROUTER.md，
+ * 由 --append-system-prompt 注入运行时。见 docs/spec/router.md §8。
+ *
+ * 刻意不写任何命令行示例：Router 没有 shell，写 bash 例子会诱导它去执行。
+ */
+export function renderRouterContract() {
+  return w(
+    [
+      "# mo 指挥台契约",
+      "",
+      "你是 mo 的**指挥台**（Router）：常驻的主 Agent。职责是理解用户意图、把工作拆成任务卡、派给执行 Agent、按账本的事实汇报。",
+      "",
+      "你不是执行者。",
+      "",
+      "## 你在哪里",
+      "",
+      "工作目录是 ~/.mo-agent/router/workbench，它**不属于任何项目**。",
+      "不要在这里构建、测试或改代码——这里没有代码。",
+      "",
+      "## 你能用的",
+      "",
+      "- **只读工具**：read / grep / find / ls。你可以读任何目录的代码，用来判断该不该派单。",
+      "- **mo 的工具**（全部通过 MCP 调用，你没有 shell）：",
+      "",
+      ...TOOLS.map((tool) => "  - " + tool.name + "：" + tool.description),
+      "",
+      "所有会改变世界的动作都必须走 mo 的工具。你没有写文件、也没有执行命令的能力——这不是故障，是设计。",
+      "",
+      "## 派单流程",
+      "",
+      "1. 先问清三件事：交付物、验收标准、边界；缺验收标准要明确提醒。",
+      "2. 用 task_create 建卡，**必须带 project**（不确定就问用户，不要猜）。",
+      "3. 把卡片摘要回显给用户，然后**停下等批准**；task_confirm 只发起请求，批准由人做。",
+      "4. 批准后用 task_dispatch 派单；派单可能耗时，不要重复派同一张卡。",
+      "5. 只按 task_status / ledger_query 的字段汇报，不猜、不编。",
+      "",
+      "## 遇到这些返回怎么办",
+      "",
+      "| 返回 | 意思 | 你该做什么 |",
+      "|---|---|---|",
+      "| `E_NOT_CONFIRMED` | 卡还没被批准 | 重新 task_confirm 发起请求，别自己猜「应该批过了」 |",
+      "| `E_CARD_CHANGED` | 批准前卡被改过，这次批准作废 | **重新发起确认**（不要重试 approve），并说明改了什么 |",
+      "| `E_NO_EXECUTOR` | 卡上没有执行者，也没有默认执行者 | 问用户用哪个执行者，再 task_dispatch 带上 |",
+      "| `E_ALREADY_RUNNING` | 同一张卡正在跑 | 不要重复派单；用 task_status 看进展，或告诉用户在终端加 --force |",
+      "| `E_PROJECT_UNBOUND` | 当前目录不是项目 | 问用户是否 `mo project init .` |",
+      "",
+      "## 记忆与文档",
+      "",
+      "- 值得**改变你将来的行为** → memory_propose 提一条候选（必须有 trigger）；一次对话最多 2 条。",
+      // note_write 还没实现（见 spec §5.4 / 重构清单 P3）：先不写进契约，
+      // 否则 Router 会去调一个不存在的工具。落地后把这行加回来。
+      "- 过程文档、讨论纪要、刚定的结论 → note_write（落 ~/.mo-agent/notes/，不接受路径）。",
+      "- 交付物、要写进项目仓库的文档 → 派单，不要自己写。",
+      "",
+      "## 边界",
+      "",
+      ...FORBIDDEN.map((item) => "- " + item.action + " 不是你的动作（" + item.why + "）"),
+      "- 没有 taskId 不许说\"已派发\"",
+      "- 执行者退出码为 0 但没有回执 = 未完成",
+      "- 一次对话最多派 3 个任务；不确定就停下来问",
+      "- 用户只是在聊天时，不要动任何工具",
+      "",
+      "## 汇报方式",
+      "",
+      "简短、先给结论、只引用事实字段；需要用户决策时一次只问一个问题。",
+    ].join("\n"),
+  );
+}
+
 /** 极短指针：技能已装时只留一句 */
 export function renderPointer(where) {
   return w(
     [
       "## mo",
       "",
-      "本仓库使用 mo。" + (where || "把讨论落地时按已安装的 mo 技能执行") + "，只按 `mo task status` / `mo ledger query` 的事实汇报。",
+      "本仓库使用 mo。" + (where || "要把讨论落地时按已安装的 mo 技能执行（仅主 Agent）") + "，只按 `mo task status` / `mo ledger query` 的事实汇报。",
+      "",
+      "如果你是被派单的执行者：**不需要**这个技能，按任务卡上的交付物、验收标准与回执模板做即可。",
     ].join("\n"),
   );
 }
@@ -408,7 +510,7 @@ export function renderPointer(where) {
  * agent-block / mo-doc / pointer 是 mo project init 落盘用的 payload，
  * 对着终端打印没有意义（它们本来就靠"引用技能/MO.md"来补全细节）。
  */
-export const FORMATS = ["skill", "agent-block", "mo-doc", "prompt", "pointer"];
+export const FORMATS = ["skill", "agent-block", "mo-doc", "prompt", "pointer", "router"];
 export const DESCRIBE_FORMATS = ["prompt", "skill"];
 
 /** describe 的输出说明：格式 + 一句话用途，直接给 --format list 用 */
@@ -425,5 +527,6 @@ export function render(format) {
   if (format === "mo-doc") return finish(renderMoDoc());
   if (format === "prompt") return finish(renderPrompt());
   if (format === "pointer") return finish(renderPointer());
+  if (format === "router") return finish(renderRouterContract());
   throw new Error("未知格式：" + format + "（可用：" + FORMATS.join(" / ") + "）");
 }

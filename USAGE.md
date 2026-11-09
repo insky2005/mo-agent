@@ -52,7 +52,8 @@ mo task status <id>      # 状态、验收结果、待批请求
 | 写法 | 含义 |
 |---|---|
 | `run:npm test` | 跑命令，退出码 0 才算过 |
-| `check:文件存在` | 检查产出物 |
+| `check:dist/index.html` | 检查产出物存在（也可写 `check:<路径> 存在`） |
+| `check:<路径> 包含 <文本>` | 检查文件内容 |
 | `human:看起来对不对` | 留给人判断 |
 
 没有 `--verify` 会警告 `W_NO_VERIFY`——卡还是能建，但结论要自己看。
@@ -96,6 +97,16 @@ mo daemon stop         # 只停自己拉起的
 配对后：Agent 请求授权时手机会亮；批准/拒绝/回答问题都在手机上完成。
 
 没手机在线时，超时会把请求**交回本地终端**——不会卡死，也不会替你放行。
+
+任务卡也能在手机上批：`mo task confirm <id>` 发出请求后，host 常驻时会推一条「有任务卡等你批准」，手机/网页的「需要你决定」里有两个选择：
+
+- **允许并派单**：批准 + 立刻派出去，全流程不用回终端；
+- **只允许**：只把卡推到 `confirmed`，稍后自己 `mo task dispatch <id>`（或 `--detach` 后台跑）。
+
+卡片上会直接显示**交付物与验收项**，不用回终端看 `mo task status` 再决定。
+
+> 派单失败（比如卡上没执行者、也没设默认执行者）不会回滚批准：批准已经落盘，错误原因会显示在手机上。
+> 这两种选择都不改变"没有你的决定就不放行"——只是把批准之后那一步也搬到了同一个点击里。
 
 ---
 
@@ -145,6 +156,18 @@ mo inbox pull --wait 60s     # 没有就等
 mo ledger query --task <id>  # 一条任务的时间线
 ```
 
+### 静音时段
+
+`~/.mo-agent/notify.json` 里可以配一段不受打扰的时间（默认 22:30–08:00，新装才有）：
+
+```json
+{ "quietHours": { "start": "22:30", "end": "08:00", "allowCritical": true } }
+```
+
+静音时段只挡"不紧急"的通知（任务完成、取消这类 normal）；**授权请求、报错仍然是 critical，照常送达**——
+半夜卡住的事不能等到早上。想连 critical 也一起静音，把 `allowCritical` 设成 `false`；
+`"enabled": false` 直接关掉。老配置文件没有这一项时不会静音。
+
 ---
 
 ## 10. 排障
@@ -164,20 +187,22 @@ mo ledger query --task <id>  # 一条任务的时间线
 
 | 组 | 子命令 |
 |---|---|
-| `task` | create confirm approve reject requests dispatch status list cancel verify logs |
-| `project` | init agent list remove |
+| `task` | create confirm approve reject requests dispatch **show** list cancel verify logs |
+| `project` | **create** agent list remove |
 | `memory` | init list recall path migrate propose candidates accept reject |
 | `worker` | list add remove use current |
 | `terminal` | list add remove use current |
-| `daemon` | start status open stop |
+| `serve` | start stop restart status open · `serve router …` |
 | `skill` | list install uninstall |
-| `agent` | describe add |
+| `connect` | describe add |
 | `ledger` | query |
-| `receipt` | submit apply |
 | `inbox` | pull |
 | `config` | list get set unset |
 | `setup` | `--dry-run` / `--only` / `--json` |
-| `doctor` / `mcp` / `watchdog` / `completion` | 直接跑 |
+| `doctor` | 直接跑 |
+| `internal` | mcp · receipt submit/apply · watchdog run · completion bash/zsh · memory-migrate · note-write |
+
+**旧名字仍可用**：`task status` = `task show`、`project init`/`add` = `project create`、`daemon` = `serve`、`agent` = `connect`、`receipt`/`watchdog`/`completion` = `internal …`（后三者会打一行 `[deprecated]` 提示）。
 
 每组细节：`mo help <组>`，例如 `mo help task`。
 

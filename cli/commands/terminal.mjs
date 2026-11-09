@@ -1,6 +1,7 @@
 import { MoError } from "../../core/errors.mjs";
-import { has, one } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { has, one } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
+import { deprecate } from "../ui/deprecate.mjs";
 import { moHome } from "../lib/paths.mjs";
 import {
   addTerminal,
@@ -49,7 +50,10 @@ export function terminalCommand(ctx, args) {
   if (sub === "add") return addCommand(args, home);
   if (sub === "remove") return removeCommand(args, home);
   if (sub === "use") return useCommand(args, home);
-  if (sub === "current") return currentCommand(args, home);
+  if (sub === "current") {
+    deprecate("mo terminal current");
+    return currentCommand(args, home);
+  }
   throw new MoError("E_USAGE", "未知子命令：terminal " + sub + "（可用：list / add / remove / use）");
 }
 

@@ -1,5 +1,5 @@
 import { MoError } from "../../core/errors.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { emit, table } from "../ui/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { defaultMemoryDir } from "../lib/knowledge.mjs";
 import { CONFIG_KEYS, configKey, effectiveConfig, readGlobalConfig, writeGlobalConfig } from "../lib/config.mjs";

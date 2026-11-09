@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { has, one } from "../lib/args.mjs";
-import { emit, isJson } from "../lib/output.mjs";
+import { has, one } from "../ui/args.mjs";
+import { emit, isJson } from "../ui/output.mjs";
 import { VERSION } from "../lib/version.mjs";
 import { FORBIDDEN, RULES, TOOLS, render } from "../../core/manager/contract.mjs";
+import { projectAgent } from "./agent.mjs";
 
 /**
  * 通用接入：mo 不认识任何具体 Agent。
@@ -25,6 +26,8 @@ export function agentCommand(ctx, args) {
   if (!sub || sub === "help") return describeCommand(args);
   if (sub === "describe") return describeCommand(args);
   if (sub === "add") return addCommand(ctx, args);
+  // 写/删项目里的 Agent 说明段：从 mo project agent 收过来的位置
+  if (sub === "project") return projectAgent(ctx, args);
   throw new MoError("E_USAGE", "未知子命令：agent " + sub + "（" + USAGE + "）");
 }
 

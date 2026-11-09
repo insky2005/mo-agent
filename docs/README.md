@@ -12,6 +12,7 @@ Mo Agent 的全部文档。先看「怎么读」，再按需跳转。
 | 要用或排障 | [guides/mo-cli.md](guides/mo-cli.md) → [guides/agent-hooks.md](guides/agent-hooks.md)、[guides/voice.md](guides/voice.md) |
 | 要发版 / 理版本号 | [../VERSIONING.md](../VERSIONING.md) → [../RELEASE.md](../RELEASE.md) → 执行版 [runbooks/versioning.md](runbooks/versioning.md)、[runbooks/release.md](runbooks/release.md) |
 | 在做 workbench（个人工作台） | [spec/workbench-flow.md](spec/workbench-flow.md) |
+| 在做 Router（指挥台） | [adr/adr-0004](adr/adr-0004-private-router-runtime.md) → [spec/router.md](spec/router.md) → [research/super-agent-architecture-analysis.md](research/super-agent-architecture-analysis.md) |
 
 ## 目录
 
@@ -36,6 +37,7 @@ docs/
 | [adr-0001-observational-first.md](adr/adr-0001-observational-first.md) | 观察优先，暂不做 ACP 托管 |
 | [adr-0002-hands-free-voice.md](adr/adr-0002-hands-free-voice.md) | 免手操作：语音优先、耳机直连 |
 | [adr-0003-event-contract.md](adr/adr-0003-event-contract.md) | 一套规范事件 + 显式映射表 + 契约测试 |
+| [adr-0004-private-router-runtime.md](adr/adr-0004-private-router-runtime.md) | 两个平面、两套运行时：Router 用 mo 私有安装的运行时，版本锁定、可替换；给 ADR-0001 加平面限定 |
 
 ### spec/ — 设计与契约
 
@@ -44,6 +46,7 @@ docs/
 | [event-contract.md](spec/event-contract.md) | ✅ 生效（M1–M4 已落地） | 事件词汇表、状态语义、映射责任、接入清单 |
 | [dingtalk-bot.md](spec/dingtalk-bot.md) | ✅ 生效 | 钉钉 Stream 通道、消息形态、配置 |
 | [workbench-flow.md](spec/workbench-flow.md) | 🟡 P0 已落地（CLI） | 个人工作台：任务流转、分支、安装 |
+| [router.md](spec/router.md) | ✅ 生效（0.3.0 起） | Router（指挥台）：私有运行时、工具面白名单、会话注入、凭据、启动流程与验收 |
 
 ### guides/ — 操作手册
 
@@ -77,10 +80,16 @@ docs/
 | [cli-cross-platform.md](plans/cli-cross-platform.md) | ⏳ 未实现：Windows/Linux 差距与改造计划 |
 | [setup-config-prompt.md](plans/setup-config-prompt.md) | 已实现（`mo config` / `mo setup`，见 spec §12.8） |
 | [cli-cross-platform-verify.md](plans/cli-cross-platform-verify.md) | 验收备忘：Linux Docker / Windows 验证步骤 |
+| [router-implementation.md](plans/router-implementation.md) | ⏳ 待执行：Router 分四阶段实现，含优先级、验收与风险 |
+| [cli-layer-split.md](plans/cli-layer-split.md) | ⏳ 待执行：把 cli/ 拆成应用层 / 接口层 / 工具层，含 P0–P2 清单 |
 
 ### research/ — 预研
 
 各家 Agent 的接入可行性、hooks 能力、桌面壳选型、业界规范调研。结论已提炼进 [reference/agent-adaptation-matrix.md](reference/agent-adaptation-matrix.md)，这里保留证据与过程。
+
+| 文档 | 内容 |
+|---|---|
+| [super-agent-architecture-analysis.md](research/super-agent-architecture-analysis.md) | Super-agent（双层 / 事件驱动 / 存算分离 / Watchdog）机制拆解，与 mo-agent 的逐模块差距矩阵、路径选择与路线图 |
 
 ### private/ 与 raw/
 

@@ -342,7 +342,7 @@ assignee: auto
 workdir: .
 verify:
   - run: npm test -- --filter tasks
-  - check: app/web/tasks.html 含 filter-bar
+  - check: app/web/tasks.html 包含 filter-bar
   - human: 视觉确认
 receipt: .mo-agent/receipts/t_01HXYZ.json
 timeout: 45m

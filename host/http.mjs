@@ -7,7 +7,7 @@ import { buildPairPayload, candidateAddresses } from "./pairing.mjs";
 import { handleLogRoutes } from "./logs-http.mjs";
 import { handleMonitorRoutes } from "./monitor-http.mjs";
 import { canControl } from "../core/contract.mjs";
-import { decideTaskApproval, listTaskApprovals } from "./task-approvals.mjs";
+import { decideTaskApproval, dispatchApprovedTask, listTaskApprovals } from "./task-approvals.mjs";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -102,6 +102,7 @@ export function createMoAgentServer(options) {
     ? options.getDingTalk
     : () => options.dingtalk || null;
   const dingtalkSetup = options.dingtalkSetup || null;
+  const router = options.router || null;
   const onDingTalkReset = typeof options.onDingTalkReset === "function" ? options.onDingTalkReset : null;
 
   const deviceTokens = new Set();
@@ -491,6 +492,86 @@ export function createMoAgentServer(options) {
         return json(res, 200, { ok: true });
       }
 
+      // ---- Router（指挥台）----
+      if (pathname === "/local/router/status" && req.method === "GET") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.status());
+      }
+
+      if (pathname === "/local/router/start" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        try {
+          return json(res, 200, await router.start());
+        } catch (error) {
+          return json(res, error && error.code === "E_ROUTER_RUNTIME_MISSING" ? 409 : 500, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "启动失败",
+            hint: (error && error.details && error.details.hint) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/setup" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, await router.setup(body));
+        } catch (error) {
+          return json(res, 400, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "配置失败",
+            hint: (error && error.details && error.details.hint) || null,
+            detail: (error && error.details && error.details.detail) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/reset" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.reset());
+      }
+
+      if (pathname === "/local/router/runtime/list" && req.method === "GET") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.runtimes());
+      }
+
+      if (pathname === "/local/router/runtime/install" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        const body = await readBody(req);
+        try {
+          return json(res, 200, await router.runtimeInstall(body));
+        } catch (error) {
+          return json(res, 500, {
+            ok: false,
+            code: (error && error.code) || null,
+            error: (error && error.message) || "安装失败",
+            hint: (error && error.details && error.details.hint) || null,
+            detail: (error && error.details && error.details.detail) || null,
+          });
+        }
+      }
+
+      if (pathname === "/local/router/runtime/prune" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.runtimePrune());
+      }
+
+      if (pathname === "/local/router/stop" && req.method === "POST") {
+        if (!localAuthed(req)) return json(res, 401, { ok: false, error: "local token invalid" });
+        if (!router) return json(res, 503, { ok: false, error: "Router 未启用" });
+        return json(res, 200, router.stop());
+      }
+
       // ---- 需设备令牌 ----
       if (pathname.startsWith("/api/") && !deviceAuthed(req, url)) {
         return json(res, 401, { ok: false, error: "未配对或令牌无效" });
@@ -592,7 +673,19 @@ export function createMoAgentServer(options) {
         try {
           const result = decideTaskApproval({ id: taskApprovalMatch[1], decision: String(body.decision || "") });
           log.info("网页已处理任务确认 " + result.id + " -> " + result.status + "（任务 " + result.taskId + "）");
-          return json(res, 200, { ok: true, ...result });
+
+          // 「批准并派单」：手机上这一次点击就能把卡送出去，不用再回终端敲 dispatch。
+          // 派单失败不影响批准本身（批准已经落盘），把失败原因带回给客户端。
+          let dispatched = null;
+          if (result.status === "approved" && body.dispatch === true) {
+            try {
+              dispatched = dispatchApprovedTask({ id: result.id, log });
+            } catch (error) {
+              dispatched = { error: (error && error.code) || "E_DISPATCH", message: (error && error.message) || "派单失败" };
+              log.warn("按批准派单失败 " + result.taskId + "：" + dispatched.message);
+            }
+          }
+          return json(res, 200, { ok: true, ...result, ...(dispatched ? { dispatched } : {}) });
         } catch (error) {
           const code = (error && error.code) || null;
           const status = code === "E_CARD_CHANGED" ? 409 : code === "E_USAGE" ? 400 : 404;

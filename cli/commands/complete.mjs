@@ -2,14 +2,14 @@
  * TAB 补全：按「组 → 子命令 → 该子命令自己的 flag」组织。
  * 纯计算，读注册表与任务卡，不改任何东西。
  */
-import { moHome } from "./paths.mjs";
-import { listProjects, findProjectRoot } from "./project.mjs";
-import { listCards } from "./store.mjs";
-import { listAgents } from "./executors.mjs";
-import { listCandidates } from "./candidates.mjs";
-import { groupNames } from "./help.mjs";
-import { allTargets } from "../commands/skill.mjs";
-import { CONFIG_KEYS } from "./config.mjs";
+import { moHome } from "../lib/paths.mjs";
+import { listProjects, findProjectRoot } from "../lib/project.mjs";
+import { listCards } from "../lib/store.mjs";
+import { listAgents } from "../lib/executors.mjs";
+import { listCandidates } from "../lib/candidates.mjs";
+import { groupNames } from "../ui/help.mjs";
+import { allTargets } from "./skill.mjs";
+import { CONFIG_KEYS } from "../lib/config.mjs";
 
 const GLOBAL_FLAGS = ["--project", "--json", "--help"];
 
@@ -17,7 +17,8 @@ const PROJECT = ["--project"];
 const taskIds = { positional: "task" };
 const candidateIds = { positional: "candidate" };
 const configKeys = { positional: "configKey" };
-const SETUP_STEPS = ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp"];
+const SETUP_STEPS = ["dirs", "config", "memory", "worker", "terminal", "skill", "mcp", "router"];
+const ROUTER_RUNTIME_ACTIONS = ["install", "list", "prune"];
 
 const SPEC = {
   task: {
@@ -29,6 +30,7 @@ const SPEC = {
       requests: { flags: [] },
       cancel: { flags: [], ...taskIds },
       status: { flags: [], ...taskIds },
+      show: { flags: [], ...taskIds },
       list: { flags: [] },
       dispatch: { flags: ["--worker", "--exec", "--timeout"], ...taskIds },
       verify: { flags: [], ...taskIds },
@@ -38,6 +40,7 @@ const SPEC = {
   project: {
     subs: {
       init: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
+      create: { flags: ["--name", "--file", "--mode", "--no-agent-file"] },
       agent: { flags: ["--file", "--mode", "--remove"] },
       list: { flags: [] },
       remove: { flags: ["--path", "--purge", "--dry-run", "--yes", "--id"] },
@@ -47,6 +50,7 @@ const SPEC = {
     subs: {
       recall: { flags: ["--limit", "--scope", "--all"] },
       list: { flags: ["--scope"] },
+      create: { flags: [] },
       init: { flags: [] },
       path: { flags: [] },
       migrate: { flags: ["--dry-run"] },
@@ -108,6 +112,18 @@ const SPEC = {
       uninstall: { flags: ["--target"] },
     },
   },
+  router: {
+    subs: {
+      start: { flags: ["--window", "--foreground", "--start-daemon", "--no-open"] },
+      stop: { flags: [] },
+      status: { flags: [] },
+      restart: { flags: [] },
+      setup: { flags: ["--provider", "--model", "--key", "--no-test"] },
+      reset: { flags: [] },
+      runtime: { flags: [], positional: "routerRuntimeAction" },
+      help: { flags: [] },
+    },
+  },
   config: {
     subs: {
       list: { flags: [] },
@@ -120,8 +136,36 @@ const SPEC = {
     subs: {
       start: { flags: ["--port", "--foreground"] },
       open: { flags: ["--browser", "--show-token"], positional: "daemonTarget" },
+      install: { flags: ["--force"] },
       stop: { flags: [] },
       status: { flags: [] },
+    },
+  },
+  connect: {
+    subs: {
+      describe: { flags: ["--json"] },
+      add: { flags: ["--mcp", "--prompt", "--name"] },
+      project: { flags: ["--file", "--mode", "--remove"] },
+    },
+  },
+  serve: {
+    subs: {
+      start: { flags: ["--port", "--foreground", "--no-apk"] },
+      stop: { flags: [] },
+      restart: { flags: [] },
+      status: { flags: [] },
+      open: { flags: ["--browser", "--show-token"], positional: "daemonTarget" },
+      router: { flags: [] },
+    },
+  },
+  internal: {
+    subs: {
+      mcp: { flags: [] },
+      receipt: { flags: [], ...taskIds },
+      watchdog: { flags: ["--project", "--all", "--dry-run"] },
+      completion: { flags: [] },
+      "memory-migrate": { flags: ["--dry-run"] },
+      "note-write": { flags: ["--file", "--title", "--body", "--slug", "--tag"] },
     },
   },
   setup: { subs: {} },
@@ -134,21 +178,37 @@ const SPEC = {
 /** 取值型 flag：补全时给候选而不是空 */
 const VALUE_FLAGS = new Set([
   "--project", "--task", "--worker", "--scope", "--mode", "--target", "--file", "--mcp", "--type", "--id", "--only", "--skip",
+  "--provider", "--router-provider",
 ]);
 
 const ENUMS = {
   "--scope": ["preferences", "pitfalls", "decisions"],
+  "--router-provider": ["deepseek", "anthropic", "openai"],
   "--mode": ["auto", "skill", "ref", "inline"],
 };
 
 /** 没有子命令的组：自己的 flag */
 const NO_SUB_FLAGS = {
   doctor: ["--json"],
-  setup: ["--yes", "--dry-run", "--only", "--skip", "--json"],
+  daemon: ["--port", "--foreground", "--no-apk", "--browser", "--show-token", "--json"],
+  // 裸 mo router 等同于 start，所以 start 的 flag 在这一层也要能补出来
+  router: ["--window", "--foreground", "--start-daemon", "--no-open"],
+  setup: [
+    "--yes",
+    "--dry-run",
+    "--only",
+    "--skip",
+    "--json",
+    "--router",
+    "--router-provider",
+    "--router-model",
+    "--router-key",
+    "--no-test",
+  ],
   upgrade: ["--check", "--dry-run", "--version", "--force", "--json"],
 };
 
-const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "config", "setup", "upgrade", "watchdog", "completion", "version", "help"];
+const TOP_LEVEL = ["project", "task", "receipt", "ledger", "doctor", "worker", "skill", "memory", "inbox", "mcp", "agent", "terminal", "daemon", "router", "config", "setup", "upgrade", "watchdog", "completion", "connect", "serve", "internal", "version", "help"];
 
 function item(value, description) {
   return { value, description };
@@ -184,6 +244,9 @@ function valuesFor(flag, cwd) {
   if (flag === "--project") return projectItems();
   if (flag === "--task") return taskItems(cwd);
   if (flag === "--worker") return listAgents().map((agent) => item(agent.name, agent.description));
+  if (flag === "--router-provider" || flag === "--provider") {
+    return (ENUMS["--router-provider"] || []).map((value) => item(value, ""));
+  }
   if (flag === "--scope") return ENUMS["--scope"].map((value) => item(value, ""));
   if (flag === "--mode") return ENUMS["--mode"].map((value) => item(value, ""));
   if (flag === "--id") return candidateItems();
@@ -201,6 +264,13 @@ function positionalFor(kind, cwd) {
   if (kind === "task") return taskItems(cwd);
   if (kind === "candidate") return candidateItems();
   if (kind === "configKey") return CONFIG_KEYS.map((spec) => item(spec.key, spec.range));
+  if (kind === "routerRuntimeAction") {
+    return [
+      item("install", "安装私有运行时（约 150MB）"),
+      item("list", "已装的版本与清单 pin"),
+      item("prune", "清理旧版本"),
+    ];
+  }
   if (kind === "daemonTarget") {
     return [
       item("app", "安装与配对"),
@@ -289,6 +359,20 @@ const FLAG_DESC = {
   "--dry-run": "只预演，不落盘",
   "--only": "只跑指定步骤",
   "--skip": "跳过指定步骤",
+  "--router": "也配置指挥台（装运行时 + 配模型凭据）",
+  "--router-provider": "指挥台的 provider",
+  "--router-model": "指挥台的模型 id",
+  "--router-key": "指挥台的 API key（落 credentials.json，0600）",
+  "--no-test": "跳过测通",
+  "--provider": "指挥台的 provider",
+  "--model": "指挥台的模型 id",
+  "--key": "指挥台的 API key",
+  "--force": "强制重装运行时",
+  "--no-apk": "跳过 APK 预下载",
+  "--window": "开新终端窗口跑（默认在当前终端）",
+  "--start-daemon": "先把 host 起来并打开监控屏，再进指挥台",
+  "--no-open": "配合 --start-daemon：不自动打开监控屏",
+  "--foreground": "在当前终端跑（TTY 下默认）",
 };
 
 function flagItems(flags, current) {

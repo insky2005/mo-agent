@@ -1,5 +1,5 @@
 import { EventStore } from "./store.mjs";
-import { EVENT, canonicalEventType, isKnownEventType } from "./contract.mjs";
+import { EVENT, SESSION_ROLE, canonicalEventType, isKnownEventType, normalizeSessionRole } from "./contract.mjs";
 import { IDLE } from "./status.mjs";
 
 /**
@@ -81,9 +81,15 @@ export class Hub {
   normalize(payload) {
     const id = payload.id || payload.sessionId || payload.agentId;
     const previous = id ? this.agents.get(id) : null;
+    // role 一旦是已知值就不该被后续 upsert 洗掉：adapter 重扫同一条会话时不带 role
+    const incomingRole = normalizeSessionRole(payload.role);
+    const role = incomingRole === SESSION_ROLE.UNKNOWN
+      ? (previous && previous.role) || SESSION_ROLE.UNKNOWN
+      : incomingRole;
     return {
       id,
       sessionId: id,
+      role,
       parentId: payload.parentId || null,
       blank: !!payload.blank,
       agent: payload.agent || payload.source || "unknown",
@@ -108,8 +114,19 @@ export class Hub {
     return this.agents.get(id) || null;
   }
 
-  list() {
-    return [...this.agents.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  /**
+   * 按可选条件过滤。目前只支持 role：
+   * list({ role: SESSION_ROLE.ROUTER }) 给监控页与 Router 状态用。
+   */
+  list(options) {
+    const filter = options || {};
+    const all = [...this.agents.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (filter.role === undefined || filter.role === null || filter.role === "") return all;
+
+    const known = Object.values(SESSION_ROLE);
+    // 传了不认识的 role 一律返回空：静默回落到 unknown 会让界面上出现莫名其妙的会话
+    if (!known.includes(filter.role)) return [];
+    return all.filter((agent) => agent.role === filter.role);
   }
 
   /** 对外快照。字段名保持向后兼容（sessionId 仍在）。 */

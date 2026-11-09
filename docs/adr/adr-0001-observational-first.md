@@ -1,6 +1,7 @@
 # ADR-0001：观察优先，暂不做 ACP 托管
 
 状态：**已采纳**　日期：2026-10-16
+范围：本决策约束 **Worker 平面**（用户的 Agent）。Router 平面（mo 自己的主 Agent）是例外，见 [ADR-0004](adr-0004-private-router-runtime.md)。
 
 ## 背景
 

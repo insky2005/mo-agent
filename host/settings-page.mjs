@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { grantAdminCookie, isAdminAuthed } from "./admin-auth.mjs";
+import { credentialsFile, routerFile, runtimeRoot, workbenchDir } from "../cli/lib/router-paths.mjs";
+import { readJsonSafe } from "../cli/lib/fsx.mjs";
 import { isLoopback } from "./logs-http.mjs";
 import {
   PAGE_STYLE,
@@ -25,6 +30,7 @@ const TABS = [
   { id: "app", label: "App 安装与配对", hint: "手机扫两下就能用" },
   { id: "dingtalk", label: "钉钉机器人", hint: "不装 App，也能在钉钉里接收审批" },
   { id: "agents", label: "Agent 配置", hint: "配置 Agent hook 与 Pi 控制扩展" },
+  { id: "router", label: "指挥台", hint: "mo 自己的主 Agent：只做分派" },
   { id: "voice", label: "语音", hint: "语音命令、口述、测试和浮层" },
   { id: "system", label: "重启与日志", hint: "重启本地服务，并直接查看日志" },
 ];
@@ -257,6 +263,53 @@ function renderVoiceSection() {
   return { title: "语音", body, script };
 }
 
+/**
+ * 指挥台：只读状态 + 下一步命令。
+ *
+ * 有意不在网页里做输入表单：凭据是敏感输入，CLI（mo router setup）更容易审计，
+ * 也不需要在这里处理 CSRF。网页负责"让你看见它在"，不负责"替你输入 key"。
+ */
+function renderRouterSection() {
+  const home = os.homedir();
+  const state = readJsonSafe(routerFile(home), null) || {};
+  const hasCredentials = fs.existsSync(credentialsFile(home));
+  let installed = [];
+  try {
+    installed = fs
+      .readdirSync(path.join(runtimeRoot({ home: os.homedir(), env: process.env }), "routers", "pi"))
+      .filter((name) => !name.includes(".tmp-"));
+  } catch {
+    installed = [];
+  }
+
+  const rows = [
+    ["状态", state.pid ? "运行中（pid " + state.pid + "）" : "未运行"],
+    ["模型", state.provider && state.model ? state.provider + " / " + state.model : "未配置"],
+    ["运行时", installed.length ? installed.join(" / ") : "未安装"],
+    ["凭据", hasCredentials ? "已配置（0600）" : "未配置"],
+    ["工作台", workbenchDir(home)],
+  ];
+
+  const body = [
+    "<div class='settingsSection'>",
+    "<div class='restartCard'><div class='settingMain'>",
+    "<h3>指挥台</h3>",
+    "<p>mo 自己的主 Agent：常驻、只读代码、只做分派。它有独立的运行时与配置，",
+    "不碰你平时用的 Agent，也不碰项目工作区。</p>",
+    "<div class='restartMeta'>",
+    ...rows.map(([label, value]) => escapeHtml(label) + " <code>" + escapeHtml(String(value)) + "</code><br />"),
+    "</div>",
+    "<p>在终端里完成后三步：</p>",
+    "<pre style='white-space:pre-wrap;opacity:.85'>"
+      + ["mo router runtime install", "mo router setup --provider deepseek --model deepseek-flash --key sk-...", "mo router start"].join("\n")
+      + "</pre>",
+    "</div></div>",
+    "</div>",
+  ].join("");
+
+  return { body, script: "" };
+}
+
 function renderSystemSection(ctx) {
   const logFile = ctx.logFile || "";
   const viewer = renderLogViewer({ file: logFile, mode: "inline" });
@@ -342,6 +395,7 @@ export async function handleSettingsRoutes(req, res, url, ctx) {
   try {
     if (tab === "dingtalk") section = renderDingTalkSection(ctx, "settings");
     else if (tab === "agents") section = renderAgentsSection(ctx, url, "settings");
+    else if (tab === "router") section = renderRouterSection();
     else if (tab === "voice") section = renderVoiceSection();
     else if (tab === "system") section = renderSystemSection(ctx);
     else section = renderSetupSection(ctx, url, { mode: "settings", fresh: true });

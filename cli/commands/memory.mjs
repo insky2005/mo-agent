@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MoError } from "../../core/errors.mjs";
-import { all, one, has } from "../lib/args.mjs";
-import { emit, table } from "../lib/output.mjs";
+import { all, one, has } from "../ui/args.mjs";
+import { emit, table } from "../ui/output.mjs";
+import { deprecate } from "../ui/deprecate.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { ensureDir } from "../lib/fsx.mjs";
 import { memoryDir, loadKnowledge, recallKnowledge } from "../lib/knowledge.mjs";
@@ -23,9 +24,15 @@ export function memoryCommand(ctx, args) {
   const home = moHome();
   if (sub === "recall") return recallCommand(args, home);
   if (sub === "list") return listCommand(args, home);
-  if (sub === "init") return initCommand(args, home);
+  if (sub === "create" || sub === "init") {
+    if (sub === "init") deprecate("mo memory init");
+    return initCommand(args, home);
+  }
   if (sub === "path") return pathCommand(args, home);
-  if (sub === "migrate") return migrateCommand(args, home);
+  if (sub === "migrate") {
+    deprecate("mo memory migrate");
+    return migrateCommand(args, home);
+  }
   if (sub === "propose") return proposeCommand(args, home);
   if (sub === "candidates") return candidatesCommand(args, home);
   if (sub === "accept") return acceptCommand(args, home);

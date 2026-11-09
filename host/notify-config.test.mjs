@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ensureNotifyConfig } from "./notify-config.mjs";
+import { ensureNotifyConfig, readQuietHours } from "./notify-config.mjs";
 
 const quiet = { info() {}, warn() {} };
 
@@ -30,6 +30,25 @@ test("配置已存在时不覆盖", () => {
   assert.equal(created, false);
   const parsed = JSON.parse(fs.readFileSync(target, "utf8"));
   assert.equal(parsed.channels[0].type, "wecom");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("读得到静音时段", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-notify-"));
+  const target = path.join(dir, "notify.json");
+  fs.writeFileSync(target, JSON.stringify({ quietHours: { start: "22:30", end: "08:00" } }));
+  const quietHours = readQuietHours({ file: target });
+  assert.equal(quietHours.start, "22:30");
+  assert.equal(quietHours.end, "08:00");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("没有静音配置时返回 null（老配置不会突然变安静）", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mo-notify-"));
+  const target = path.join(dir, "notify.json");
+  fs.writeFileSync(target, JSON.stringify({ channels: [] }));
+  assert.equal(readQuietHours({ file: target }), null);
+  assert.equal(readQuietHours({ file: path.join(dir, "missing.json") }), null);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

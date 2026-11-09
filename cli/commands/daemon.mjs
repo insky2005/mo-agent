@@ -16,9 +16,11 @@ import { fileURLToPath } from "node:url";
 import { MoError } from "../../core/errors.mjs";
 import { readGlobalConfig } from "../lib/config.mjs";
 import { fetchApk, apkDest } from "../lib/apk.mjs";
+import { installHost } from "../lib/host-install.mjs";
+import { dataDirFrom } from "../lib/paths.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PID_FILE = (home) => path.join(home, ".mo-agent", "daemon.pid");
+const PID_FILE = (home) => path.join(dataDirFrom(home), "daemon.pid");
 
 function isCompiledBinary() {
   // bun --compile 出来的可执行文件：execPath 不是 bun/node 本身
@@ -68,7 +70,7 @@ function readConfigPort(env, home) {
 // host 每次启动都会写 session.json（端口 + 本机令牌），用来找"不是我们拉起的"那个
 function readSessionToken(home) {
   try {
-    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    const info = JSON.parse(fs.readFileSync(path.join(dataDirFrom(home), "session.json"), "utf8"));
     return typeof info.token === "string" ? info.token : null;
   } catch {
     return null;
@@ -77,7 +79,7 @@ function readSessionToken(home) {
 
 export function readSessionPort(home) {
   try {
-    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    const info = JSON.parse(fs.readFileSync(path.join(dataDirFrom(home), "session.json"), "utf8"));
     if (Number.isInteger(info.port) && info.port > 0) return info.port;
     if (typeof info.url === "string") {
       const port = Number(new URL(info.url).port);
@@ -182,7 +184,7 @@ function printNext() {
 
 function readSessionLauncher(home) {
   try {
-    const info = JSON.parse(fs.readFileSync(path.join(home, ".mo-agent", "session.json"), "utf8"));
+    const info = JSON.parse(fs.readFileSync(path.join(dataDirFrom(home), "session.json"), "utf8"));
     return {
       launcher: typeof info.launcher === "string" ? info.launcher : null,
       pid: Number(info.launcherPid) || null,
@@ -215,6 +217,14 @@ async function start(ctx, args) {
   const opts = args.options || {};
   const foreground = Boolean(opts.foreground);
   const port = Number(opts.port) || readConfigPort(env, home);
+  // APK 只跟"手机装 App"有关；被别的命令顺带拉起时（如 mo router）没必要下 30MB
+  const skipApk = Boolean(opts["no-apk"]) || String(env.MO_AGENT_NO_APK || "") === "1";
+  // 被别的命令顺带拉起时不要刷一整屏访问信息（本机/监控/设置/配对/安装…）
+  const quiet = Boolean(opts.quiet);
+  const prefetchApk = async () => {
+    if (skipApk) return null;
+    return fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+  };
 
   const existing = readPid(home);
   // pid 文件过期（进程没了）就清掉，别影响后面的判断
@@ -234,12 +244,16 @@ async function start(ctx, args) {
     // 幂等：已经有一个 host 在跑，就把访问信息给出来，不再起第二个。
     // 顺手把 APK 备好，这样桌面 App 起的 host 也能扫码装。
     try {
-      await fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+      await prefetchApk();
     } catch {
       // 没有 APK Release 就算了，不影响信息输出
     }
-    await printInfo(occupiedPort, home, existing);
-    printNext();
+    if (quiet) {
+      process.stderr.write("✓ host 已在运行（pid " + ((existing && existing.pid) || "?") + "，端口 " + occupiedPort + "）\n");
+    } else {
+      await printInfo(occupiedPort, home, existing);
+      printNext();
+    }
     return 0;
   }
 
@@ -247,7 +261,7 @@ async function start(ctx, args) {
   if (!host) {
     throw new MoError("E_NO_HOST", "找不到可运行的 host", {
       hint: isCompiledBinary()
-        ? "单文件 CLI 不含 host。装桌面版（installer 里的 get-desktop）或设置 MO_AGENT_ROOT 指向源码/运行时"
+        ? "单文件 CLI 不含 host。先 mo daemon install 补齐 host 运行时；或装桌面版；或设置 MO_AGENT_ROOT 指向源码"
         : "在仓库根目录执行，或设置 MO_AGENT_ROOT",
     });
   }
@@ -255,7 +269,7 @@ async function start(ctx, args) {
   // 顺手把 APK 备好，这样手机扫码就能装（没有 Release 就跳过，不影响启动）
   let apk = null;
   try {
-    apk = await fetchApk({ home, env, log: (line) => process.stdout.write("  " + line + "\n") });
+    apk = await prefetchApk();
   } catch (error) {
     process.stderr.write("  （APK 未准备好：" + error.message + "，/app.apk 会提示去下载）\n");
   }
@@ -263,7 +277,7 @@ async function start(ctx, args) {
   const [cmd, ...cmdRest] = host.command;
   const spawnArgs = [...cmdRest, "--port", String(port)];
 
-  const logFile = path.join(home, ".mo-agent", "daemon.log");
+  const logFile = path.join(dataDirFrom(home), "daemon.log");
   if (!foreground) fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const errFd = foreground ? null : fs.openSync(logFile, "a");
 
@@ -310,8 +324,10 @@ async function start(ctx, args) {
 
   await waitForToken(home);
   process.stdout.write("✓ daemon 已启动（pid " + child.pid + "，端口 " + port + "）\n");
-  printAccess(port, home);
-  printNext();
+  if (!quiet) {
+    printAccess(port, home);
+    printNext();
+  }
   return 0;
 }
 
@@ -343,6 +359,21 @@ async function stop() {
   return 0;
 }
 
+/** status 里显示"host 到底会从哪儿来、什么时候编的"——旧构建的困惑大多来自这里 */
+export function describeHostOrigin(options) {
+  const found = findHost(options || {});
+  if (!found) return null;
+  const entry = found.kind === "source" ? found.command[1] : found.command[0];
+  let when = null;
+  try {
+    when = fs.statSync(entry).mtime.toISOString().slice(0, 16).replace("T", " ");
+  } catch {
+    when = null;
+  }
+  const label = found.kind === "env" ? "MO_AGENT_ROOT" : found.kind === "desktop" ? "桌面运行时" : "源码";
+  return { kind: found.kind, entry, when, label };
+}
+
 async function status() {
   const home = os.homedir();
   const info = readPid(home);
@@ -352,12 +383,21 @@ async function status() {
 
   if (!body) {
     process.stdout.write("daemon  未运行" + (managed ? "（pid " + info.pid + " 没响应）" : "") + "\n");
-    process.stdout.write("  启动    mo daemon start\n");
+    const origin = describeHostOrigin({ env: process.env, home, cwd: process.cwd() });
+    if (!origin) {
+      process.stdout.write("  host    没有可用的 host 运行时：mo daemon install（或装桌面版）\n");
+    } else {
+      process.stdout.write("  启动    mo serve start\n");
+    }
     return 1;
   }
 
   process.stdout.write("daemon  运行中（" + where(port, managed ? info : null, home) + "）\n");
   process.stdout.write("  健康    ✓\n");
+  const origin = describeHostOrigin({ env: process.env, home, cwd: process.cwd() });
+  if (origin) {
+    process.stdout.write("  host    " + origin.label + " · " + origin.entry + (origin.when ? "（" + origin.when + "）" : "") + "\n");
+  }
   printAccess(port, home);
   printActions();
   return 0;
@@ -460,11 +500,37 @@ async function open(ctx, args) {
   return 0;
 }
 
+async function install(ctx, args) {
+  const opts = (args && args.options) || {};
+  const env = (ctx && ctx.env) || process.env;
+  process.stderr.write("安装 host 运行时会下载约 20–30MB…\n");
+  try {
+    const result = await installHost({
+      home: os.homedir(),
+      env,
+      force: Boolean(opts.force),
+      log: (line) => process.stdout.write("  " + line + "\n"),
+    });
+    if (result.reused) {
+      process.stdout.write("✓ host 运行时已存在（" + result.dir + "）\n");
+    } else {
+      process.stdout.write("✓ host 运行时已安装" + (result.version ? "（" + result.version + "）" : "") + "\n  " + result.dir + "\n");
+    }
+    process.stdout.write("  启动    mo serve start\n");
+    return 0;
+  } catch (error) {
+    throw new MoError("E_HOST_INSTALL_FAILED", (error && error.message) || "安装 host 运行时失败", {
+      hint: "也可以装桌面版；或设置 MO_AGENT_HOST_URL 指向本地 runtime.tar.gz",
+    });
+  }
+}
+
 export async function daemonCommand(ctx, args) {
   const sub = (args.positional || [])[0];
   if (!sub || sub === "status") return status();
+  if (sub === "install") return install(ctx, args);
   if (sub === "start") return start(ctx, args);
   if (sub === "stop") return stop();
   if (sub === "open") return open(ctx, args);
-  throw new MoError("E_USAGE", "未知子命令：" + sub, { hint: "mo daemon start|stop|status" });
+  throw new MoError("E_USAGE", "未知子命令：" + sub, { hint: "mo serve start|stop|status|open（旧写法 mo daemon … 仍可用）" });
 }

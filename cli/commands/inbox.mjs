@@ -1,6 +1,6 @@
 import { MoError } from "../../core/errors.mjs";
-import { one, has } from "../lib/args.mjs";
-import { emit } from "../lib/output.mjs";
+import { one, has } from "../ui/args.mjs";
+import { emit } from "../ui/output.mjs";
 import { moHome } from "../lib/paths.mjs";
 import { pullInbox, inboxDir } from "../lib/inbox.mjs";
 import { parseDuration } from "../lib/envelope.mjs";
@@ -81,9 +81,19 @@ async function pullCommand(args) {
       if (!result.items.length) {
         return timeout ? "等了 " + Math.round(waitedMs / 1000) + "s，没有新消息" : "没有新消息";
       }
+      const CONFIRM_LABEL = { approved: "已批准", rejected: "已拒绝", stale: "已作废" };
       const blocks = result.items.map((item) => {
-        const head = [item.status, item.taskId, item.title].filter(Boolean).join(" · ");
+        const isConfirm = String(item.type || "").startsWith("task.confirm");
+        const label = isConfirm ? CONFIRM_LABEL[item.status] || item.status : item.status;
+        const head = [label, item.taskId, item.title].filter(Boolean).join(" · ");
         const lines = ["● " + head];
+        if (isConfirm) {
+          lines.push("  下一步   " + (item.status === "approved"
+            ? "mo task dispatch " + item.taskId
+            : "mo task confirm " + item.taskId + "（重新发起确认）"));
+          lines.push("  时间     " + item.at);
+          return lines.join("\n");
+        }
         if (item.verified && item.verified !== "unverified") lines.push("  验收   " + item.verified);
         if (item.reason && item.reason !== "receipt") lines.push("  原因   " + item.reason);
         if (item.summary) lines.push("  结论   " + item.summary);

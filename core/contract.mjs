@@ -25,6 +25,7 @@ export const EVENT = Object.freeze({
   APPROVAL_RESOLVED: "approval.resolved",
   NOTICE: "notice",
   SOURCE_ERROR: "source.error",
+  TASK_CONFIRM_REQUESTED: "task.confirm_requested",
   NOTIFY: "notify",
 });
 
@@ -50,8 +51,26 @@ export const EVENT_META = Object.freeze({
   [EVENT.APPROVAL_RESOLVED]: { category: "state", replay: true, required: ["id"] },
   [EVENT.NOTICE]: { category: "signal", replay: false, required: ["title"] },
   [EVENT.SOURCE_ERROR]: { category: "state", replay: true, required: ["source", "message"] },
+  // 任务卡的确认请求：来自 ~/.mo-agent/approvals/（文件队列），host 扫描后发一次
+  [EVENT.TASK_CONFIRM_REQUESTED]: { category: "signal", replay: false, required: ["requestId", "taskId"] },
   [EVENT.NOTIFY]: { category: "derived", replay: false, required: ["severity", "kind", "title"] },
 });
+
+/**
+ * 会话身份。role 回答"这个会话在系统里是谁"，与 agent（哪家厂商）正交：
+ * Router 是 mo 自己的主 Agent，Worker 是用户的 Agent。见 ADR-0004。
+ */
+export const SESSION_ROLE = Object.freeze({
+  ROUTER: "router",
+  WORKER: "worker",
+  UNKNOWN: "unknown",
+});
+
+/** 只接受已知的两个角色；其余一律 unknown，避免上游笔误污染过滤逻辑。 */
+export function normalizeSessionRole(value) {
+  if (value === SESSION_ROLE.ROUTER || value === SESSION_ROLE.WORKER) return value;
+  return SESSION_ROLE.UNKNOWN;
+}
 
 /** 明确不会产生通知的事件；与 NOTIFY_POLICY 互补，测试会检查完整性。 */
 export const SILENT_EVENTS = Object.freeze(new Set([
@@ -201,6 +220,25 @@ export const NOTIFY_POLICY = Object.freeze({
     notificationType: p.notificationType || null,
     requiresAction: p.requiresAction === true || p.kind === "approval" || p.kind === "question",
     toolName: null,
+  }),
+
+  // 任务卡确认：手机/桌面要能用它渲染一张可点的卡片（不只是"有件事"）
+  [EVENT.TASK_CONFIRM_REQUESTED]: (p) => ({
+    severity: SEVERITY.CRITICAL,
+    kind: "task-confirm",
+    title: "有任务卡等你批准",
+    body: withPrefix(
+      p.title,
+      Array.isArray(p.deliverables) && p.deliverables.length ? "交付：" + p.deliverables.join("；") : "批准后才可以派单"
+    ),
+    requiresAction: true,
+    eventId: p.requestId || null,
+    sessionId: null,
+    agent: null,
+    agentLabel: null,
+    sessionTitle: null,
+    toolName: null,
+    taskId: p.taskId || null,
   }),
 
   [EVENT.RUN_COMPLETED]: (p) => ({

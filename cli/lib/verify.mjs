@@ -13,8 +13,9 @@ const OUTPUT_LIMIT = 2000;
  * - run: <命令>              在项目根用 /bin/sh -c 执行，退出码 0 通过；超时算失败
  * - check: <路径> 存在        文件存在通过
  * - check: <路径> 包含 <文本> 文件内容包含文本通过
+ * - check: <路径>             裸路径按“存在”判定（契约里的常见写法）
  * - human: <说明>             不执行，交给人工确认
- * - 其它形式                   无法判定，归入 needs_human
+ * - 空的 check                 无法判定，归入 needs_human
  */
 export function runVerify({ card, root, timeoutMs } = {}) {
   const meta = card && card.meta ? card.meta : card || {};
@@ -109,7 +110,7 @@ function evaluate(raw, root, timeoutMs) {
       item: normalized.item,
       kind: "unknown",
       ok: false,
-      detail: "无法判定的 check：" + normalized.value + "（支持 \"<路径> 存在\"、\"<路径> 包含 <文本>\"）",
+      detail: "check 不能为空（支持 \"<路径>\"、\"<路径> 存在\"、\"<路径> 包含 <文本>\"）",
       durationMs: Date.now() - started,
     };
   }
@@ -132,12 +133,18 @@ function evaluate(raw, root, timeoutMs) {
 }
 
 function parseCheck(value) {
-  const exists = /^(.+?)\s+存在$/.exec(value);
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return null;
+
+  const exists = /^(.+?)\s+存在$/.exec(text);
   if (exists) return { mode: "exists", path: exists[1].trim() };
 
-  const contains = /^(.+?)\s+包含\s+([\s\S]+)$/.exec(value);
+  const contains = /^(.+?)\s+包含\s+([\s\S]+)$/.exec(text);
   if (contains) return { mode: "contains", path: contains[1].trim(), text: contains[2] };
-  return null;
+
+  // 裸路径（可以带空格）默认按“存在”判定：契约里常见写法是 check:<路径>。
+  // 写错语法时要求“文件不存在”比静默 needs_human 更容易被发现。
+  return { mode: "exists", path: text };
 }
 
 function runCommand(command, root, timeoutMs) {
