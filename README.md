@@ -13,7 +13,7 @@ Momo 不替 Agent 干活，也不改变你的工作方式。Agent 照旧在终�
 | 你的情况 | 走哪条 | 第一步 |
 |---|---|---|
 | 只想被通知、随手批准（只看不改） | 桌面 App + 手机 | 装桌面版 → 扫码配对 |
-| 已经在 Claude / Codex / DSH 里干活 | 外部 Agent + 技能 + MCP | `mo skill install` → `mo agent add --mcp` |
+| 已经在 Claude / Codex / DSH 里干活 | 外部 Agent + 技能 + MCP | `mo skill install` → `mo connect add --mcp` |
 | 没有主 Agent，或不想开外部 Agent | 内置指挥台（推荐） | `mo router start` |
 | 脚本 / CI / 排障 | `mo` 直接敲 | `mo task create …` |
 
@@ -131,7 +131,8 @@ Mo Agent 采用 **PolyForm Noncommercial 1.0.0**：个人与非商业用途免�
 - 跨平台路径与 Agent 差异：[docs/plans/desktop-cross-platform.md](docs/plans/desktop-cross-platform.md)
 - 语音手册：[docs/guides/voice.md](docs/guides/voice.md)
 - 设计原则：[ADR-0001 观察优先](docs/adr/adr-0001-observational-first.md)
-- 个人工作台 CLI（P0）：[cli/README.md](cli/README.md)
+- 个人工作台 CLI（建卡、派单、账本）：[cli/README.md](cli/README.md)
+- 内置指挥台（主 Agent）：[docs/spec/router.md](docs/spec/router.md)
 - 全部文档：[docs/README.md](docs/README.md)
 
 ---

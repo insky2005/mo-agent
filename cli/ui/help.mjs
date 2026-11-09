@@ -82,6 +82,7 @@ export const GROUPS = [
       ["restart", "停止后再启动", "停不掉也继续，start 是幂等的"],
       ["status", "在不在跑、健康检查、APK 是否就绪", "默认子命令"],
       ["open [app|dingtalk|agents|voice|system|monitor]", "打开设置页页签或监控屏（自动带令牌）", "默认 monitor"],
+      ["install [--force]", "下载 host 运行时到数据目录", "只装 CLI 时用它补齐"],
       ["router <子命令>", "指挥台：serve router start|stop|status|setup|runtime", "等价于 mo router"],
     ],
   },

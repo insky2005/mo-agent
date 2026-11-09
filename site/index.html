@@ -144,7 +144,7 @@
         <article class="card">
           <div class="num">03</div>
           <h3>决定</h3>
-          <p>手机上允许或拒绝，直接回答 Agent 的提问；戴着耳机时用口令确认；不方便时，超时自动交回本地终端。</p>
+          <p>手机上允许或拒绝，直接回答 Agent 的提问；任务卡还能一次点成「允许并派单」。戴着耳机时用口令确认；不方便时，超时自动交回本地终端。夜里只有真正需要你的才会叫醒你（静音时段）。</p>
         </article>
       </div>
     </div>
@@ -177,8 +177,8 @@
   <section id="start">
     <div class="wrap">
       <div class="section-head">
-        <h2>三步开始</h2>
-        <p>手机远程批准走桌面端。只想在终端里建卡、派单、看账本的话，装 CLI 就够了。</p>
+        <h2>开始使用</h2>
+        <p>手机远程批准走桌面端；只想在终端里建卡、派单、看账本，装 CLI 就够了；不想接外部主 Agent 的话，mo 还自带一个指挥台。</p>
       </div>
       <div class="steps">
         <div class="step">
@@ -199,12 +199,27 @@
         <div class="cli-head">
           <h3>只要 CLI</h3>
           <p>单文件二进制，不需要 Node。装在 <code>~/.local/bin/mo</code>（Windows 为 <code>%USERPROFILE%\.local\bin\mo.exe</code>），负责终端侧的建卡、派单与账本。</p>
+          <p>装完先跑 <code>mo setup</code>（幂等，会问你要不要配指挥台）；手机与监控屏需要 host：<code>mo serve install</code> 补齐后 <code>mo serve start</code>。命令以 <code>mo help</code> 为准。</p>
         </div>
 <pre><code><span class="cm"># macOS / Linux</span>
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash
 
 <span class="cm"># Windows（PowerShell）</span>
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.ps1 | iex"</code></pre>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>你的情况</th><th>走哪条</th><th>第一步</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>只想被通知、随手批准</td><td>桌面 App + 手机</td><td>装桌面版 → 扫码配对</td></tr>
+            <tr><td>已经在 Claude / Codex / DSH 里干活</td><td>外部 Agent + 技能 + MCP</td><td><code>mo skill install</code> → <code>mo connect add --mcp</code></td></tr>
+            <tr><td>没有主 Agent，或不想开外部 Agent</td><td>内置指挥台</td><td><code>mo router start</code></td></tr>
+            <tr><td>脚本 / CI / 排障</td><td>CLI</td><td><code>mo task create …</code></td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -216,7 +231,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ins
         <p>没有你的决定，它不会替你放行。这条写在设计里，也写在代码里。</p>
       </div>
       <ul class="grid-2">
-        <li><strong>本机优先</strong>：只允许本机访问，且必须携带本机令牌。</li>
+        <li><strong>本机优先</strong>：管理页只允许本机访问、必须带本机令牌；手机访问凭一次性配对令牌。</li>
         <li><strong>不自动放行</strong>：超时或无法确认，一律交回本地终端。</li>
         <li><strong>语音有分寸</strong>：批准需复述口令，音频只在本机识别。</li>
         <li><strong>改动可回退</strong>：只增删自己的 hook，改前自动备份。</li>
