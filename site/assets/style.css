@@ -70,6 +70,7 @@ a { color: inherit; text-decoration: none; }
 
 .nav {
   display: flex;
+  align-items: center;
   gap: 22px;
   margin-left: 18px;
   font-size: 14px;
@@ -77,6 +78,39 @@ a { color: inherit; text-decoration: none; }
 }
 
 .nav a:hover { color: var(--text); }
+
+/* 切到另一条产品线的入口：和页内锚点区分开，做成小胶囊 */
+.nav-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 -10px;
+  background: var(--line-strong);
+}
+
+.nav a.nav-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.nav a.nav-switch .arrow {
+  color: var(--brand);
+  font-size: 12px;
+}
+
+.nav a.nav-switch:hover {
+  border-color: var(--brand);
+  background: rgba(79, 140, 255, 0.12);
+  color: #fff;
+}
 
 .header-actions {
   margin-left: auto;
@@ -432,6 +466,9 @@ tbody td:first-child { color: var(--text); font-weight: 600; }
   counter-reset: step;
 }
 
+/* 四步流程用 2×2：3+1 会留个孤零零的格子，命令文本也放不下 */
+.steps.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .step {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -637,7 +674,7 @@ pre code { color: #cfe0ff; }
   .hero { padding: 56px 0 48px; }
   .hero-art { order: -1; }
   .hero-art img { width: 160px; height: auto; }
-  .cards, .steps { grid-template-columns: 1fr; }
+  .cards, .steps, .steps.four { grid-template-columns: 1fr; }
   .compare { grid-template-columns: 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
   .nav { display: none; }

@@ -32,7 +32,8 @@
       <a href="#router">指挥台</a>
       <a href="#install">安装</a>
       <a href="#relationship">与桌面端的关系</a>
-      <a href="../">Mo Agent</a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a class="nav-switch" href="../">Mo Agent <span class="arrow" aria-hidden="true">→</span></a>
     </nav>
     <div class="header-actions">
       <a class="btn btn-ghost btn-small" href="https://github.com/insky2005/mo-agent" target="_blank" rel="noopener">GitHub</a>
@@ -46,7 +47,7 @@
     <div class="wrap">
       <div>
         <span class="eyebrow"><span class="dot"></span>Mo CLI · 个人工作台</span>
-        <h1>把想法变成任务卡，<br /><span class="grad">派给任意 Agent 干完。</span></h1>
+        <h1>把想法变成任务卡，<br /><span class="grad">派给任意 Agent。</span></h1>
         <p class="lede">
           你写卡，人批准，Agent 执行，mo 按你定的验收标准结算，全过程记账。
           文件即状态，不依赖常驻服务；装了桌面端的话，任务卡也能在手机上批。
@@ -68,7 +69,7 @@
         <h2>一张卡的一生</h2>
         <p>没有数据库，没有常驻进程；状态就在文件里，可以 grep、可以 diff、可以进 git。</p>
       </div>
-      <div class="steps">
+      <div class="steps four">
         <div class="step">
           <h3>建卡</h3>
           <p><code>mo task create</code> 写下交付物、验收标准与边界。缺验收会告警：卡能建，但结论得自己看。</p>
