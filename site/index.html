@@ -39,7 +39,7 @@
       <a href="#how">能力</a>
       <a href="#agents">支持的 Agent</a>
       <a href="#start">开始使用</a>
-      <a href="cli/">mo CLI</a>
+      <a href="cli/">Mo CLI</a>
       <a href="#security">安全</a>
     </nav>
     <div class="header-actions">
@@ -179,7 +179,7 @@
     <div class="wrap">
       <div class="section-head">
         <h2>开始使用</h2>
-        <p>手机远程批准走桌面端；只想在终端里建卡、派单、看账本，装 CLI 就够了；不想接外部主 Agent 的话，mo 还自带一个指挥台。</p>
+        <p>手机远程批准走桌面端；只想在终端里建卡、派单、看账本，装 Mo CLI 就够了；不想接外部主 Agent 的话，mo 还自带一个指挥台。</p>
       </div>
       <div class="steps">
         <div class="step">
@@ -198,10 +198,10 @@
 
       <div class="cli-block">
         <div class="cli-head">
-          <h3>只要 CLI</h3>
+          <h3>只要 Mo CLI</h3>
           <p>单文件二进制，不需要 Node。装在 <code>~/.local/bin/mo</code>（Windows 为 <code>%USERPROFILE%\.local\bin\mo.exe</code>），负责终端侧的建卡、派单与账本。</p>
           <p>装完先跑 <code>mo setup</code>（幂等，会问你要不要配指挥台）；手机与监控屏需要 host：<code>mo serve install</code> 补齐后 <code>mo serve start</code>。命令以 <code>mo help</code> 为准。</p>
-          <p><a href="cli/">看完整的 CLI 工作台介绍 →</a></p>
+          <p><a href="cli/">看完整的 Mo CLI 工作台介绍 →</a></p>
         </div>
 <pre><code><span class="cm"># macOS / Linux</span>
 curl -fsSL https://raw.githubusercontent.com/insky2005/mo-agent/main/installer/get-cli.sh | bash
@@ -219,7 +219,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ins
             <tr><td>只想被通知、随手批准</td><td>桌面 App + 手机</td><td>装桌面版 → 扫码配对</td></tr>
             <tr><td>已经在 Claude / Codex / DSH 里干活</td><td>外部 Agent + 技能 + MCP</td><td><code>mo skill install</code> → <code>mo connect add --mcp</code></td></tr>
             <tr><td>没有主 Agent，或不想开外部 Agent</td><td>内置指挥台</td><td><code>mo router start</code></td></tr>
-            <tr><td>脚本 / CI / 排障</td><td><a href="cli/">CLI 工作台</a></td><td><code>mo task create …</code></td></tr>
+            <tr><td>脚本 / CI / 排障</td><td><a href="cli/">Mo CLI 工作台</a></td><td><code>mo task create …</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -268,7 +268,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ins
         <span>Mo Agent</span>
       </a>
       <div class="footer-links">
-        <a href="cli/">CLI 工作台</a>
+        <a href="cli/">Mo CLI 工作台</a>
         <a href="https://github.com/insky2005/mo-agent" target="_blank" rel="noopener">GitHub 仓库</a>
         <a href="https://github.com/insky2005/mo-agent/releases" target="_blank" rel="noopener">发布版本</a>
         <a href="https://github.com/insky2005/mo-agent/blob/main/INSTALL.md" target="_blank" rel="noopener">安装文档</a>
